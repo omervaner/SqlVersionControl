@@ -47,10 +47,10 @@ public partial class ConnectionViewModel : ViewModelBase
     // Show password field when using recent connection with SQL auth
     public bool NeedsPassword => UseRecentConnection && SelectedConnection != null && !SelectedConnection.UseWindowsAuth;
 
-    public ConnectionViewModel(DatabaseService db, Action<ConnectionSettings> onConnected)
+    public ConnectionViewModel(DatabaseService db, SettingsService settings, Action<ConnectionSettings> onConnected)
     {
         _db = db;
-        _settings = new SettingsService();
+        _settings = settings;
         _onConnected = onConnected;
 
         // Load recent connections
