@@ -24,11 +24,11 @@ public partial class ConnectionDialog : Window
         };
     }
 
-    public ConnectionDialog(DatabaseService db) : this()
+    public ConnectionDialog(DatabaseService db, SettingsService? settings = null) : this()
     {
-        DataContext = new ConnectionViewModel(db, settings =>
+        DataContext = new ConnectionViewModel(db, settings ?? new SettingsService(), connSettings =>
         {
-            Result = settings;
+            Result = connSettings;
             Close();
         });
     }

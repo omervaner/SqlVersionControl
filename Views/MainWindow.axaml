@@ -49,6 +49,9 @@
                             <TextBox Text="{Binding SearchText}"
                                      Watermark="Search objects..."
                                      Width="200"/>
+                            <Button x:Name="ChangeDbButton" Content="Change DB"
+                                    Background="#4a4a6e" Foreground="White" Padding="10,5"
+                                    ToolTip.Tip="Connect to a different database"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10">

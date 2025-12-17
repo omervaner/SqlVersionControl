@@ -37,6 +37,9 @@ public partial class MainWindow : Window
         // Wire up settings button
         SettingsButton.Click += async (s, e) => await ShowSettingsDialogAsync();
 
+        // Wire up change DB button
+        ChangeDbButton.Click += async (s, e) => await ChangeConnectionAsync();
+
         Opened += OnOpened;
         Closing += OnClosing;
     }
@@ -99,7 +102,7 @@ public partial class MainWindow : Window
 
     private async Task ShowConnectionDialogAsync()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService);
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
         await dialog.ShowDialog(this);
 
         if (dialog.Result != null)
@@ -122,5 +125,18 @@ public partial class MainWindow : Window
             // Apply theme and font size changes
             ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
         }
+    }
+
+    private async Task ChangeConnectionAsync()
+    {
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Result != null)
+        {
+            // User connected to a new database - refresh the view
+            _viewModel.OnConnected(dialog.Result);
+        }
+        // If user cancels, just keep current connection (don't close app)
     }
 }
