@@ -20,7 +20,7 @@ public class ObjectVersion
     public string FullName => $"{SchemaName}.{ObjectName}";
     public string ChangedAtDisplay => ChangedAt.ToString("MMM dd, HH:mm");
     public string VersionDisplay => $"v{VersionNumber}";
-    public string VersionLabel => $"v{VersionNumber} - {ChangedBy} - {ChangedAt:MMM dd, HH:mm}";
+    public string VersionLabel => $"v{VersionNumber} - {ChangedBy}@{HostName} - {ChangedAt:MMM dd, HH:mm}";
 }
 
 public class DatabaseObject
