@@ -35,6 +35,9 @@ public class DiffLine
 
     public int FontSize => ThemeManager.FontSize;
 
+    public IBrush LineNumberBackground => new SolidColorBrush(ThemeManager.GetLineNumberBackground());
+    public IBrush LineNumberForeground => new SolidColorBrush(ThemeManager.GetLineNumberForeground());
+
     // Syntax-highlighted segments
     public List<HighlightedSegment> Segments
     {

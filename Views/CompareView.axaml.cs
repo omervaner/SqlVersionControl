@@ -60,4 +60,9 @@ public partial class CompareView : UserControl
             ViewModel.AddConnection(dialog.Result, dialog.Password, isSource);
         }
     }
+
+    public void RefreshTheme()
+    {
+        CompareDiffView.ApplyTheme();
+    }
 }
