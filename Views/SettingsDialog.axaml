@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.SettingsDialog"
+        Title="Settings"
+        Width="450" Height="380"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto" Margin="20">
+        <!-- Settings Content -->
+        <StackPanel Grid.Row="0" Spacing="20">
+            <!-- Theme -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Theme" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="15">
+                    <RadioButton x:Name="DarkThemeRadio" Content="Dark" GroupName="Theme"/>
+                    <RadioButton x:Name="LightThemeRadio" Content="Light" GroupName="Theme"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Font Size -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Diff View Font Size" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <ComboBox x:Name="FontSizeCombo" MinWidth="100">
+                        <ComboBoxItem Content="10" Tag="10"/>
+                        <ComboBoxItem Content="11" Tag="11"/>
+                        <ComboBoxItem Content="12" Tag="12"/>
+                        <ComboBoxItem Content="13" Tag="13"/>
+                        <ComboBoxItem Content="14" Tag="14"/>
+                        <ComboBoxItem Content="16" Tag="16"/>
+                        <ComboBoxItem Content="18" Tag="18"/>
+                    </ComboBox>
+                    <TextBlock Text="px" VerticalAlignment="Center" Foreground="#666"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Max Recent Connections -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Max Recent Connections" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <NumericUpDown x:Name="MaxConnectionsUpDown"
+                                   Minimum="1" Maximum="20" Value="5"
+                                   Width="100" FormatString="0"/>
+                    <TextBlock Text="connections" VerticalAlignment="Center" Foreground="#666"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Data Folder -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Data Folder" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox x:Name="DataFolderTextBox" Grid.Column="0"
+                             IsReadOnly="True" Margin="0,0,10,0"/>
+                    <Button x:Name="BrowseFolderButton" Grid.Column="1"
+                            Content="Browse..." Padding="10,5"/>
+                </Grid>
+                <TextBlock x:Name="FolderHintText" FontSize="11" Foreground="#888"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,20,0,0">
+            <Button x:Name="CancelButton" Content="Cancel" Padding="20,8"/>
+            <Button x:Name="SaveButton" Content="Save" Padding="20,8"
+                    Background="#2a6e4e" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>

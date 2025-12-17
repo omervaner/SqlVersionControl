@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.QuickConnectionDialog"
+        Title="Add Connection"
+        Width="400" Height="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="New Database Connection" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,15"/>
+
+        <!-- Form -->
+        <StackPanel Grid.Row="1" Spacing="12">
+            <StackPanel>
+                <TextBlock Text="Server:" Margin="0,0,0,4"/>
+                <TextBox Name="ServerBox" Watermark="e.g. 10.95.0.53"/>
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Text="Database:" Margin="0,0,0,4"/>
+                <TextBox Name="DatabaseBox" Watermark="e.g. MyDatabase"/>
+            </StackPanel>
+
+            <CheckBox Name="WindowsAuthCheck" Content="Use Windows Authentication" IsChecked="True"/>
+
+            <StackPanel Name="CredentialsPanel" IsVisible="False">
+                <StackPanel Margin="0,0,0,8">
+                    <TextBlock Text="Username:" Margin="0,0,0,4"/>
+                    <TextBox Name="UsernameBox"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Password:" Margin="0,0,0,4"/>
+                    <TextBox Name="PasswordBox" PasswordChar="*"/>
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Name="ErrorText" Foreground="#e63946" TextWrapping="Wrap" IsVisible="False"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,15,0,0">
+            <Button Name="CancelButton" Content="Cancel" Padding="15,8"/>
+            <Button Name="TestButton" Content="Test" Padding="15,8"/>
+            <Button Name="ConnectButton" Content="Connect" Background="#2a6e4e" Foreground="White" Padding="15,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

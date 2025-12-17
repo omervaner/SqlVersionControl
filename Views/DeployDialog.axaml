@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.DeployDialog"
+        Title="Confirm Deployment"
+        Width="500" Height="250"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Header -->
+        <Border Grid.Row="0" Name="HeaderBorder" Background="#2a6e4e" Padding="20,15">
+            <StackPanel>
+                <TextBlock Name="TitleText" Text="Deploy Confirmation" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Name="WarningText" Foreground="#c8e6c9" FontSize="12" Margin="0,5,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Details -->
+        <StackPanel Grid.Row="1" Margin="20,15">
+            <TextBlock Name="ObjectText" FontWeight="SemiBold" FontSize="14"/>
+            <TextBlock Name="TargetText" Margin="0,8,0,0"/>
+            <TextBlock Name="ProdWarning" Foreground="#e63946" FontWeight="Bold"
+                       Margin="0,15,0,0" TextWrapping="Wrap" IsVisible="False"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,10,20,15">
+            <Button Name="CancelButton" Content="Cancel" Padding="20,8" Margin="0,0,10,0"/>
+            <Button Name="ConfirmButton" Content="Deploy"
+                    Background="#2a6e4e" Foreground="White" Padding="20,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

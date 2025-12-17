@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SqlVersionControl.ViewModels"
+        x:Class="SqlVersionControl.Views.ConnectionDialog"
+        x:DataType="vm:ConnectionViewModel"
+        Title="Connect to SQL Server"
+        Width="420" Height="480"
+        WindowStartupLocation="CenterScreen"
+        CanResize="True"
+        MinWidth="400" MinHeight="400">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#1a1a2e" Padding="20,15">
+            <StackPanel>
+                <TextBlock Text="SQL Version Control" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="Connect to your database server" Foreground="#aaa" FontSize="12"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Form -->
+        <StackPanel Grid.Row="1" Margin="25,20">
+            <!-- Mode Toggle (only show if there are recent connections) -->
+            <StackPanel Orientation="Horizontal" Spacing="15" Margin="0,0,0,15"
+                        IsVisible="{Binding HasRecentConnections}">
+                <RadioButton Content="Recent Connection" GroupName="Mode"
+                             IsChecked="{Binding UseRecentConnection}"/>
+                <RadioButton Content="New Connection" GroupName="Mode"
+                             IsChecked="{Binding !UseRecentConnection}"/>
+            </StackPanel>
+
+            <!-- Recent Connection Mode -->
+            <StackPanel IsVisible="{Binding UseRecentConnection}">
+                <TextBlock Text="Select Connection" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <ComboBox ItemsSource="{Binding RecentConnections}"
+                          SelectedItem="{Binding SelectedConnection}"
+                          HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <!-- Password for SQL auth recent connections -->
+                <StackPanel IsVisible="{Binding NeedsPassword}" Margin="0,15,0,0">
+                    <TextBlock Text="Password" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Password}" PasswordChar="●"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- New Connection Mode -->
+            <StackPanel IsVisible="{Binding !UseRecentConnection}">
+                <TextBlock Text="Server" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <TextBox Text="{Binding Server}" Watermark="e.g., 10.95.0.53 or server\instance"/>
+
+                <TextBlock Text="Database" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                <TextBox Text="{Binding Database}" Watermark="e.g., AAD"/>
+
+                <CheckBox Content="Use Windows Authentication" IsChecked="{Binding UseWindowsAuth}" Margin="0,15,0,10"/>
+
+                <TextBlock Text="Username" FontWeight="SemiBold" Margin="0,0,0,5"
+                           IsVisible="{Binding !UseWindowsAuth}"/>
+                <TextBox Text="{Binding Username}" IsVisible="{Binding !UseWindowsAuth}"/>
+
+                <TextBlock Text="Password" FontWeight="SemiBold" Margin="0,15,0,5"
+                           IsVisible="{Binding !UseWindowsAuth}"/>
+                <TextBox Text="{Binding Password}" PasswordChar="●" IsVisible="{Binding !UseWindowsAuth}"/>
+            </StackPanel>
+
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="#e63946" Margin="0,15,0,0"
+                       TextWrapping="Wrap" IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <Button Content="{Binding IsConnecting, Converter={StaticResource BoolToConnectText}}"
+                    Command="{Binding ConnectCommand}"
+                    IsEnabled="{Binding !IsConnecting}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    Background="#1a1a2e" Foreground="White"
+                    Padding="15,10" Margin="0,20,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

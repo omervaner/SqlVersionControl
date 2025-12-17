@@ -1,0 +1,212 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SqlVersionControl.ViewModels"
+        xmlns:views="using:SqlVersionControl.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="SqlVersionControl.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="SQL Version Control"
+        Width="1200" Height="700"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Tab Header -->
+        <Border Grid.Row="0" Background="#0d0d1a">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs" IsChecked="True"
+                                 Classes="TabButton" Content="Version History"/>
+                    <RadioButton x:Name="CompareTab" GroupName="Tabs"
+                                 Classes="TabButton" Content="Compare Databases"/>
+                </StackPanel>
+                <Button x:Name="SettingsButton" Grid.Column="1"
+                        Background="Transparent" Foreground="#888"
+                        Padding="15,10" Margin="0,0,10,0"
+                        ToolTip.Tip="Settings"
+                        Cursor="Hand">
+                    <TextBlock Text="&#x2699;" FontSize="18"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Tab Content -->
+        <Grid Grid.Row="1">
+            <!-- Version History Tab -->
+            <Grid IsVisible="{Binding #VersionHistoryTab.IsChecked}" RowDefinitions="Auto,*,Auto">
+                <!-- Top Toolbar -->
+                <Border Grid.Row="0" Background="#1a1a2e" Padding="15,10">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Database:" Foreground="White" VerticalAlignment="Center"/>
+                            <ComboBox ItemsSource="{Binding Databases}"
+                                      SelectedItem="{Binding SelectedDatabase}"
+                                      MinWidth="150"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="20,0,0,0">
+                            <TextBox Text="{Binding SearchText}"
+                                     Watermark="Search objects..."
+                                     Width="200"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10">
+                            <Button Content="Sync" Command="{Binding SyncCommand}"
+                                    Background="#2a6e4e" Foreground="White" Padding="10,5"
+                                    ToolTip.Tip="Sync new changes from DDL log"/>
+                            <Button Content="Refresh" Command="{Binding RefreshCommand}"
+                                    Background="#2a2a4e" Foreground="White" Padding="10,5"/>
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="4" Text="{Binding StatusMessage}"
+                                   Foreground="#aaa" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- Main Content -->
+                <Grid Grid.Row="1" ColumnDefinitions="250,*">
+                    <!-- Left Panel: Object Browser -->
+                    <Border Grid.Column="0" Background="#f5f5f5" BorderBrush="#ddd" BorderThickness="0,0,1,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                                <TextBlock Text="Object Browser" FontWeight="SemiBold"/>
+                            </Border>
+
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding Objects}"
+                                     SelectedItem="{Binding SelectedObject}"
+                                     Padding="5">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding TypeIcon}" FontFamily="Segoe UI Symbol"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding DisplayInfo}" FontSize="11" Foreground="#666"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- Right Panel: Recent Changes + Diff -->
+                    <Grid Grid.Column="1" RowDefinitions="*,Auto,*">
+                        <!-- Recent Changes -->
+                        <Grid Grid.Row="0" RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                                <TextBlock Text="Recent Changes" FontWeight="SemiBold"/>
+                            </Border>
+
+                            <DataGrid Grid.Row="1"
+                                      ItemsSource="{Binding RecentChanges}"
+                                      SelectedItem="{Binding SelectedChange}"
+                                      IsReadOnly="True"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      CanUserResizeColumns="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Object" Binding="{Binding ObjectName}" Width="*"/>
+                                    <DataGridTextColumn Header="Schema" Binding="{Binding SchemaName}" Width="80"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding EventType}" Width="70"/>
+                                    <DataGridTextColumn Header="Changed By" Binding="{Binding ChangedBy}" Width="100"/>
+                                    <DataGridTextColumn Header="Host" Binding="{Binding HostName}" Width="100"/>
+                                    <DataGridTextColumn Header="When" Binding="{Binding TimeAgo}" Width="100"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+
+                        <!-- Splitter -->
+                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+                                      Background="#ddd" ResizeDirection="Rows"/>
+
+                        <!-- Diff View -->
+                        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+                            <!-- Version Selectors -->
+                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                                <Grid ColumnDefinitions="*,Auto,*">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="Left:" VerticalAlignment="Center"/>
+                                        <ComboBox ItemsSource="{Binding Versions}"
+                                                  SelectedItem="{Binding LeftVersion}"
+                                                  MinWidth="200">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding VersionLabel}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" Content="Rollback to Left"
+                                            Command="{Binding RollbackCommand}"
+                                            Background="#e63946" Foreground="White" Padding="10,5"
+                                            IsVisible="{Binding LeftVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                                        <TextBlock Text="Right:" VerticalAlignment="Center"/>
+                                        <ComboBox ItemsSource="{Binding Versions}"
+                                                  SelectedItem="{Binding RightVersion}"
+                                                  MinWidth="200">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding VersionLabel}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Side by Side Diff View -->
+                            <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}"/>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
+                <!-- Status Bar -->
+                <Border Grid.Row="2" Background="#1a1a2e" Padding="10,5">
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#aaa" FontSize="11"/>
+                </Border>
+            </Grid>
+
+            <!-- Compare Databases Tab -->
+            <views:CompareView IsVisible="{Binding #CompareTab.IsChecked}" x:Name="CompareViewControl"/>
+        </Grid>
+    </Grid>
+
+    <Window.Styles>
+        <Style Selector="RadioButton.TabButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#888"/>
+            <Setter Property="Padding" Value="20,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            BorderThickness="0,0,0,3"
+                            BorderBrush="Transparent"
+                            x:Name="PART_Border">
+                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.TabButton:checked">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="RadioButton.TabButton:checked /template/ Border#PART_Border">
+            <Setter Property="BorderBrush" Value="#4a9eff"/>
+        </Style>
+        <Style Selector="RadioButton.TabButton:pointerover">
+            <Setter Property="Foreground" Value="#ccc"/>
+        </Style>
+        <Style Selector="Button#SettingsButton:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+</Window>
