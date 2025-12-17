@@ -8,6 +8,8 @@ namespace SqlVersionControl.Views;
 public partial class SettingsDialog : Window
 {
     private readonly SettingsService _settings = null!;
+    private bool _originalDarkTheme;
+    private int _originalFontSize;
     public bool SettingsChanged { get; private set; }
 
     public SettingsDialog()
@@ -19,7 +21,16 @@ public partial class SettingsDialog : Window
     {
         _settings = settings;
 
+        // Store original values for cancel/revert
+        _originalDarkTheme = settings.Settings.UseDarkTheme;
+        _originalFontSize = settings.Settings.FontSize;
+
         LoadCurrentSettings();
+
+        // Live preview when theme changes
+        DarkThemeRadio.IsCheckedChanged += (s, e) => PreviewTheme();
+        LightThemeRadio.IsCheckedChanged += (s, e) => PreviewTheme();
+        FontSizeCombo.SelectionChanged += (s, e) => PreviewTheme();
 
         // Enter saves, Escape cancels
         KeyDown += (s, e) =>
@@ -27,12 +38,33 @@ public partial class SettingsDialog : Window
             if (e.Key == Key.Enter)
                 SaveAndClose();
             else if (e.Key == Key.Escape)
-                Close();
+                CancelAndRevert();
         };
 
-        CancelButton.Click += (s, e) => Close();
+        CancelButton.Click += (s, e) => CancelAndRevert();
         SaveButton.Click += (s, e) => SaveAndClose();
         BrowseFolderButton.Click += async (s, e) => await BrowseForFolderAsync();
+    }
+
+    private void PreviewTheme()
+    {
+        var useDark = DarkThemeRadio.IsChecked == true;
+        var fontSize = _originalFontSize;
+
+        if (FontSizeCombo.SelectedItem is ComboBoxItem item && item.Tag != null)
+        {
+            if (int.TryParse(item.Tag.ToString(), out var size))
+                fontSize = size;
+        }
+
+        ThemeManager.ApplyTheme(useDark, fontSize);
+    }
+
+    private void CancelAndRevert()
+    {
+        // Revert to original theme
+        ThemeManager.ApplyTheme(_originalDarkTheme, _originalFontSize);
+        Close();
     }
 
     private void LoadCurrentSettings()
@@ -70,9 +102,6 @@ public partial class SettingsDialog : Window
     {
         var s = _settings.Settings;
 
-        var oldTheme = s.UseDarkTheme;
-        var oldFontSize = s.FontSize;
-
         // Theme
         s.UseDarkTheme = DarkThemeRadio.IsChecked == true;
 
@@ -92,7 +121,8 @@ public partial class SettingsDialog : Window
 
         _settings.Save();
 
-        SettingsChanged = oldTheme != s.UseDarkTheme || oldFontSize != s.FontSize;
+        // Compare with original values to see if theme/font changed
+        SettingsChanged = _originalDarkTheme != s.UseDarkTheme || _originalFontSize != s.FontSize;
         Close();
     }
 
