@@ -125,6 +125,13 @@ public partial class MainWindow : Window
         {
             // Apply theme and font size changes
             ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
+
+            // Refresh DiffView colors
+            MainDiffView.ApplyTheme();
+
+            // Refresh CompareView's DiffView if it exists
+            var compareView = this.FindControl<CompareView>("CompareViewControl");
+            compareView?.RefreshTheme();
         }
     }
 

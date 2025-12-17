@@ -9,7 +9,7 @@
 
     <Grid ColumnDefinitions="*,5,*">
         <!-- Left Panel (Old) -->
-        <Border Grid.Column="0" Background="#1e1e1e">
+        <Border Grid.Column="0" Name="LeftPanel">
             <ScrollViewer Name="LeftScroll"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto">
@@ -17,9 +17,9 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:DiffLine">
                             <Grid ColumnDefinitions="50,*">
-                                <Border Grid.Column="0" Background="#2d2d2d" Padding="5,2">
+                                <Border Grid.Column="0" Background="{Binding LineNumberBackground}" Padding="5,2">
                                     <TextBlock Text="{Binding LineNumber}"
-                                               Foreground="#858585"
+                                               Foreground="{Binding LineNumberForeground}"
                                                FontFamily="Consolas,Menlo,Monaco,monospace"
                                                FontSize="{Binding FontSize}"
                                                HorizontalAlignment="Right"/>
@@ -50,10 +50,10 @@
 
         <!-- Splitter -->
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                      Background="#333"/>
+                      Name="DiffSplitter"/>
 
         <!-- Right Panel (New) -->
-        <Border Grid.Column="2" Background="#1e1e1e">
+        <Border Grid.Column="2" Name="RightPanel">
             <ScrollViewer Name="RightScroll"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto">
@@ -61,9 +61,9 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:DiffLine">
                             <Grid ColumnDefinitions="50,*">
-                                <Border Grid.Column="0" Background="#2d2d2d" Padding="5,2">
+                                <Border Grid.Column="0" Background="{Binding LineNumberBackground}" Padding="5,2">
                                     <TextBlock Text="{Binding LineNumber}"
-                                               Foreground="#858585"
+                                               Foreground="{Binding LineNumberForeground}"
                                                FontFamily="Consolas,Menlo,Monaco,monospace"
                                                FontSize="{Binding FontSize}"
                                                HorizontalAlignment="Right"/>

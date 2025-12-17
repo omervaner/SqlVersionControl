@@ -164,7 +164,7 @@
                             </Border>
 
                             <!-- Side by Side Diff View -->
-                            <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}"/>
+                            <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}" x:Name="MainDiffView"/>
                         </Grid>
                     </Grid>
                 </Grid>

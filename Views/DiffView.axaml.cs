@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using DiffPlex.DiffBuilder.Model;
 using SqlVersionControl.Models;
+using SqlVersionControl.Services;
 
 namespace SqlVersionControl.Views;
 
@@ -17,10 +19,12 @@ public partial class DiffView : UserControl
     }
 
     private bool _syncingScroll;
+    private SideBySideDiffModel? _lastModel;
 
     public DiffView()
     {
         InitializeComponent();
+        ApplyTheme();
 
         PropertyChanged += (s, e) =>
         {
@@ -33,6 +37,24 @@ public partial class DiffView : UserControl
         RightScroll.ScrollChanged += (s, e) => SyncScroll(RightScroll, LeftScroll);
     }
 
+    public void ApplyTheme()
+    {
+        var bg = new SolidColorBrush(ThemeManager.GetDiffBackground());
+        var splitterBg = ThemeManager.IsDarkTheme
+            ? new SolidColorBrush(Color.FromRgb(51, 51, 51))
+            : new SolidColorBrush(Color.FromRgb(200, 200, 200));
+
+        LeftPanel.Background = bg;
+        RightPanel.Background = bg;
+        DiffSplitter.Background = splitterBg;
+
+        // Re-render diff lines to update colors
+        if (_lastModel != null)
+        {
+            OnDiffModelChanged(_lastModel);
+        }
+    }
+
     private void SyncScroll(ScrollViewer source, ScrollViewer target)
     {
         if (_syncingScroll) return;
@@ -43,6 +65,8 @@ public partial class DiffView : UserControl
 
     private void OnDiffModelChanged(SideBySideDiffModel? model)
     {
+        _lastModel = model;
+
         if (model == null)
         {
             LeftLines.ItemsSource = null;

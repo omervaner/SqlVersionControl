@@ -148,7 +148,7 @@
                 </Grid>
 
                 <!-- Side by Side Diff -->
-                <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}"/>
+                <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}" x:Name="CompareDiffView"/>
             </Grid>
         </Grid>
 
