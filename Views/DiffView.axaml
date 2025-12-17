@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:models="using:SqlVersionControl.Models"
+             xmlns:views="using:SqlVersionControl.Views"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="SqlVersionControl.Views.DiffView">
+
+    <Grid ColumnDefinitions="*,5,*">
+        <!-- Left Panel (Old) -->
+        <Border Grid.Column="0" Background="#1e1e1e">
+            <ScrollViewer Name="LeftScroll"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl Name="LeftLines" Padding="0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DiffLine">
+                            <Grid ColumnDefinitions="50,*">
+                                <Border Grid.Column="0" Background="#2d2d2d" Padding="5,2">
+                                    <TextBlock Text="{Binding LineNumber}"
+                                               Foreground="#858585"
+                                               FontFamily="Consolas,Menlo,Monaco,monospace"
+                                               FontSize="{Binding FontSize}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                                <Border Grid.Column="1" Background="{Binding Background}" Padding="10,2">
+                                    <ItemsControl ItemsSource="{Binding Segments}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:HighlightedSegment">
+                                                <TextBlock Text="{Binding Text}"
+                                                           Foreground="{Binding Foreground}"
+                                                           FontFamily="Consolas,Menlo,Monaco,monospace"
+                                                           FontSize="{Binding FontSize}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Splitter -->
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                      Background="#333"/>
+
+        <!-- Right Panel (New) -->
+        <Border Grid.Column="2" Background="#1e1e1e">
+            <ScrollViewer Name="RightScroll"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl Name="RightLines" Padding="0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DiffLine">
+                            <Grid ColumnDefinitions="50,*">
+                                <Border Grid.Column="0" Background="#2d2d2d" Padding="5,2">
+                                    <TextBlock Text="{Binding LineNumber}"
+                                               Foreground="#858585"
+                                               FontFamily="Consolas,Menlo,Monaco,monospace"
+                                               FontSize="{Binding FontSize}"
+                                               HorizontalAlignment="Right"/>
+                                </Border>
+                                <Border Grid.Column="1" Background="{Binding Background}" Padding="10,2">
+                                    <ItemsControl ItemsSource="{Binding Segments}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:HighlightedSegment">
+                                                <TextBlock Text="{Binding Text}"
+                                                           Foreground="{Binding Foreground}"
+                                                           FontFamily="Consolas,Menlo,Monaco,monospace"
+                                                           FontSize="{Binding FontSize}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>
