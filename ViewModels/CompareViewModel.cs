@@ -113,9 +113,13 @@ public partial class CompareViewModel : ViewModelBase
     // Event for password prompt (returns password or null if cancelled)
     public event Func<SavedConnection, Task<string?>>? PasswordRequested;
 
-    public CompareViewModel()
+    public CompareViewModel() : this(new SettingsService())
     {
-        _settings = new SettingsService();
+    }
+
+    public CompareViewModel(SettingsService settings)
+    {
+        _settings = settings;
         LoadSavedConnections();
         RestoreLastComparison();
     }

@@ -27,10 +27,11 @@ public partial class MainWindow : Window
         // Subscribe to rollback confirmation requests
         _viewModel.RollbackRequested += OnRollbackRequested;
 
-        // Wire up CompareView's deploy confirmation
+        // Initialize and wire up CompareView
         var compareView = this.FindControl<CompareView>("CompareViewControl");
         if (compareView != null)
         {
+            compareView.Initialize(_settings);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
         }
 
