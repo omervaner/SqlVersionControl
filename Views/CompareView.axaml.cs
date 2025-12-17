@@ -8,10 +8,17 @@ namespace SqlVersionControl.Views;
 
 public partial class CompareView : UserControl
 {
+    private SettingsService? _settings;
+
     public CompareView()
     {
         InitializeComponent();
-        DataContext = new CompareViewModel();
+    }
+
+    public void Initialize(SettingsService settings)
+    {
+        _settings = settings;
+        DataContext = new CompareViewModel(settings);
 
         AddSourceButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(true);
         AddTargetButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(false);
