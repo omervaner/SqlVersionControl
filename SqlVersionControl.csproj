@@ -14,7 +14,7 @@
     <Description>Track and manage SQL Server stored procedure versions with diff view and rollback support</Description>
     <Company>Internal Tools</Company>
     <Copyright>2024</Copyright>
-    <ApplicationIcon>Assets\avalonia-logo.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
