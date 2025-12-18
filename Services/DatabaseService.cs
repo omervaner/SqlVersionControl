@@ -207,8 +207,10 @@ public class DatabaseService
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
 
-            // Execute the stored definition (CREATE or ALTER)
-            using var cmd = new SqlCommand(version.Definition, conn);
+            // Convert CREATE to CREATE OR ALTER so rollback works whether object exists or not
+            var script = ConvertToCreateOrAlter(version.Definition);
+
+            using var cmd = new SqlCommand(script, conn);
             await cmd.ExecuteNonQueryAsync();
             return true;
         }
@@ -216,6 +218,32 @@ public class DatabaseService
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Converts CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER to CREATE OR ALTER
+    /// so deploy/rollback works whether object exists or not (SQL Server 2016+)
+    /// </summary>
+    private static string ConvertToCreateOrAlter(string definition)
+    {
+        if (string.IsNullOrEmpty(definition)) return definition;
+
+        // Skip if already has "OR ALTER"
+        if (System.Text.RegularExpressions.Regex.IsMatch(definition, @"CREATE\s+OR\s+ALTER",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            return definition;
+        }
+
+        // Pattern matches CREATE PROCEDURE/PROC/FUNCTION/VIEW/TRIGGER anywhere in the string
+        var pattern = @"\bCREATE\s+(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b";
+        var replacement = "CREATE OR ALTER $1";
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            definition,
+            pattern,
+            replacement,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     public async Task EnsureSchemaAsync()

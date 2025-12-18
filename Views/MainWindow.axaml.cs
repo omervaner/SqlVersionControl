@@ -33,6 +33,8 @@ public partial class MainWindow : Window
         {
             compareView.Initialize(_settings);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
+            // Apply theme to Compare tab diff views after initialization
+            compareView.RefreshTheme();
         }
 
         // Wire up settings button
@@ -118,21 +120,15 @@ public partial class MainWindow : Window
 
     private async Task ShowSettingsDialogAsync()
     {
-        var dialog = new SettingsDialog(_settings);
+        var dialog = new SettingsDialog(_settings, RefreshDiffViews);
         await dialog.ShowDialog(this);
+    }
 
-        if (dialog.SettingsChanged)
-        {
-            // Apply theme and font size changes
-            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
-
-            // Refresh DiffView colors
-            MainDiffView.ApplyTheme();
-
-            // Refresh CompareView's DiffView if it exists
-            var compareView = this.FindControl<CompareView>("CompareViewControl");
-            compareView?.RefreshTheme();
-        }
+    private void RefreshDiffViews()
+    {
+        MainDiffView.ApplyTheme();
+        var compareView = this.FindControl<CompareView>("CompareViewControl");
+        compareView?.RefreshTheme();
     }
 
     private async Task ChangeConnectionAsync()

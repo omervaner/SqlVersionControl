@@ -48,6 +48,31 @@ public partial class CompareViewModel : ViewModelBase
 
     private string _targetConnectionString = "";
 
+    // Target2 connection (optional third database for three-way compare)
+    [ObservableProperty]
+    private ObservableCollection<SavedConnection> _target2Connections = new();
+
+    [ObservableProperty]
+    private SavedConnection? _selectedTarget2Connection;
+
+    [ObservableProperty]
+    private string _target2Status = "Not connected";
+
+    [ObservableProperty]
+    private bool _isTarget2Connected;
+
+    [ObservableProperty]
+    private bool _showTarget2; // Toggle for showing third DB
+
+    public string ToggleTarget2ButtonText => ShowTarget2 ? "- T2" : "+ T2";
+
+    partial void OnShowTarget2Changed(bool value)
+    {
+        OnPropertyChanged(nameof(ToggleTarget2ButtonText));
+    }
+
+    private string _target2ConnectionString = "";
+
     // Objects and comparison
     [ObservableProperty]
     private ObservableCollection<CompareObject> _objects = new();
@@ -67,11 +92,21 @@ public partial class CompareViewModel : ViewModelBase
     [ObservableProperty]
     private SideBySideDiffModel? _diffModel;
 
+    // Second diff for Target1 ↔ Target2 comparison
+    [ObservableProperty]
+    private string _target2Code = "";
+
+    [ObservableProperty]
+    private SideBySideDiffModel? _diffModel2;
+
     [ObservableProperty]
     private string _statusMessage = "";
 
     [ObservableProperty]
     private bool _canDeploy;
+
+    [ObservableProperty]
+    private bool _canDeploy2; // Can deploy from Target1 to Target2
 
     // Show only differences feature
     [ObservableProperty]
@@ -121,7 +156,42 @@ public partial class CompareViewModel : ViewModelBase
     {
         _settings = settings;
         LoadSavedConnections();
-        RestoreLastComparison();
+        // Restore dropdown selections visually (no auto-connect)
+        // User will click Refresh or select to actually connect
+        RestoreSelections();
+    }
+
+    private void RestoreSelections()
+    {
+        var (lastSource, lastTarget) = _settings.GetLastComparison();
+
+        if (lastSource != null)
+        {
+            // Set backing field directly to avoid triggering connection
+            _selectedSourceConnection = SourceConnections.FirstOrDefault(c =>
+                c.Server == lastSource.Server && c.Database == lastSource.Database);
+        }
+
+        if (lastTarget != null)
+        {
+            _selectedTargetConnection = TargetConnections.FirstOrDefault(c =>
+                c.Server == lastTarget.Server && c.Database == lastTarget.Database);
+        }
+    }
+
+    /// <summary>
+    /// Auto-connect source if we already have credentials (from main app login).
+    /// Only connects source, not target - avoids double password prompts.
+    /// </summary>
+    public async Task TryAutoConnectSourceAsync()
+    {
+        if (_selectedSourceConnection == null) return;
+
+        // Auto-connect if Windows Auth OR if we already have the password stored
+        if (_selectedSourceConnection.UseWindowsAuth || HasPasswordFor(_selectedSourceConnection))
+        {
+            await ConnectSourceAsync(_selectedSourceConnection);
+        }
     }
 
     private void LoadSavedConnections()
@@ -130,31 +200,7 @@ public partial class CompareViewModel : ViewModelBase
         {
             SourceConnections.Add(conn);
             TargetConnections.Add(conn);
-        }
-    }
-
-    private void RestoreLastComparison()
-    {
-        var (lastSource, lastTarget) = _settings.GetLastComparison();
-
-        if (lastSource != null)
-        {
-            var source = SourceConnections.FirstOrDefault(c =>
-                c.Server == lastSource.Server && c.Database == lastSource.Database);
-            if (source != null)
-            {
-                SelectedSourceConnection = source;
-            }
-        }
-
-        if (lastTarget != null)
-        {
-            var target = TargetConnections.FirstOrDefault(c =>
-                c.Server == lastTarget.Server && c.Database == lastTarget.Database);
-            if (target != null)
-            {
-                SelectedTargetConnection = target;
-            }
+            Target2Connections.Add(conn);
         }
     }
 
@@ -176,6 +222,14 @@ public partial class CompareViewModel : ViewModelBase
         if (value != null)
         {
             _ = ConnectTargetAsync(value);
+        }
+    }
+
+    partial void OnSelectedTarget2ConnectionChanged(SavedConnection? value)
+    {
+        if (value != null)
+        {
+            _ = ConnectTarget2Async(value);
         }
     }
 
@@ -234,12 +288,60 @@ public partial class CompareViewModel : ViewModelBase
             IsTargetConnected = true;
             TargetStatus = $"Connected: {conn.Server}/{conn.Database}";
             SaveLastComparison();
-            await LoadObjectsAsync();
+
+            // Auto-connect source after target connects (password should be in PasswordStore from main login)
+            if (SelectedSourceConnection != null && !IsSourceConnected)
+            {
+                if (SelectedSourceConnection.UseWindowsAuth || HasPasswordFor(SelectedSourceConnection))
+                {
+                    await ConnectSourceAsync(SelectedSourceConnection);
+                }
+            }
+            else
+            {
+                await LoadObjectsAsync();
+            }
         }
         else
         {
             IsTargetConnected = false;
             TargetStatus = "Connection failed";
+        }
+    }
+
+    private async Task ConnectTarget2Async(SavedConnection conn)
+    {
+        Target2Status = "Connecting...";
+
+        // Check if we need password and don't have it
+        if (!conn.UseWindowsAuth && !HasPasswordFor(conn))
+        {
+            var password = await RequestPasswordAsync(conn);
+            if (password == null)
+            {
+                Target2Status = "Cancelled";
+                return;
+            }
+            StorePassword(conn, password);
+        }
+
+        _target2ConnectionString = BuildConnectionString(conn);
+
+        if (await TestConnectionAsync(_target2ConnectionString))
+        {
+            IsTarget2Connected = true;
+            Target2Status = $"Connected: {conn.Server}/{conn.Database}";
+
+            // Reload definitions if we have a selected object
+            if (SelectedObject != null)
+            {
+                await LoadDefinitionsAsync(SelectedObject);
+            }
+        }
+        else
+        {
+            IsTarget2Connected = false;
+            Target2Status = "Connection failed";
         }
     }
 
@@ -312,6 +414,9 @@ public partial class CompareViewModel : ViewModelBase
     {
         if (!IsSourceConnected && !IsTargetConnected) return;
 
+        // Remember selected object to restore after refresh
+        var selectedFullName = SelectedObject?.FullName;
+
         var sourceObjects = new Dictionary<string, string>();
         var targetObjects = new Dictionary<string, string>();
 
@@ -350,6 +455,21 @@ public partial class CompareViewModel : ViewModelBase
         }
 
         FilterObjects();
+
+        // Re-select the same object (new instance) and reload definitions
+        if (!string.IsNullOrEmpty(selectedFullName))
+        {
+            var matchingObject = Objects.FirstOrDefault(o => o.FullName == selectedFullName);
+            if (matchingObject != null)
+            {
+                SelectedObject = matchingObject;
+                await LoadDefinitionsAsync(matchingObject);
+            }
+            else
+            {
+                SelectedObject = null;
+            }
+        }
     }
 
     private async Task<Dictionary<string, string>> GetObjectsFromDatabaseAsync(string connectionString)
@@ -502,7 +622,9 @@ public partial class CompareViewModel : ViewModelBase
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
-            var searchTerms = SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // Normalize search text: replace underscores with spaces, then split
+            var normalizedSearch = SearchText.Replace("_", " ");
+            var searchTerms = normalizedSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             filtered = filtered.Where(o =>
             {
                 var name = o.ObjectName.Replace("_", " ");
@@ -533,7 +655,9 @@ public partial class CompareViewModel : ViewModelBase
     {
         SourceCode = "";
         TargetCode = "";
+        Target2Code = "";
         CanDeploy = false;
+        CanDeploy2 = false;
 
         if (IsSourceConnected && obj.ExistsInSource)
         {
@@ -545,10 +669,20 @@ public partial class CompareViewModel : ViewModelBase
             TargetCode = await GetDefinitionAsync(_targetConnectionString, obj.SchemaName, obj.ObjectName);
         }
 
+        // Load Target2 definition if connected
+        if (IsTarget2Connected)
+        {
+            Target2Code = await GetDefinitionAsync(_target2ConnectionString, obj.SchemaName, obj.ObjectName);
+        }
+
         UpdateDiff();
+        UpdateDiff2();
 
         // Can deploy if source has code and target is connected
         CanDeploy = IsTargetConnected && !string.IsNullOrEmpty(SourceCode);
+
+        // Can deploy to Target2 if Target1 has code and Target2 is connected
+        CanDeploy2 = IsTarget2Connected && !string.IsNullOrEmpty(TargetCode);
     }
 
     private async Task<string> GetDefinitionAsync(string connectionString, string schema, string objectName)
@@ -584,6 +718,18 @@ public partial class CompareViewModel : ViewModelBase
         DiffModel = diffBuilder.BuildDiffModel(SourceCode, TargetCode);
     }
 
+    private void UpdateDiff2()
+    {
+        if (!IsTarget2Connected || string.IsNullOrEmpty(TargetCode))
+        {
+            DiffModel2 = null;
+            return;
+        }
+
+        var diffBuilder = new SideBySideDiffBuilder(new Differ());
+        DiffModel2 = diffBuilder.BuildDiffModel(TargetCode, Target2Code);
+    }
+
     [RelayCommand]
     private async Task DeployAsync()
     {
@@ -606,16 +752,10 @@ public partial class CompareViewModel : ViewModelBase
             using var conn = new SqlConnection(_targetConnectionString);
             await conn.OpenAsync();
 
-            // Drop existing if exists, then create
-            var dropSql = $@"
-                IF OBJECT_ID('{SelectedObject.SchemaName}.{SelectedObject.ObjectName}') IS NOT NULL
-                    DROP PROCEDURE [{SelectedObject.SchemaName}].[{SelectedObject.ObjectName}]";
+            // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
+            var deployScript = ConvertToCreateOrAlter(SourceCode);
 
-            // For simplicity, we'll execute the source definition directly
-            // This assumes the definition is a CREATE statement
-            // You may need to convert CREATE to ALTER or handle differently
-
-            using var cmd = new SqlCommand(SourceCode, conn);
+            using var cmd = new SqlCommand(deployScript, conn);
             await cmd.ExecuteNonQueryAsync();
 
             StatusMessage = $"Deployed {SelectedObject.FullName} to {SelectedTargetConnection?.Server}";
@@ -630,8 +770,73 @@ public partial class CompareViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private async Task Deploy2Async()
+    {
+        if (SelectedObject == null || string.IsNullOrEmpty(TargetCode)) return;
+
+        // Check if deploying to PROD (IP ends with .15)
+        var isProd = SelectedTarget2Connection?.Server.EndsWith(".15") == true;
+
+        if (DeployRequested != null)
+        {
+            var targetDesc = isProd ? "PRODUCTION" : SelectedTarget2Connection?.Server ?? "target2";
+            var confirmed = await DeployRequested(SelectedObject.FullName, targetDesc);
+            if (!confirmed) return;
+        }
+
+        StatusMessage = "Deploying to Target 2...";
+
+        try
+        {
+            using var conn = new SqlConnection(_target2ConnectionString);
+            await conn.OpenAsync();
+
+            // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
+            var deployScript = ConvertToCreateOrAlter(TargetCode);
+
+            using var cmd = new SqlCommand(deployScript, conn);
+            await cmd.ExecuteNonQueryAsync();
+
+            StatusMessage = $"Deployed {SelectedObject.FullName} to {SelectedTarget2Connection?.Server}";
+
+            // Refresh to show updated state
+            await LoadDefinitionsAsync(SelectedObject);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Deploy to Target 2 failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleTarget2()
+    {
+        ShowTarget2 = !ShowTarget2;
+        if (!ShowTarget2)
+        {
+            // Clear Target2 connection when hiding
+            SelectedTarget2Connection = null;
+            IsTarget2Connected = false;
+            Target2Status = "Not connected";
+            Target2Code = "";
+            DiffModel2 = null;
+            CanDeploy2 = false;
+        }
+    }
+
+    [RelayCommand]
     private async Task RefreshAsync()
     {
+        // Connect if we have selections but aren't connected yet
+        if (SelectedSourceConnection != null && !IsSourceConnected)
+        {
+            await ConnectSourceAsync(SelectedSourceConnection);
+        }
+        if (SelectedTargetConnection != null && !IsTargetConnected)
+        {
+            await ConnectTargetAsync(SelectedTargetConnection);
+        }
+
         await LoadObjectsAsync();
         UpdateStatusMessage();
     }
@@ -676,6 +881,33 @@ public partial class CompareViewModel : ViewModelBase
             StatusMessage = $"Showing {total} objects";
         else
             StatusMessage = $"Showing {showing} of {total} objects";
+    }
+
+    /// <summary>
+    /// Converts CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER to CREATE OR ALTER
+    /// so deploy works whether object exists or not (SQL Server 2016+)
+    /// </summary>
+    private static string ConvertToCreateOrAlter(string definition)
+    {
+        if (string.IsNullOrEmpty(definition)) return definition;
+
+        // Skip if already has "OR ALTER"
+        if (System.Text.RegularExpressions.Regex.IsMatch(definition, @"CREATE\s+OR\s+ALTER",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            return definition;
+        }
+
+        // Pattern matches CREATE PROCEDURE/PROC/FUNCTION/VIEW/TRIGGER anywhere in the string
+        // More flexible to handle leading whitespace, comments, etc.
+        var pattern = @"\bCREATE\s+(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b";
+        var replacement = "CREATE OR ALTER $1";
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            definition,
+            pattern,
+            replacement,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     public void UpdateSelectedCount()
@@ -738,10 +970,13 @@ public partial class CompareViewModel : ViewModelBase
                     sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
                 }
 
+                // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
+                var deployScript = ConvertToCreateOrAlter(sourceCode);
+
                 using var conn = new SqlConnection(_targetConnectionString);
                 await conn.OpenAsync();
 
-                using var cmd = new SqlCommand(sourceCode, conn);
+                using var cmd = new SqlCommand(deployScript, conn);
                 await cmd.ExecuteNonQueryAsync();
 
                 obj.IsSelected = false;
@@ -776,7 +1011,7 @@ public partial class CompareViewModel : ViewModelBase
         // Save to settings for future use
         _settings.AddRecentConnection(conn);
 
-        // Add to both dropdowns if not already present
+        // Add to all dropdowns if not already present
         if (!SourceConnections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
         {
             SourceConnections.Insert(0, conn);
@@ -784,6 +1019,10 @@ public partial class CompareViewModel : ViewModelBase
         if (!TargetConnections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
         {
             TargetConnections.Insert(0, conn);
+        }
+        if (!Target2Connections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
+        {
+            Target2Connections.Insert(0, conn);
         }
 
         // Select it for the appropriate side
@@ -795,6 +1034,36 @@ public partial class CompareViewModel : ViewModelBase
         {
             SelectedTargetConnection = conn;
         }
+    }
+
+    public void AddConnectionToTarget2(SavedConnection conn, string? password)
+    {
+        // Store password if provided (for SQL auth)
+        if (!conn.UseWindowsAuth && !string.IsNullOrEmpty(password))
+        {
+            var key = $"{conn.Server}|{conn.Database}|{conn.Username}";
+            _passwords[key] = password;
+        }
+
+        // Save to settings for future use
+        _settings.AddRecentConnection(conn);
+
+        // Add to all dropdowns if not already present
+        if (!SourceConnections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
+        {
+            SourceConnections.Insert(0, conn);
+        }
+        if (!TargetConnections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
+        {
+            TargetConnections.Insert(0, conn);
+        }
+        if (!Target2Connections.Any(c => c.Server == conn.Server && c.Database == conn.Database))
+        {
+            Target2Connections.Insert(0, conn);
+        }
+
+        // Select it for Target2
+        SelectedTarget2Connection = conn;
     }
 }
 

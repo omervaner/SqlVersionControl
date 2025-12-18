@@ -70,9 +70,10 @@
                 <!-- Main Content -->
                 <Grid Grid.Row="1" ColumnDefinitions="250,Auto,*">
                     <!-- Left Panel: Object Browser -->
-                    <Border Grid.Column="0" Background="#f5f5f5" BorderBrush="#ddd" BorderThickness="0,0,1,0">
+                    <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
                         <Grid RowDefinitions="Auto,*">
-                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
                                 <TextBlock Text="Object Browser" FontWeight="SemiBold"/>
                             </Border>
 
@@ -86,7 +87,8 @@
                                             <TextBlock Text="{Binding TypeIcon}" FontFamily="Segoe UI Symbol"/>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding DisplayInfo}" FontSize="11" Foreground="#666"/>
+                                                <TextBlock Text="{Binding DisplayInfo}" FontSize="11"
+                                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
@@ -97,13 +99,13 @@
 
                     <!-- Resizable Splitter -->
                     <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                                  Background="#ddd" ResizeDirection="Columns"/>
+                                  Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" ResizeDirection="Columns"/>
 
                     <!-- Right Panel: Recent Changes + Diff -->
                     <Grid Grid.Column="2" RowDefinitions="*,Auto,*">
                         <!-- Recent Changes -->
                         <Grid Grid.Row="0" RowDefinitions="Auto,*">
-                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
                                 <TextBlock Text="Recent Changes" FontWeight="SemiBold"/>
                             </Border>
 
@@ -127,12 +129,12 @@
 
                         <!-- Splitter -->
                         <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                                      Background="#ddd" ResizeDirection="Rows"/>
+                                      Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" ResizeDirection="Rows"/>
 
                         <!-- Diff View -->
                         <Grid Grid.Row="2" RowDefinitions="Auto,*">
                             <!-- Version Selectors -->
-                            <Border Grid.Row="0" Background="#e8e8e8" Padding="10">
+                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
                                 <Grid ColumnDefinitions="*,Auto,*">
                                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                                         <TextBlock Text="Left:" VerticalAlignment="Center"/>

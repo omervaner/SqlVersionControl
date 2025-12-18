@@ -8,6 +8,7 @@ namespace SqlVersionControl.Views;
 public partial class SettingsDialog : Window
 {
     private readonly SettingsService _settings = null!;
+    private readonly Action? _onThemePreview;
     private bool _originalDarkTheme;
     private int _originalFontSize;
     public bool SettingsChanged { get; private set; }
@@ -17,9 +18,10 @@ public partial class SettingsDialog : Window
         InitializeComponent();
     }
 
-    public SettingsDialog(SettingsService settings) : this()
+    public SettingsDialog(SettingsService settings, Action? onThemePreview = null) : this()
     {
         _settings = settings;
+        _onThemePreview = onThemePreview;
 
         // Store original values for cancel/revert
         _originalDarkTheme = settings.Settings.UseDarkTheme;
@@ -58,12 +60,14 @@ public partial class SettingsDialog : Window
         }
 
         ThemeManager.ApplyTheme(useDark, fontSize);
+        _onThemePreview?.Invoke();
     }
 
     private void CancelAndRevert()
     {
         // Revert to original theme
         ThemeManager.ApplyTheme(_originalDarkTheme, _originalFontSize);
+        _onThemePreview?.Invoke();
         Close();
     }
 

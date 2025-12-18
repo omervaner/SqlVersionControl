@@ -121,7 +121,7 @@ public class AppSettings
     public string? LastTargetDatabase { get; set; }
 
     // User preferences
-    public bool UseDarkTheme { get; set; } = true;
+    public bool UseDarkTheme { get; set; } = false;
     public int FontSize { get; set; } = 12;
     public int MaxRecentConnections { get; set; } = 5;
     public string? DataFolderPath { get; set; }
