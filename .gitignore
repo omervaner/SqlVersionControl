@@ -62,3 +62,12 @@ publish/
 
 # Local settings
 appsettings.local.json
+
+# Claude / AI
+CLAUDE.md
+.claude/
+
+# Sensitive / internal
+credentials.json
+doculog2.csv
+ROADMAP*.md
