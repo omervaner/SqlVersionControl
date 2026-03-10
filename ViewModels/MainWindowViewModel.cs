@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DiffPlex;
@@ -15,6 +16,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private List<DatabaseObject> _allObjects = new();  // Unfiltered list for search
     private CancellationTokenSource? _codeSearchCts;    // Debounce for code search
     private string _activeCodeSearchTerm = "";           // The term that produced current code results
+    private DispatcherTimer? _autoSyncTimer;
+    private bool _autoSyncing;                           // Guard against overlapping syncs
 
     [ObservableProperty]
     private bool _isConnected;
@@ -96,6 +99,58 @@ public partial class MainWindowViewModel : ViewModelBase
         StatusMessage = $"Connected to {settings.Server}/{settings.Database} - loading...";
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
+        StartAutoSyncTimer();
+    }
+
+    private void StartAutoSyncTimer()
+    {
+        _autoSyncTimer?.Stop();
+        _autoSyncTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+        _autoSyncTimer.Tick += async (_, _) => await AutoSyncTickAsync();
+        _autoSyncTimer.Start();
+    }
+
+    private async Task AutoSyncTickAsync()
+    {
+        if (!IsConnected || _autoSyncing || string.IsNullOrEmpty(SelectedDatabase))
+            return;
+
+        _autoSyncing = true;
+        try
+        {
+            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase);
+            if (synced <= 0) return;
+
+            // Reload recent changes without resetting user's current selection
+            var savedChange = SelectedChange;
+            var changes = await _db.GetRecentChangesAsync(SelectedDatabase);
+            RecentChanges.Clear();
+            foreach (var c in changes)
+                RecentChanges.Add(c);
+
+            // Restore selection if it still exists
+            if (savedChange != null)
+                SelectedChange = RecentChanges.FirstOrDefault(c => c.VersionId == savedChange.VersionId);
+
+            // Reload objects list without resetting selection
+            var savedObject = SelectedObject;
+            _allObjects = await _db.GetObjectsAsync(SelectedDatabase);
+            if (!IsDependencyMode)
+                FilterObjects();
+
+            if (savedObject != null)
+                SelectedObject = Objects.FirstOrDefault(o => o.FullName == savedObject.FullName);
+
+            StatusMessage = $"{synced} new change{(synced == 1 ? "" : "s")} synced";
+        }
+        catch
+        {
+            // Silently ignore — transient DB errors shouldn't kill the timer
+        }
+        finally
+        {
+            _autoSyncing = false;
+        }
     }
 
     private async Task LoadDataAsync()
