@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Microsoft.Data.SqlClient;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
 using SqlVersionControl.ViewModels;
@@ -9,6 +10,7 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsService _settings;
+    private readonly SleepDetector _sleepDetector;
 
     public MainWindow()
     {
@@ -37,11 +39,21 @@ public partial class MainWindow : Window
             compareView.RefreshTheme();
         }
 
+        // Wire up dependencies button
+        DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
+
         // Wire up settings button
         SettingsButton.Click += async (s, e) => await ShowSettingsDialogAsync();
 
         // Wire up change DB button
         ChangeDbButton.Click += async (s, e) => await ChangeConnectionAsync();
+
+        // Wire up retry button on reconnect overlay
+        RetryButton.Click += async (s, e) => await ReconnectAsync();
+
+        // Sleep/wake detection
+        _sleepDetector = new SleepDetector();
+        _sleepDetector.WokeFromSleep += OnWokeFromSleep;
 
         Opened += OnOpened;
         Closing += OnClosing;
@@ -68,6 +80,8 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        _sleepDetector.Stop();
+
         // Save window position/size
         var s = _settings.Settings;
         s.IsMaximized = WindowState == WindowState.Maximized;
@@ -111,6 +125,7 @@ public partial class MainWindow : Window
         if (dialog.Result != null)
         {
             _viewModel.OnConnected(dialog.Result);
+            _sleepDetector.Start();
         }
         else
         {
@@ -131,6 +146,14 @@ public partial class MainWindow : Window
         compareView?.RefreshTheme();
     }
 
+    private async Task ShowDependenciesAsync()
+    {
+        var obj = _viewModel.SelectedObject;
+        if (obj == null || obj.IsSectionHeader || string.IsNullOrEmpty(_viewModel.SelectedDatabase)) return;
+
+        await _viewModel.ShowDependenciesAsync(obj);
+    }
+
     private async Task ChangeConnectionAsync()
     {
         var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
@@ -140,7 +163,48 @@ public partial class MainWindow : Window
         {
             // User connected to a new database - refresh the view
             _viewModel.OnConnected(dialog.Result);
+            _sleepDetector.Start();
         }
         // If user cancels, just keep current connection (don't close app)
+    }
+
+    private async void OnWokeFromSleep()
+    {
+        if (!_viewModel.IsConnected) return;
+        await ReconnectAsync();
+    }
+
+    private async Task ReconnectAsync()
+    {
+        // Show overlay
+        ReconnectOverlay.IsVisible = true;
+        ReconnectText.Text = "Reconnecting...";
+        ReconnectProgress.IsVisible = true;
+        RetryButton.IsVisible = false;
+
+        // Clear stale pooled connections
+        SqlConnection.ClearAllPools();
+
+        // Retry up to 3 times with 2s delay
+        for (int i = 1; i <= 3; i++)
+        {
+            ReconnectText.Text = $"Reconnecting... (attempt {i}/3)";
+
+            if (await _viewModel.DatabaseService.TestConnectionAsync())
+            {
+                // Success — hide overlay and refresh
+                ReconnectOverlay.IsVisible = false;
+                _viewModel.StatusMessage = "Reconnected after sleep";
+                return;
+            }
+
+            if (i < 3)
+                await Task.Delay(2000);
+        }
+
+        // All retries failed — show manual retry
+        ReconnectText.Text = "Connection lost";
+        ReconnectProgress.IsVisible = false;
+        RetryButton.IsVisible = true;
     }
 }

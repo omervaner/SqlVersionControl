@@ -282,6 +282,138 @@ public class DatabaseService
     }
 
     /// <summary>
+    /// Gets outgoing (uses) and incoming (used by) dependencies for an object.
+    /// Includes definitions from sys.sql_modules so the viewer can display them immediately.
+    /// </summary>
+    public async Task<(List<CodeSearchResult> Uses, List<CodeSearchResult> UsedBy)> GetDependenciesAsync(
+        string database, string schema, string objectName)
+    {
+        var uses = new List<CodeSearchResult>();
+        var usedBy = new List<CodeSearchResult>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var safeName = database.Replace("]", "]]");
+        var fullName = $"[{safeName}].[{schema}].[{objectName}]";
+
+        // Outgoing: what this object references
+        var usesSql = $@"
+            SELECT DISTINCT
+                ISNULL(d.referenced_schema_name, 'dbo') AS SchemaName,
+                d.referenced_entity_name AS ObjectName,
+                ISNULL(o.type_desc, '') AS ObjectType,
+                ISNULL(m.definition, '') AS Definition
+            FROM [{safeName}].sys.sql_expression_dependencies d
+            LEFT JOIN [{safeName}].sys.objects o ON d.referenced_id = o.object_id
+            LEFT JOIN [{safeName}].sys.sql_modules m ON d.referenced_id = m.object_id
+            WHERE d.referencing_id = OBJECT_ID(@fullName)
+              AND d.referenced_id IS NOT NULL
+            ORDER BY d.referenced_entity_name";
+
+        using (var cmd = new SqlCommand(usesSql, conn))
+        {
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.AddWithValue("@fullName", fullName);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                uses.Add(new CodeSearchResult
+                {
+                    SchemaName = reader.GetString(0),
+                    ObjectName = reader.GetString(1),
+                    ObjectType = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    Definition = reader.IsDBNull(3) ? "" : reader.GetString(3)
+                });
+            }
+        }
+
+        // Incoming: what references this object
+        var usedBySql = $@"
+            SELECT DISTINCT
+                s.name AS SchemaName,
+                o.name AS ObjectName,
+                o.type_desc AS ObjectType,
+                ISNULL(m.definition, '') AS Definition
+            FROM [{safeName}].sys.sql_expression_dependencies d
+            JOIN [{safeName}].sys.objects o ON d.referencing_id = o.object_id
+            JOIN [{safeName}].sys.schemas s ON o.schema_id = s.schema_id
+            LEFT JOIN [{safeName}].sys.sql_modules m ON d.referencing_id = m.object_id
+            WHERE d.referenced_id = OBJECT_ID(@fullName)
+            ORDER BY o.name";
+
+        using (var cmd = new SqlCommand(usedBySql, conn))
+        {
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.AddWithValue("@fullName", fullName);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                usedBy.Add(new CodeSearchResult
+                {
+                    SchemaName = reader.GetString(0),
+                    ObjectName = reader.GetString(1),
+                    ObjectType = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    Definition = reader.IsDBNull(3) ? "" : reader.GetString(3)
+                });
+            }
+        }
+
+        return (uses, usedBy);
+    }
+
+    /// <summary>
+    /// Searches live object definitions in sys.sql_modules for the given database.
+    /// LIKE mode filters server-side; regex mode fetches all for client-side filtering.
+    /// </summary>
+    public async Task<List<CodeSearchResult>> SearchObjectDefinitionsAsync(
+        string database, string searchTerm, bool useRegex)
+    {
+        var results = new List<CodeSearchResult>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        // Sanitize database name for safe use in dynamic SQL (bracket-quote it)
+        var safeName = database.Replace("]", "]]");
+
+        var sql = $@"
+            SELECT
+                s.name AS SchemaName,
+                o.name AS ObjectName,
+                o.type_desc AS ObjectType,
+                m.definition
+            FROM [{safeName}].sys.sql_modules m
+            JOIN [{safeName}].sys.objects o ON m.object_id = o.object_id
+            JOIN [{safeName}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE o.is_ms_shipped = 0"
+            + (useRegex ? "" : "\n              AND m.definition LIKE @searchTerm")
+            + "\n            ORDER BY o.name";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.CommandTimeout = 60;
+
+        if (!useRegex)
+        {
+            cmd.Parameters.AddWithValue("@searchTerm", $"%{searchTerm}%");
+        }
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new CodeSearchResult
+            {
+                SchemaName = reader.GetString(0),
+                ObjectName = reader.GetString(1),
+                ObjectType = reader.GetString(2),
+                Definition = reader.IsDBNull(3) ? "" : reader.GetString(3)
+            });
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// Syncs from VMAuditDb.dbo.DDL_Log to ObjectVersions table
     /// </summary>
     public async Task<int> SyncFromDdlLogAsync(string? filterDatabase = null)

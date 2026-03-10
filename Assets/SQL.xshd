@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<SyntaxDefinition name="SQL" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Keyword" fontWeight="normal"/>
+  <Color name="String"/>
+  <Color name="Comment"/>
+  <Color name="Number"/>
+  <Color name="Variable"/>
+  <Color name="SystemFunction"/>
+  <Color name="Identifier"/>
+
+  <RuleSet ignoreCase="true">
+    <!-- Block comments -->
+    <Span color="Comment" multiline="true">
+      <Begin>/\*</Begin>
+      <End>\*/</End>
+    </Span>
+
+    <!-- Line comments -->
+    <Span color="Comment">
+      <Begin>--</Begin>
+    </Span>
+
+    <!-- Strings -->
+    <Span color="String">
+      <Begin>'</Begin>
+      <End>'</End>
+      <RuleSet>
+        <Span begin="'" end="'"/>
+      </RuleSet>
+    </Span>
+
+    <!-- Bracketed identifiers -->
+    <Span color="Identifier">
+      <Begin>\[</Begin>
+      <End>\]</End>
+    </Span>
+
+    <!-- System functions (@@) -->
+    <Rule color="SystemFunction">@@[A-Za-z_][A-Za-z0-9_]*</Rule>
+
+    <!-- Variables (@) -->
+    <Rule color="Variable">@[A-Za-z_][A-Za-z0-9_]*</Rule>
+
+    <!-- Numbers -->
+    <Rule color="Number">\b\d+\.?\d*\b</Rule>
+
+    <Keywords color="Keyword">
+      <!-- DDL -->
+      <Word>CREATE</Word><Word>ALTER</Word><Word>DROP</Word><Word>TRUNCATE</Word>
+      <Word>TABLE</Word><Word>VIEW</Word><Word>INDEX</Word><Word>PROCEDURE</Word>
+      <Word>PROC</Word><Word>FUNCTION</Word><Word>TRIGGER</Word><Word>SCHEMA</Word>
+      <Word>DATABASE</Word><Word>CONSTRAINT</Word><Word>PRIMARY</Word><Word>FOREIGN</Word>
+      <Word>KEY</Word><Word>REFERENCES</Word><Word>UNIQUE</Word><Word>CHECK</Word>
+      <Word>DEFAULT</Word><Word>IDENTITY</Word><Word>CLUSTERED</Word><Word>NONCLUSTERED</Word>
+      <!-- DML -->
+      <Word>SELECT</Word><Word>INSERT</Word><Word>UPDATE</Word><Word>DELETE</Word>
+      <Word>MERGE</Word><Word>INTO</Word><Word>VALUES</Word><Word>FROM</Word>
+      <Word>WHERE</Word><Word>SET</Word><Word>OUTPUT</Word><Word>INSERTED</Word><Word>DELETED</Word>
+      <!-- Clauses -->
+      <Word>JOIN</Word><Word>INNER</Word><Word>LEFT</Word><Word>RIGHT</Word>
+      <Word>FULL</Word><Word>OUTER</Word><Word>CROSS</Word><Word>ON</Word>
+      <Word>AND</Word><Word>OR</Word><Word>NOT</Word><Word>IN</Word>
+      <Word>EXISTS</Word><Word>BETWEEN</Word><Word>LIKE</Word><Word>IS</Word>
+      <Word>NULL</Word><Word>AS</Word><Word>CASE</Word><Word>WHEN</Word>
+      <Word>THEN</Word><Word>ELSE</Word><Word>END</Word><Word>GROUP</Word>
+      <Word>BY</Word><Word>HAVING</Word><Word>ORDER</Word><Word>ASC</Word>
+      <Word>DESC</Word><Word>TOP</Word><Word>DISTINCT</Word><Word>ALL</Word>
+      <Word>UNION</Word><Word>INTERSECT</Word><Word>EXCEPT</Word><Word>WITH</Word>
+      <Word>OVER</Word><Word>PARTITION</Word><Word>ROW_NUMBER</Word><Word>RANK</Word><Word>DENSE_RANK</Word>
+      <!-- Control flow -->
+      <Word>IF</Word><Word>BEGIN</Word><Word>WHILE</Word><Word>BREAK</Word>
+      <Word>CONTINUE</Word><Word>RETURN</Word><Word>GOTO</Word><Word>WAITFOR</Word>
+      <Word>TRY</Word><Word>CATCH</Word><Word>THROW</Word><Word>RAISERROR</Word>
+      <!-- Transactions -->
+      <Word>TRANSACTION</Word><Word>TRAN</Word><Word>COMMIT</Word><Word>ROLLBACK</Word>
+      <Word>SAVE</Word><Word>SAVEPOINT</Word>
+      <!-- Variables and declarations -->
+      <Word>DECLARE</Word><Word>EXEC</Word><Word>EXECUTE</Word><Word>PRINT</Word>
+      <Word>USE</Word><Word>GO</Word>
+      <!-- Data types -->
+      <Word>INT</Word><Word>BIGINT</Word><Word>SMALLINT</Word><Word>TINYINT</Word>
+      <Word>BIT</Word><Word>DECIMAL</Word><Word>NUMERIC</Word><Word>MONEY</Word>
+      <Word>SMALLMONEY</Word><Word>FLOAT</Word><Word>REAL</Word><Word>DATETIME</Word>
+      <Word>DATETIME2</Word><Word>DATE</Word><Word>TIME</Word><Word>SMALLDATETIME</Word>
+      <Word>DATETIMEOFFSET</Word><Word>CHAR</Word><Word>VARCHAR</Word><Word>TEXT</Word>
+      <Word>NCHAR</Word><Word>NVARCHAR</Word><Word>NTEXT</Word><Word>BINARY</Word>
+      <Word>VARBINARY</Word><Word>IMAGE</Word><Word>UNIQUEIDENTIFIER</Word><Word>XML</Word>
+      <Word>CURSOR</Word><Word>SQL_VARIANT</Word><Word>TIMESTAMP</Word><Word>ROWVERSION</Word>
+      <!-- Other -->
+      <Word>NOCOUNT</Word><Word>NOLOCK</Word><Word>ROWLOCK</Word><Word>TABLOCK</Word>
+      <Word>HOLDLOCK</Word><Word>UPDLOCK</Word><Word>XLOCK</Word><Word>FETCH</Word>
+      <Word>NEXT</Word><Word>PRIOR</Word><Word>FIRST</Word><Word>LAST</Word>
+      <Word>ABSOLUTE</Word><Word>RELATIVE</Word><Word>OPEN</Word><Word>CLOSE</Word>
+      <Word>DEALLOCATE</Word><Word>FOR</Word><Word>READONLY</Word><Word>OUT</Word><Word>MAX</Word>
+      <Word>ISNULL</Word><Word>COALESCE</Word><Word>CAST</Word><Word>CONVERT</Word>
+      <Word>GETDATE</Word><Word>DATEADD</Word><Word>DATEDIFF</Word><Word>COUNT</Word>
+      <Word>SUM</Word><Word>AVG</Word><Word>MIN</Word><Word>LEN</Word>
+      <Word>SUBSTRING</Word><Word>REPLACE</Word><Word>LTRIM</Word><Word>RTRIM</Word>
+      <Word>UPPER</Word><Word>LOWER</Word><Word>CHARINDEX</Word><Word>PATINDEX</Word>
+      <Word>STUFF</Word><Word>OBJECT_ID</Word><Word>SCHEMA_NAME</Word>
+    </Keywords>
+  </RuleSet>
+</SyntaxDefinition>

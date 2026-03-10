@@ -33,7 +33,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:HighlightedSegment">
-                                                <TextBlock Text="{Binding Text}"
+                                                <SelectableTextBlock Text="{Binding Text}"
                                                            Foreground="{Binding Foreground}"
                                                            FontFamily="Consolas,Menlo,Monaco,monospace"
                                                            FontSize="{Binding FontSize}"/>
@@ -77,7 +77,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:HighlightedSegment">
-                                                <TextBlock Text="{Binding Text}"
+                                                <SelectableTextBlock Text="{Binding Text}"
                                                            Foreground="{Binding Foreground}"
                                                            FontFamily="Consolas,Menlo,Monaco,monospace"
                                                            FontSize="{Binding FontSize}"/>

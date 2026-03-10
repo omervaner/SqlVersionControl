@@ -75,7 +75,8 @@ public partial class ConnectionViewModel : ViewModelBase
             Database = value.Database;
             Username = value.Username;
             UseWindowsAuth = value.UseWindowsAuth;
-            Password = ""; // Don't store passwords
+            // Pre-fill password from encrypted store if available
+            Password = PasswordStore.Get(value.Server, value.Database, value.Username) ?? "";
         }
         OnPropertyChanged(nameof(NeedsPassword));
     }
@@ -142,10 +143,11 @@ public partial class ConnectionViewModel : ViewModelBase
 
         if (success)
         {
-            // Store password in memory for reuse in Compare tab (SQL auth only)
+            // Store password for reuse in Compare tab (SQL auth only)
             if (!settings.UseWindowsAuth && !string.IsNullOrEmpty(settings.Password))
             {
                 PasswordStore.Store(settings.Server, settings.Database, settings.Username, settings.Password);
+                PasswordStore.Save();
             }
 
             // Save to recent connections (moves to top if already exists)

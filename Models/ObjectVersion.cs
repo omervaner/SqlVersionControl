@@ -32,8 +32,19 @@ public class DatabaseObject
     public int VersionCount { get; set; }
     public DateTime? LastChanged { get; set; }
 
+    public bool IsCodeMatch { get; set; }
+    public string? CodeMatchDefinition { get; set; }
+
+    // Dependency mode
+    public bool IsSectionHeader { get; set; }
+    public string SectionTitle { get; set; } = "";
+    public string DependencyDirection { get; set; } = ""; // "Uses" or "Used By"
+
     public string FullName => $"{SchemaName}.{ObjectName}";
-    public string DisplayInfo => $"{SchemaName} | {ObjectType} | {VersionCount} version(s)";
+    public string DisplayInfo => IsSectionHeader ? ""
+        : IsCodeMatch ? $"{SchemaName} | {ObjectType} | found in code"
+        : !string.IsNullOrEmpty(DependencyDirection) ? $"{SchemaName} | {ObjectType}"
+        : $"{SchemaName} | {ObjectType} | {VersionCount} version(s)";
 
     public string TypeIcon => ObjectType.ToUpperInvariant() switch
     {

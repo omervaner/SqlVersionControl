@@ -60,6 +60,10 @@
                                     ToolTip.Tip="Sync new changes from DDL log"/>
                             <Button Content="Refresh" Command="{Binding RefreshCommand}"
                                     Background="#2a2a4e" Foreground="White" Padding="10,5"/>
+                            <Button x:Name="DependenciesButton" Content="Dependencies"
+                                    Background="#2980b9" Foreground="White" Padding="10,5"
+                                    ToolTip.Tip="Show dependencies for selected object"
+                                    IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                         </StackPanel>
 
                         <TextBlock Grid.Column="4" Text="{Binding StatusMessage}"
@@ -73,8 +77,22 @@
                     <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                             BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
                         <Grid RowDefinitions="Auto,*">
-                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
+                            <!-- Normal header -->
+                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10"
+                                    IsVisible="{Binding !IsDependencyMode}">
                                 <TextBlock Text="Object Browser" FontWeight="SemiBold"/>
+                            </Border>
+                            <!-- Dependency mode header -->
+                            <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10"
+                                    IsVisible="{Binding IsDependencyMode}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" FontWeight="SemiBold"
+                                               Text="{Binding DependencySourceName, StringFormat='Deps of {0}'}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="Back" Command="{Binding BackFromDependenciesCommand}"
+                                            Background="#4a4a6e" Foreground="White" Padding="8,2"
+                                            FontSize="11" VerticalAlignment="Center" Cursor="Hand"/>
+                                </Grid>
                             </Border>
 
                             <ListBox Grid.Row="1"
@@ -83,14 +101,27 @@
                                      Padding="5">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding TypeIcon}" FontFamily="Segoe UI Symbol"/>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding DisplayInfo}" FontSize="11"
-                                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                        <Panel>
+                                            <!-- Section header (dependency mode) -->
+                                            <TextBlock Text="{Binding SectionTitle}" FontWeight="Bold"
+                                                       FontSize="12" Foreground="#4a9eff" Margin="0,6,0,2"
+                                                       IsVisible="{Binding IsSectionHeader}"/>
+                                            <!-- Normal object item -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                        IsVisible="{Binding !IsSectionHeader}">
+                                                <TextBlock Text="{Binding TypeIcon}" FontFamily="Segoe UI Symbol"/>
+                                                <StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="(in code)" FontSize="10" Foreground="#e6a23c"
+                                                                   FontStyle="Italic" VerticalAlignment="Center"
+                                                                   IsVisible="{Binding IsCodeMatch}"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding DisplayInfo}" FontSize="11"
+                                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                                </StackPanel>
                                             </StackPanel>
-                                        </StackPanel>
+                                        </Panel>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
@@ -147,6 +178,10 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
+                                        <Button Content="Copy" Command="{Binding CopyLeftCodeCommand}"
+                                                Background="#4a4a6e" Foreground="White" Padding="8,4"
+                                                ToolTip.Tip="Copy left definition to clipboard"
+                                                IsVisible="{Binding LeftVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                                     </StackPanel>
 
                                     <Button Grid.Column="1" Content="Rollback to Left"
@@ -165,12 +200,17 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
+                                        <Button Content="Copy" Command="{Binding CopyRightCodeCommand}"
+                                                Background="#4a4a6e" Foreground="White" Padding="8,4"
+                                                ToolTip.Tip="Copy right definition to clipboard"
+                                                IsVisible="{Binding RightVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
                             <!-- Side by Side Diff View -->
-                            <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}" x:Name="MainDiffView"/>
+                            <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}"
+                                            x:Name="MainDiffView"/>
                         </Grid>
                     </Grid>
                 </Grid>
@@ -184,6 +224,22 @@
             <!-- Compare Databases Tab -->
             <views:CompareView IsVisible="{Binding #CompareTab.IsChecked}" x:Name="CompareViewControl"/>
         </Grid>
+
+        <!-- Reconnection Overlay (z-order: on top of everything) -->
+        <Panel Grid.Row="0" Grid.RowSpan="2" Background="#CC1a1a2e"
+               IsVisible="False" x:Name="ReconnectOverlay">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="15">
+                <TextBlock x:Name="ReconnectText" Text="Reconnecting..."
+                           Foreground="White" FontSize="20" FontWeight="SemiBold"
+                           HorizontalAlignment="Center"/>
+                <ProgressBar x:Name="ReconnectProgress" IsIndeterminate="True"
+                             Width="250" Foreground="#4a9eff"/>
+                <Button x:Name="RetryButton" Content="Click to Retry"
+                        Background="#4a4a6e" Foreground="White" Padding="20,8"
+                        HorizontalAlignment="Center" IsVisible="False"
+                        Cursor="Hand"/>
+            </StackPanel>
+        </Panel>
     </Grid>
 
     <Window.Styles>

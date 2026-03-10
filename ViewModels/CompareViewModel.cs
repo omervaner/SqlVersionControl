@@ -360,6 +360,9 @@ public partial class CompareViewModel : ViewModelBase
     {
         var key = $"{conn.Server}|{conn.Database}|{conn.Username}";
         _passwords[key] = password;
+        // Also persist to global encrypted store
+        PasswordStore.Store(conn.Server, conn.Database, conn.Username, password);
+        PasswordStore.Save();
     }
 
     private async Task<string?> RequestPasswordAsync(SavedConnection conn)
@@ -371,29 +374,31 @@ public partial class CompareViewModel : ViewModelBase
         return null;
     }
 
+    private const string PoolingParams = "Connect Timeout=5;Pooling=true;Min Pool Size=0;Max Pool Size=10;";
+
     private string BuildConnectionString(SavedConnection conn)
     {
         if (conn.UseWindowsAuth)
         {
-            return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;";
+            return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;{PoolingParams}";
         }
 
         // For SQL auth, check global PasswordStore first (from initial login)
         var globalPassword = PasswordStore.Get(conn.Server, conn.Database, conn.Username);
         if (!string.IsNullOrEmpty(globalPassword))
         {
-            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={globalPassword};TrustServerCertificate=True;";
+            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={globalPassword};TrustServerCertificate=True;{PoolingParams}";
         }
 
         // Then check local passwords (from QuickConnectionDialog)
         var key = $"{conn.Server}|{conn.Database}|{conn.Username}";
         if (_passwords.TryGetValue(key, out var password))
         {
-            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={password};TrustServerCertificate=True;";
+            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={password};TrustServerCertificate=True;{PoolingParams}";
         }
 
         // No password available - connection will likely fail
-        return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;";
+        return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;{PoolingParams}";
     }
 
     private async Task<bool> TestConnectionAsync(string connectionString)
@@ -554,39 +559,43 @@ public partial class CompareViewModel : ViewModelBase
         SourceOnlyCount = _allObjects.Count(o => o.Status == "Source Only");
         TargetOnlyCount = _allObjects.Count(o => o.Status == "Target Only");
 
-        foreach (var obj in objectsToScan)
+        // Parallel scan with bounded concurrency
+        var semaphore = new SemaphoreSlim(5);
+
+        var tasks = objectsToScan.Select(async obj =>
         {
-            current++;
-            ScanProgressText = $"Scanning {current}/{total}: {obj.ObjectName}";
-            ScanProgress = (double)current / total * 100;
-
-            // Fetch definitions
-            obj.SourceDefinition = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
-            obj.TargetDefinition = await GetDefinitionAsync(_targetConnectionString, obj.SchemaName, obj.ObjectName);
-            obj.HasBeenCompared = true;
-
-            // Compare - normalize whitespace for comparison
-            var sourceNorm = NormalizeForComparison(obj.SourceDefinition);
-            var targetNorm = NormalizeForComparison(obj.TargetDefinition);
-
-            if (sourceNorm == targetNorm)
+            await semaphore.WaitAsync();
+            try
             {
-                obj.Status = "Identical";
-                IdenticalCount++;
-            }
-            else
-            {
-                obj.Status = "Modified";
-                ModifiedCount++;
-            }
-        }
+                obj.SourceDefinition = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                obj.TargetDefinition = await GetDefinitionAsync(_targetConnectionString, obj.SchemaName, obj.ObjectName);
+                obj.HasBeenCompared = true;
 
-        // Count already-compared objects
+                var sourceNorm = NormalizeForComparison(obj.SourceDefinition);
+                var targetNorm = NormalizeForComparison(obj.TargetDefinition);
+                obj.Status = sourceNorm == targetNorm ? "Identical" : "Modified";
+
+                var c = Interlocked.Increment(ref current);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    ScanProgressText = $"Scanning {c}/{total}: {obj.ObjectName}";
+                    ScanProgress = (double)c / total * 100;
+                });
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+
+        // Count results
         foreach (var obj in _allObjects.Where(o => o.HasBeenCompared))
         {
-            if (obj.Status == "Identical" && !objectsToScan.Contains(obj))
+            if (obj.Status == "Identical")
                 IdenticalCount++;
-            else if (obj.Status == "Modified" && !objectsToScan.Contains(obj))
+            else if (obj.Status == "Modified")
                 ModifiedCount++;
         }
 

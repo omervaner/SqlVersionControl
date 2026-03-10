@@ -13,6 +13,8 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly DatabaseService _db;
     private List<DatabaseObject> _allObjects = new();  // Unfiltered list for search
+    private CancellationTokenSource? _codeSearchCts;    // Debounce for code search
+    private string _activeCodeSearchTerm = "";           // The term that produced current code results
 
     [ObservableProperty]
     private bool _isConnected;
@@ -59,6 +61,19 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _searchText = "";
 
+    /// <summary>
+    /// The current search term used for highlighting in the diff panel (set when a code match is selected).
+    /// </summary>
+    [ObservableProperty]
+    private string _highlightTerm = "";
+
+    // --- Dependency mode ---
+    [ObservableProperty]
+    private bool _isDependencyMode;
+
+    [ObservableProperty]
+    private string _dependencySourceName = "";
+
     public MainWindowViewModel()
     {
         _db = new DatabaseService();
@@ -98,13 +113,16 @@ public partial class MainWindowViewModel : ViewModelBase
                 StatusMessage = $"Synced {synced} new changes from DDL log";
             }
 
-            // Load databases
+            // Load databases (save/restore selection since Clear() nulls the ComboBox binding)
+            var savedDb = SelectedDatabase;
             var dbs = await _db.GetDatabasesAsync();
             Databases.Clear();
             foreach (var db in dbs)
             {
                 Databases.Add(db);
             }
+            if (savedDb != null && Databases.Contains(savedDb))
+                SelectedDatabase = savedDb;
 
             // Load recent changes
             await RefreshAsync();
@@ -164,12 +182,93 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSearchTextChanged(string value)
     {
+        // Immediate name filter
         FilterObjects();
+
+        // Cancel any pending code search
+        _codeSearchCts?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 2 || string.IsNullOrEmpty(SelectedDatabase))
+        {
+            _activeCodeSearchTerm = "";
+            HighlightTerm = "";
+            return;
+        }
+
+        // Debounced async code search
+        _codeSearchCts = new CancellationTokenSource();
+        var token = _codeSearchCts.Token;
+        var searchTerm = value;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                if (token.IsCancellationRequested) return;
+
+                var results = await _db.SearchObjectDefinitionsAsync(SelectedDatabase!, searchTerm, false);
+                if (token.IsCancellationRequested) return;
+
+                // Get names already in the Object Browser (name matches)
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (token.IsCancellationRequested) return;
+
+                    var existingNames = new HashSet<string>(
+                        Objects.Select(o => o.FullName), StringComparer.OrdinalIgnoreCase);
+
+                    var codeOnlyMatches = 0;
+                    foreach (var result in results)
+                    {
+                        var fullName = $"{result.SchemaName}.{result.ObjectName}";
+                        if (existingNames.Contains(fullName)) continue;
+
+                        Objects.Add(new DatabaseObject
+                        {
+                            DatabaseName = SelectedDatabase!,
+                            SchemaName = result.SchemaName,
+                            ObjectName = result.ObjectName,
+                            ObjectType = result.ObjectType,
+                            IsCodeMatch = true,
+                            // Store the definition in a tag for later retrieval
+                            CodeMatchDefinition = result.Definition
+                        });
+                        codeOnlyMatches++;
+                    }
+
+                    _activeCodeSearchTerm = searchTerm;
+
+                    if (codeOnlyMatches > 0)
+                    {
+                        StatusMessage = $"{Objects.Count} objects ({codeOnlyMatches} found in code)";
+                    }
+                });
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    // Don't overwrite status for stale searches
+                    if (!token.IsCancellationRequested)
+                        StatusMessage = $"Code search error: {ex.Message}";
+                });
+            }
+        }, token);
     }
 
     private void FilterObjects()
     {
+        // Exit dependency mode when user searches
+        if (IsDependencyMode)
+        {
+            IsDependencyMode = false;
+            DependencySourceName = "";
+        }
+
         Objects.Clear();
+        _activeCodeSearchTerm = "";
 
         IEnumerable<DatabaseObject> filtered;
         if (string.IsNullOrWhiteSpace(SearchText))
@@ -179,7 +278,7 @@ public partial class MainWindowViewModel : ViewModelBase
         else
         {
             // Split search into words, match all of them (space/underscore insensitive)
-            var searchTerms = SearchText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var searchTerms = SearchText.Replace("_", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries);
             filtered = _allObjects.Where(o =>
             {
                 var name = o.ObjectName.Replace("_", " ");
@@ -192,6 +291,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         foreach (var o in filtered)
         {
+            o.IsCodeMatch = false; // Reset in case reused
             Objects.Add(o);
         }
     }
@@ -200,14 +300,16 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value != null)
         {
+            HighlightTerm = "";
             _ = LoadVersionsForChangeAsync(value);
         }
     }
 
     partial void OnSelectedObjectChanged(DatabaseObject? value)
     {
-        if (value != null)
+        if (value != null && !value.IsSectionHeader)
         {
+            HighlightTerm = value.IsCodeMatch ? _activeCodeSearchTerm : "";
             _ = LoadVersionsAsync(value);
         }
     }
@@ -273,6 +375,13 @@ public partial class MainWindowViewModel : ViewModelBase
             LeftVersion = null;
             LeftCode = "";
         }
+        else if (versions.Count == 0 && !string.IsNullOrEmpty(obj.CodeMatchDefinition))
+        {
+            LeftVersion = null;
+            RightVersion = null;
+            LeftCode = "";
+            RightCode = obj.CodeMatchDefinition;
+        }
 
         UpdateDiff();
     }
@@ -299,6 +408,119 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var diffBuilder = new SideBySideDiffBuilder(new Differ());
         DiffModel = diffBuilder.BuildDiffModel(LeftCode, RightCode);
+    }
+
+    [RelayCommand]
+    private async Task CopyLeftCodeAsync()
+    {
+        if (!string.IsNullOrEmpty(LeftCode))
+        {
+            var clipboard = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow?.Clipboard
+                : null;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(LeftCode);
+                StatusMessage = "Left definition copied to clipboard";
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyRightCodeAsync()
+    {
+        if (!string.IsNullOrEmpty(RightCode))
+        {
+            var clipboard = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.MainWindow?.Clipboard
+                : null;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(RightCode);
+                StatusMessage = "Right definition copied to clipboard";
+            }
+        }
+    }
+
+    public async Task ShowDependenciesAsync(DatabaseObject obj)
+    {
+        if (string.IsNullOrEmpty(SelectedDatabase)) return;
+
+        IsDependencyMode = true;
+        DependencySourceName = obj.FullName;
+        HighlightTerm = obj.ObjectName;
+        StatusMessage = $"Loading dependencies for {obj.FullName}...";
+
+        Objects.Clear();
+        SelectedObject = null;
+
+        try
+        {
+            var (uses, usedBy) = await _db.GetDependenciesAsync(
+                SelectedDatabase, obj.SchemaName, obj.ObjectName);
+
+            // Section header: Uses
+            Objects.Add(new DatabaseObject
+            {
+                IsSectionHeader = true,
+                SectionTitle = $"Uses ({uses.Count})",
+                ObjectName = $"Uses ({uses.Count})"
+            });
+
+            foreach (var item in uses)
+            {
+                Objects.Add(new DatabaseObject
+                {
+                    DatabaseName = SelectedDatabase,
+                    SchemaName = item.SchemaName,
+                    ObjectName = item.ObjectName,
+                    ObjectType = item.ObjectType,
+                    DependencyDirection = "Uses",
+                    IsCodeMatch = true,
+                    CodeMatchDefinition = item.Definition
+                });
+            }
+
+            // Section header: Used By
+            Objects.Add(new DatabaseObject
+            {
+                IsSectionHeader = true,
+                SectionTitle = $"Used By ({usedBy.Count})",
+                ObjectName = $"Used By ({usedBy.Count})"
+            });
+
+            foreach (var item in usedBy)
+            {
+                Objects.Add(new DatabaseObject
+                {
+                    DatabaseName = SelectedDatabase,
+                    SchemaName = item.SchemaName,
+                    ObjectName = item.ObjectName,
+                    ObjectType = item.ObjectType,
+                    DependencyDirection = "Used By",
+                    IsCodeMatch = true,
+                    CodeMatchDefinition = item.Definition
+                });
+            }
+
+            var total = uses.Count + usedBy.Count;
+            StatusMessage = total == 0
+                ? $"No dependencies found for {obj.FullName}"
+                : $"{uses.Count} outgoing, {usedBy.Count} incoming";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Dependency error: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void BackFromDependencies()
+    {
+        IsDependencyMode = false;
+        DependencySourceName = "";
+        HighlightTerm = "";
+        FilterObjects();
     }
 
     [RelayCommand]

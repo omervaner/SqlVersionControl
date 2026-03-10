@@ -16,6 +16,7 @@ public class SettingsService
     public SettingsService()
     {
         Load();
+        PasswordStore.Load();
     }
 
     public void Load()
