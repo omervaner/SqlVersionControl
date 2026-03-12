@@ -46,7 +46,8 @@
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="20,0,0,0">
-                            <TextBox Text="{Binding SearchText}"
+                            <TextBox x:Name="VersionHistorySearchBox"
+                                     Text="{Binding SearchText}"
                                      Watermark="Search objects..."
                                      Width="200"/>
                             <Button x:Name="ChangeDbButton" Content="Change DB"

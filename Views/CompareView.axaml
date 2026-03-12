@@ -27,7 +27,7 @@
                 </StackPanel>
 
                 <!-- Search (centered) -->
-                <TextBox Grid.Column="1" Text="{Binding SearchText}"
+                <TextBox x:Name="CompareSearchBox" Grid.Column="1" Text="{Binding SearchText}"
                          Watermark="Search objects..."
                          Width="200" HorizontalAlignment="Center"/>
 

@@ -52,6 +52,12 @@ public partial class CompareView : UserControl
 
     public CompareViewModel ViewModel => (CompareViewModel)DataContext!;
 
+    public void FocusSearch()
+    {
+        CompareSearchBox.Focus();
+        CompareSearchBox.SelectAll();
+    }
+
     private async Task<string?> OnPasswordRequested(SavedConnection conn)
     {
         var window = TopLevel.GetTopLevel(this) as Window;

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Microsoft.Data.SqlClient;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
@@ -55,8 +56,78 @@ public partial class MainWindow : Window
         _sleepDetector = new SleepDetector();
         _sleepDetector.WokeFromSleep += OnWokeFromSleep;
 
+        KeyDown += OnKeyDown;
         Opened += OnOpened;
         Closing += OnClosing;
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+                   e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (!ctrl && e.Key != Key.Escape) return;
+
+        switch (e.Key)
+        {
+            case Key.D1:
+                VersionHistoryTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.D2:
+                CompareTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.F:
+                if (CompareTab.IsChecked == true)
+                {
+                    var compareView = this.FindControl<CompareView>("CompareViewControl");
+                    compareView?.FocusSearch();
+                }
+                else
+                {
+                    VersionHistorySearchBox.Focus();
+                    VersionHistorySearchBox.SelectAll();
+                }
+                e.Handled = true;
+                break;
+
+            case Key.R:
+                if (_viewModel.IsConnected)
+                    _ = _viewModel.RefreshCommand.ExecuteAsync(null);
+                e.Handled = true;
+                break;
+
+            case Key.S:
+                if (_viewModel.IsConnected)
+                    _ = _viewModel.SyncCommand.ExecuteAsync(null);
+                e.Handled = true;
+                break;
+
+            case Key.D:
+                if (_viewModel.IsConnected)
+                    _ = ShowDependenciesAsync();
+                e.Handled = true;
+                break;
+
+            case Key.Escape when !ctrl:
+                if (_viewModel.IsDependencyMode)
+                {
+                    _viewModel.BackFromDependenciesCommand.Execute(null);
+                }
+                else if (!string.IsNullOrEmpty(_viewModel.SearchText))
+                {
+                    _viewModel.SearchText = "";
+                }
+                else
+                {
+                    _viewModel.SelectedObject = null;
+                    _viewModel.SelectedChange = null;
+                }
+                e.Handled = true;
+                break;
+        }
     }
 
     private void RestoreWindowPosition()
