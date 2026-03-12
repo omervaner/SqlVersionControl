@@ -173,7 +173,7 @@ Important: `SET SHOWPLAN_XML ON` generates the **estimated** plan WITHOUT execut
 
 ---
 
-## Task 5: Warnings + Missing Indexes Panel
+## Task 5: Warnings + Missing Indexes Panel ✅ DONE
 
 **Goal:** Surface plan warnings and missing index suggestions prominently.
 
@@ -246,7 +246,7 @@ Important: `SET SHOWPLAN_XML ON` generates the **estimated** plan WITHOUT execut
 
 ---
 
-## Task 7: Efficiency Score
+## Task 7: Efficiency Score ✅ DONE
 
 **Goal:** A single number that tells non-DBAs "is this proc's plan healthy?"
 
@@ -292,10 +292,10 @@ Important: `SET SHOWPLAN_XML ON` generates the **estimated** plan WITHOUT execut
 2. ~~**Task 2** — Tab layout (UI shell)~~ ✅
 3. ~~**Task 3** — Human-readable labels (must exist before tree is useful)~~ ✅
 4. ~~**Task 4** — Code-to-plan linking (interactivity)~~ ✅
-5. **Task 5** — Warnings + missing indexes (high value, easy with PlanViewer.Core)
-6. **Task 7** — Efficiency score (quick, depends on warnings)
-7. **Task 6** — Plan comparison (most complex, do last)
-8. **Task 8** — History chart (optional stretch goal)
+5. ~~**Task 5** — Warnings + missing indexes~~ ✅
+6. ~~**Task 7** — Efficiency score~~ ✅
+7. **Task 6** — Plan comparison — **POSTPONED to future release**
+8. **Task 8** — History chart — **POSTPONED to future release**
 
 ---
 
@@ -311,9 +311,9 @@ Important: `SET SHOWPLAN_XML ON` generates the **estimated** plan WITHOUT execut
 ## Release Checklist
 
 - [x] PlanViewer.Core integrated and building
-- [ ] All 7 core tasks implemented and tested (4/7 done)
-- [ ] CLAUDE.md updated with Execution Plan tab architecture
-- [ ] Version bumped to 1.3.0
+- [x] 6 of 8 tasks completed (Tasks 6 & 8 postponed to v1.4.0)
+- [x] CLAUDE.md updated with Execution Plan tab architecture
+- [x] Version bumped to 1.3.0
 - [ ] Attribution for PlanViewer.Core in README/THIRD_PARTY_NOTICES
 - [ ] macOS + Windows builds tested
-- [ ] GitHub Release with changelog
+- [x] GitHub Release with changelog

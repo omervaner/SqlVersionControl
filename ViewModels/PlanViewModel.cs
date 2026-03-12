@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
+using Avalonia.Data.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PlanViewer.Core.Models;
@@ -30,9 +32,18 @@ public partial class PlanViewModel : ViewModelBase
     private string? _rawPlanXml;
     private Dictionary<string, (int StartChar, int EndChar)> _statementOffsets = new();
 
+    [ObservableProperty]
+    private int _efficiencyScore;
+
+    [ObservableProperty]
+    private string _efficiencyLabel = "";
+
+    [ObservableProperty]
+    private string _efficiencyColor = "#95a5a6";
+
     public ObservableCollection<PlanNodeViewModel> OperatorNodes { get; } = new();
     public ObservableCollection<CostSegment> CostSegments { get; } = new();
-    public ObservableCollection<PlanWarning> Warnings { get; } = new();
+    public ObservableCollection<WarningDisplayItem> Warnings { get; } = new();
     public ObservableCollection<MissingIndex> MissingIndexes { get; } = new();
 
     public bool HasPlan => _currentPlan != null;
@@ -220,7 +231,7 @@ public partial class PlanViewModel : ViewModelBase
         foreach (var batch in plan.Batches)
             foreach (var stmt in batch.Statements)
                 foreach (var w in stmt.PlanWarnings)
-                    Warnings.Add(w);
+                    Warnings.Add(new WarningDisplayItem(w, null));
 
         // Build cost bar globally across ALL statements — top 5 + Other
         var allCostNodes = new List<(PlanNode Node, double Cost)>();
@@ -230,6 +241,13 @@ public partial class PlanViewModel : ViewModelBase
                     CollectCostNodes(stmt.RootNode, allCostNodes);
 
         BuildCostSegments(allCostNodes);
+
+        // Compute efficiency score
+        var allWarnings = Warnings.Select(w => w.Warning).ToList();
+        var (score, label, color) = PlanScorer.Score(plan, allWarnings, MissingIndexes);
+        EfficiencyScore = score;
+        EfficiencyLabel = label;
+        EfficiencyColor = color;
     }
 
     private void FlattenTree(PlanNode node, int level, PlanStatement? statement)
@@ -298,7 +316,7 @@ public partial class PlanViewModel : ViewModelBase
     private void CollectWarnings(PlanNode node)
     {
         foreach (var w in node.Warnings)
-            Warnings.Add(w);
+            Warnings.Add(new WarningDisplayItem(w, node.PhysicalOp));
         foreach (var child in node.Children)
             CollectWarnings(child);
     }
@@ -380,4 +398,53 @@ public class CostSegment
     public double Percentage { get; set; }
     public string Color { get; set; } = "#95a5a6";
     public int NodeId { get; set; }
+}
+
+public class WarningDisplayItem
+{
+    public PlanWarning Warning { get; }
+    public string Message => Warning.Message;
+    public string WarningType => Warning.WarningType;
+    public PlanWarningSeverity Severity => Warning.Severity;
+
+    /// <summary>Source operator name, or null for statement-level warnings.</summary>
+    public string? OperatorName { get; }
+
+    public string OperatorLabel => OperatorName != null ? $"[{OperatorName}]" : "[Statement]";
+    public bool HasOperator => true;
+
+    public string SeverityIcon => Severity switch
+    {
+        PlanWarningSeverity.Critical => "\u26d4",  // ⛔
+        PlanWarningSeverity.Warning => "\u26a0",   // ⚠
+        _ => "\u2139"                               // ℹ
+    };
+
+    public string SeverityColor => Severity switch
+    {
+        PlanWarningSeverity.Critical => "#e74c3c",
+        PlanWarningSeverity.Warning => "#f39c12",
+        _ => "#888888"
+    };
+
+    public WarningDisplayItem(PlanWarning warning, string? operatorName)
+    {
+        Warning = warning;
+        OperatorName = operatorName;
+    }
+}
+
+public class ColumnListConverter : IValueConverter
+{
+    public static readonly ColumnListConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is IEnumerable<string> list)
+            return string.Join(", ", list);
+        return "";
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

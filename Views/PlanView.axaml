@@ -9,18 +9,32 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Row 0: Top bar -->
         <Border Grid.Row="0" Background="#1a1a2e" Padding="15,10">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <TextBlock Text="Execution Plan" Foreground="#888" FontSize="12"/>
                     <TextBlock Text="{Binding CurrentObjectName}" Foreground="White"
                                FontWeight="SemiBold" FontSize="14"/>
                 </StackPanel>
 
-                <ProgressBar Grid.Column="2" IsIndeterminate="True" Width="120"
+                <!-- Efficiency score -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                            VerticalAlignment="Center" Margin="0,0,15,0"
+                            IsVisible="{Binding HasPlan}">
+                    <TextBlock Text="{Binding EfficiencyScore}"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="{Binding EfficiencyColor}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding EfficiencyLabel}"
+                               FontSize="11"
+                               Foreground="{Binding EfficiencyColor}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <ProgressBar Grid.Column="3" IsIndeterminate="True" Width="120"
                              IsVisible="{Binding IsLoading}" Foreground="#4a9eff"
                              VerticalAlignment="Center" Margin="0,0,15,0"/>
 
-                <Button Grid.Column="3" Content="Generate Plan"
+                <Button Grid.Column="4" Content="Generate Plan"
                         Command="{Binding GeneratePlanCommand}"
                         Background="#2a6e4e" Foreground="White" Padding="15,8"
                         Cursor="Hand"/>
@@ -146,10 +160,15 @@
                                    FontWeight="SemiBold" Foreground="#e74c3c" Margin="0,0,0,5"/>
                         <ItemsControl ItemsSource="{Binding Warnings}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="core:PlanWarning">
+                                <DataTemplate x:DataType="vm:WarningDisplayItem">
                                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
-                                        <TextBlock Text="⚠" FontSize="12" Foreground="#f39c12"
+                                        <TextBlock Text="{Binding SeverityIcon}" FontSize="12"
+                                                   Foreground="{Binding SeverityColor}"
                                                    VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding OperatorLabel}"
+                                                   Foreground="#888" FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding HasOperator}"/>
                                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -165,20 +184,28 @@
                         <ItemsControl ItemsSource="{Binding MissingIndexes}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="core:MissingIndex">
-                                    <Border Background="#20ffffff" CornerRadius="4" Padding="10,6" Margin="0,2">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <StackPanel Grid.Column="0" Spacing="2">
+                                    <Border Background="#20ffffff" CornerRadius="4" Padding="10,6" Margin="0,2"
+                                            x:CompileBindings="False">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                            <StackPanel Grid.Column="0" Grid.Row="0" Spacing="2">
                                                 <TextBlock Text="{Binding Table}" FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding Impact, StringFormat='Estimated improvement: {0:F1}%'}"
                                                            FontSize="11" Foreground="#27ae60"/>
                                             </StackPanel>
-                                            <Button Grid.Column="1" Content="Copy CREATE INDEX"
+                                            <Button Grid.Column="1" Grid.Row="0" Content="Copy CREATE INDEX"
                                                     Background="#4a4a6e" Foreground="White"
                                                     Padding="8,4" FontSize="11"
                                                     VerticalAlignment="Center" Cursor="Hand"
-                                                    x:CompileBindings="False"
                                                     Command="{Binding DataContext.CopyCreateIndexCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}"/>
+                                            <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1"
+                                                        Orientation="Horizontal" Spacing="12" Margin="0,3,0,0">
+                                                <TextBlock Text="{Binding EqualityColumns, Converter={x:Static vm:ColumnListConverter.Instance}, StringFormat='Key: {0}'}"
+                                                           FontSize="11" Foreground="#888"/>
+                                                <TextBlock Text="{Binding IncludeColumns, Converter={x:Static vm:ColumnListConverter.Instance}, StringFormat='Include: {0}'}"
+                                                           FontSize="11" Foreground="#888"
+                                                           IsVisible="{Binding IncludeColumns.Count}"/>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

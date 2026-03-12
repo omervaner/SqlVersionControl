@@ -2,7 +2,7 @@
 
 ---
 ## PROJECT STATUS: v1.3.0 (March 2026)
-Execution Plan tab in progress (Tasks 1-4 done, 5-8 remaining). Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
+Execution Plan tab shipped (Tasks 1-5, 7 done; Tasks 6 & 8 postponed to v1.4.0). Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
 ---
 
 ## Project Identity
