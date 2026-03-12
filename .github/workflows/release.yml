@@ -1,0 +1,91 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Publish Windows x64
+        run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: publish/win-x64/SqlVersionControl.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Publish macOS ARM64
+        run: dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
+
+      - name: Create .app bundle
+        run: |
+          mkdir -p publish/SqlVersionControl.app/Contents/MacOS
+          mkdir -p publish/SqlVersionControl.app/Contents/Resources
+          cp -r publish/osx-arm64/* publish/SqlVersionControl.app/Contents/MacOS/
+          cp Info.plist publish/SqlVersionControl.app/Contents/
+          cp AppIcon.icns publish/SqlVersionControl.app/Contents/Resources/
+
+      - name: Ad-hoc code sign
+        run: codesign --force --deep --sign - publish/SqlVersionControl.app
+
+      - name: Create DMG
+        run: |
+          hdiutil create -srcfolder publish/SqlVersionControl.app -volname "SQL Version Control" -format UDZO publish/SqlVersionControl-macOS.dmg
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: publish/SqlVersionControl-macOS.dmg
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: artifacts/windows
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: artifacts/macos
+
+      - name: Rename artifacts with version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          mv artifacts/windows/SqlVersionControl.exe "artifacts/SqlVersionControl-${TAG}-win-x64.exe"
+          mv artifacts/macos/SqlVersionControl-macOS.dmg "artifacts/SqlVersionControl-${TAG}-macOS.dmg"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/SqlVersionControl-*
