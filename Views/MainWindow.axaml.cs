@@ -40,6 +40,10 @@ public partial class MainWindow : Window
             compareView.RefreshTheme();
         }
 
+        // Initialize PlanView with shared services
+        var planView = this.FindControl<PlanView>("PlanViewControl");
+        planView?.Initialize(_viewModel.DatabaseService, _viewModel);
+
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
 
@@ -76,6 +80,11 @@ public partial class MainWindow : Window
 
             case Key.D2:
                 CompareTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.D3:
+                PlanTab.IsChecked = true;
                 e.Handled = true;
                 break;
 

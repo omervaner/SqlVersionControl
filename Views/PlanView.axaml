@@ -1,0 +1,192 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SqlVersionControl.ViewModels"
+             xmlns:core="using:PlanViewer.Core.Models"
+             x:Class="SqlVersionControl.Views.PlanView"
+             x:DataType="vm:PlanViewModel"
+             x:Name="PlanViewRoot">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- Row 0: Top bar -->
+        <Border Grid.Row="0" Background="#1a1a2e" Padding="15,10">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="Execution Plan" Foreground="#888" FontSize="12"/>
+                    <TextBlock Text="{Binding CurrentObjectName}" Foreground="White"
+                               FontWeight="SemiBold" FontSize="14"/>
+                </StackPanel>
+
+                <ProgressBar Grid.Column="2" IsIndeterminate="True" Width="120"
+                             IsVisible="{Binding IsLoading}" Foreground="#4a9eff"
+                             VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                <Button Grid.Column="3" Content="Generate Plan"
+                        Command="{Binding GeneratePlanCommand}"
+                        Background="#2a6e4e" Foreground="White" Padding="15,8"
+                        Cursor="Hand"/>
+            </Grid>
+        </Border>
+
+        <!-- Row 1: Cost breakdown bar -->
+        <Border Grid.Row="1" Background="#111122" Height="48"
+                IsVisible="{Binding HasPlan}" Padding="4,3">
+            <Grid x:Name="CostBarGrid"/>
+        </Border>
+
+        <!-- Row 2: Main content -->
+        <Panel Grid.Row="2">
+            <!-- Placeholder when no plan -->
+            <StackPanel IsVisible="{Binding !HasPlan}" VerticalAlignment="Center"
+                        HorizontalAlignment="Center" Spacing="10">
+                <TextBlock Text="No execution plan generated" FontSize="16"
+                           Foreground="#666" HorizontalAlignment="Center"/>
+                <TextBlock Text="Select an object in Version History, then click Generate Plan"
+                           FontSize="12" Foreground="#555" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="300" TextAlignment="Center"/>
+                <!-- Error display -->
+                <Border IsVisible="{Binding PlanError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Background="#33e74c3c" CornerRadius="5" Padding="15" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding PlanError}" Foreground="#e74c3c" TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Plan content -->
+            <Grid IsVisible="{Binding HasPlan}" ColumnDefinitions="*,5,*">
+                <!-- Left: SQL code -->
+                <Border Grid.Column="0"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="0,0,1,0">
+                    <Grid RowDefinitions="Auto,*">
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                Padding="10">
+                            <TextBlock Text="SQL Definition" FontWeight="SemiBold"/>
+                        </Border>
+                        <ScrollViewer Grid.Row="1" x:Name="SqlScrollViewer"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+                            <SelectableTextBlock x:Name="SqlTextBlock"
+                                                  Text="{Binding SqlText}"
+                                                  FontFamily="Consolas,Menlo,monospace"
+                                                  FontSize="12" Padding="10"/>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                              ResizeDirection="Columns"/>
+
+                <!-- Right: Operator tree -->
+                <Border Grid.Column="2"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                    <Grid RowDefinitions="Auto,*">
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                Padding="10">
+                            <TextBlock Text="Operator Tree" FontWeight="SemiBold"/>
+                        </Border>
+                        <ListBox Grid.Row="1" ItemsSource="{Binding OperatorNodes}"
+                                 SelectedItem="{Binding SelectedNode}"
+                                 Background="Transparent" Padding="5">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PlanNodeViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                                ToolTip.Tip="{Binding RawLabel}">
+                                        <!-- Indentation spacer -->
+                                        <Border Width="{Binding IndentWidth}"/>
+                                        <!-- Color indicator -->
+                                        <Border Width="4" Height="18" CornerRadius="2"
+                                                Background="{Binding Color}"/>
+                                        <!-- Warning icon -->
+                                        <TextBlock Text="⚠" FontSize="12"
+                                                   Foreground="#f39c12"
+                                                   IsVisible="{Binding HasWarnings}"
+                                                   VerticalAlignment="Center"/>
+                                        <!-- Operator name (human-readable) -->
+                                        <TextBlock Text="{Binding DisplayLabel}"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+                                        <!-- Object/index info -->
+                                        <TextBlock Text="{Binding ObjectInfo}"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   IsVisible="{Binding ObjectInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        <!-- Cost percentage -->
+                                        <Border Background="#33ffffff" CornerRadius="3" Padding="5,1">
+                                            <TextBlock Text="{Binding CostPercent, StringFormat='{}{0}%'}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                        <!-- Estimated rows -->
+                                        <TextBlock Text="{Binding RowsDisplay}"
+                                                   Foreground="#888" FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Panel>
+
+        <!-- Row 3: Bottom panel - Warnings & Missing Indexes -->
+        <Border Grid.Row="3" IsVisible="{Binding HasPlanFindings}"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="0,1,0,0" MaxHeight="200">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8" Margin="10">
+                    <!-- Warnings section -->
+                    <StackPanel IsVisible="{Binding HasWarnings}" Spacing="3">
+                        <TextBlock Text="{Binding Warnings.Count, StringFormat='Warnings ({0})'}"
+                                   FontWeight="SemiBold" Foreground="#e74c3c" Margin="0,0,0,5"/>
+                        <ItemsControl ItemsSource="{Binding Warnings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:PlanWarning">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
+                                        <TextBlock Text="⚠" FontSize="12" Foreground="#f39c12"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Missing Indexes section -->
+                    <StackPanel IsVisible="{Binding HasMissingIndexes}" Spacing="3">
+                        <TextBlock Text="{Binding MissingIndexes.Count, StringFormat='Missing Indexes ({0})'}"
+                                   FontWeight="SemiBold" Foreground="#e67e22" Margin="0,0,0,5"/>
+                        <ItemsControl ItemsSource="{Binding MissingIndexes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:MissingIndex">
+                                    <Border Background="#20ffffff" CornerRadius="4" Padding="10,6" Margin="0,2">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding Table}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Impact, StringFormat='Estimated improvement: {0:F1}%'}"
+                                                           FontSize="11" Foreground="#27ae60"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="Copy CREATE INDEX"
+                                                    Background="#4a4a6e" Foreground="White"
+                                                    Padding="8,4" FontSize="11"
+                                                    VerticalAlignment="Center" Cursor="Hand"
+                                                    x:CompileBindings="False"
+                                                    Command="{Binding DataContext.CopyCreateIndexCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

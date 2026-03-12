@@ -20,6 +20,8 @@
                                  Classes="TabButton" Content="Version History"/>
                     <RadioButton x:Name="CompareTab" GroupName="Tabs"
                                  Classes="TabButton" Content="Compare Databases"/>
+                    <RadioButton x:Name="PlanTab" GroupName="Tabs"
+                                 Classes="TabButton" Content="Execution Plan"/>
                 </StackPanel>
                 <Button x:Name="SettingsButton" Grid.Column="1"
                         Background="Transparent" Foreground="#888"
@@ -224,6 +226,9 @@
 
             <!-- Compare Databases Tab -->
             <views:CompareView IsVisible="{Binding #CompareTab.IsChecked}" x:Name="CompareViewControl"/>
+
+            <!-- Execution Plan Tab -->
+            <views:PlanView IsVisible="{Binding #PlanTab.IsChecked}" x:Name="PlanViewControl"/>
         </Grid>
 
         <!-- Reconnection Overlay (z-order: on top of everything) -->

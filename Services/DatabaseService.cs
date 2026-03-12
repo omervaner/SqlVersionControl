@@ -1,4 +1,6 @@
 using Microsoft.Data.SqlClient;
+using PlanViewer.Core.Models;
+using PlanViewer.Core.Services;
 using SqlVersionControl.Models;
 
 namespace SqlVersionControl.Services;
@@ -515,5 +517,98 @@ public class DatabaseService
         }
 
         return inserted;
+    }
+
+    /// <summary>
+    /// Generates an estimated execution plan for a stored procedure using SET SHOWPLAN_XML ON.
+    /// Falls back to cached plan from DMVs if the proc requires parameters.
+    /// </summary>
+    public async Task<string?> GetEstimatedPlanAsync(string database, string schema, string objectName)
+    {
+        try
+        {
+            var safeDb = database.Replace("]", "]]");
+            var safeSchema = schema.Replace("]", "]]");
+            var safeName = objectName.Replace("]", "]]");
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            // SET SHOWPLAN_XML ON generates the estimated plan WITHOUT executing the proc
+            using var onCmd = new SqlCommand("SET SHOWPLAN_XML ON", conn);
+            await onCmd.ExecuteNonQueryAsync();
+
+            try
+            {
+                var execSql = $"EXEC [{safeDb}].[{safeSchema}].[{safeName}]";
+                using var planCmd = new SqlCommand(execSql, conn);
+                planCmd.CommandTimeout = 30;
+                var xml = (string?)await planCmd.ExecuteScalarAsync();
+                return xml;
+            }
+            finally
+            {
+                using var offCmd = new SqlCommand("SET SHOWPLAN_XML OFF", conn);
+                await offCmd.ExecuteNonQueryAsync();
+            }
+        }
+        catch
+        {
+            // Fallback: fetch cached plan from DMVs (for procs requiring parameters)
+            return await GetCachedPlanAsync(database, schema, objectName);
+        }
+    }
+
+    /// <summary>
+    /// Fetches a cached execution plan from sys.dm_exec_procedure_stats for procs
+    /// that can't generate an estimated plan (e.g. require parameters).
+    /// </summary>
+    private async Task<string?> GetCachedPlanAsync(string database, string schema, string objectName)
+    {
+        try
+        {
+            var safeDb = database.Replace("]", "]]");
+            var sql = $@"
+                SELECT TOP 1 CAST(qp.query_plan AS NVARCHAR(MAX))
+                FROM [{safeDb}].sys.dm_exec_procedure_stats ps
+                CROSS APPLY sys.dm_exec_query_plan(ps.plan_handle) qp
+                WHERE ps.database_id = DB_ID(@database)
+                  AND OBJECT_NAME(ps.object_id, ps.database_id) = @objectName
+                  AND OBJECT_SCHEMA_NAME(ps.object_id, ps.database_id) = @schema
+                  AND qp.query_plan IS NOT NULL
+                ORDER BY ps.last_execution_time DESC";
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.AddWithValue("@database", database);
+            cmd.Parameters.AddWithValue("@objectName", objectName);
+            cmd.Parameters.AddWithValue("@schema", schema);
+
+            var result = await cmd.ExecuteScalarAsync();
+            return result as string;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses plan XML and runs PlanViewer.Core's 30 analysis rules (warnings, missing indexes, etc.)
+    /// </summary>
+    public static (ParsedPlan? Plan, string? Error) ParseAndAnalyzePlan(string planXml)
+    {
+        try
+        {
+            var plan = ShowPlanParser.Parse(planXml);
+            PlanAnalyzer.Analyze(plan);
+            return (plan, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
     }
 }
