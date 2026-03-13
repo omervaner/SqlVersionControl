@@ -23,11 +23,11 @@
                     <MenuItem Header="_File">
                         <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
                         <Separator/>
-                        <MenuItem Header="Open File..." IsEnabled="False"/>
-                        <MenuItem Header="Save" IsEnabled="False"/>
-                        <MenuItem Header="Save As..." IsEnabled="False"/>
+                        <MenuItem x:Name="MenuOpenFile" Header="Open File..." InputGesture="Ctrl+O"/>
+                        <MenuItem x:Name="MenuSave" Header="Save" InputGesture="Ctrl+S"/>
+                        <MenuItem x:Name="MenuSaveAs" Header="Save As..." InputGesture="Ctrl+Shift+S"/>
                         <Separator/>
-                        <MenuItem Header="Recent Files" IsEnabled="False"/>
+                        <MenuItem x:Name="MenuRecentFiles" Header="Recent Files"/>
                         <Separator/>
                         <MenuItem x:Name="MenuExit" Header="Exit"/>
                     </MenuItem>

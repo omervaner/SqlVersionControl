@@ -16,6 +16,11 @@ public partial class QueryTabView : UserControl
     private QueryTabViewModel? _viewModel;
     private int _selectedTabIndex = -1;
 
+    // Row state colors
+    private static readonly IBrush ModifiedBrush = new SolidColorBrush(Color.Parse("#44ffff00")); // Yellow tint
+    private static readonly IBrush NewBrush = new SolidColorBrush(Color.Parse("#4400cc00"));       // Green tint
+    private static readonly IBrush DeletedBrush = new SolidColorBrush(Color.Parse("#44ff3333"));   // Red tint
+
     public QueryTabView()
     {
         InitializeComponent();
@@ -37,6 +42,23 @@ public partial class QueryTabView : UserControl
         SqlEditor.AddHandler(DragDrop.DragOverEvent, OnEditorDragOver);
 
         vm.Results.CollectionChanged += OnResultsChanged;
+
+        // Edit mode state changes
+        vm.EditModeChanged += OnEditModeChanged;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(QueryTabViewModel.PendingChangeCount))
+                UpdateEditBar();
+            if (e.PropertyName == nameof(QueryTabViewModel.IsEditMode))
+                UpdateEditModeButton();
+        };
+
+        // Show SQL preview button
+        ShowSqlButton.Click += OnShowSqlClicked;
+
+        // DataGrid row events for edit mode
+        ResultsGrid.LoadingRow += OnDataGridLoadingRow;
+        ResultsGrid.RowEditEnded += OnDataGridRowEditEnded;
     }
 
     /// <summary>
@@ -133,6 +155,214 @@ public partial class QueryTabView : UserControl
             if (_viewModel != null)
                 _viewModel.SqlText = SqlEditor.Text;
         };
+    }
+
+    // ── Edit Mode ─────────────────────────────────────────────────────
+
+    private void OnEditModeChanged()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_viewModel == null) return;
+
+            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+                ? _selectedTabIndex : 0;
+
+            if (_viewModel.IsEditMode && _viewModel.EditableRows != null &&
+                resultIndex < _viewModel.Results.Count)
+            {
+                var result = _viewModel.Results[resultIndex];
+
+                // Rebuild columns with TwoWay binding so DataGrid can write back edits
+                ResultsGrid.Columns.Clear();
+                ResultsGrid.AutoGenerateColumns = false;
+                for (int i = 0; i < result.ColumnNames.Length; i++)
+                {
+                    ResultsGrid.Columns.Add(new DataGridTextColumn
+                    {
+                        Header = result.ColumnNames[i],
+                        Binding = new Avalonia.Data.Binding($"[{i}]",
+                            Avalonia.Data.BindingMode.TwoWay),
+                        IsReadOnly = false
+                    });
+                }
+
+                ResultsGrid.IsReadOnly = false;
+                ResultsGrid.CanUserSortColumns = false;
+                ResultsGrid.ItemsSource = _viewModel.EditableRows;
+
+                SetupEditContextMenu();
+            }
+            else
+            {
+                // Restore read-only mode — rebuild columns with default (OneWay) binding
+                ResultsGrid.IsReadOnly = true;
+                ResultsGrid.CanUserSortColumns = true;
+                ResultsGrid.ContextMenu = null;
+
+                if (_viewModel.Results.Count > 0 && resultIndex < _viewModel.Results.Count)
+                {
+                    var result = _viewModel.Results[resultIndex];
+                    if (result.Error == null)
+                    {
+                        ResultsGrid.Columns.Clear();
+                        ResultsGrid.AutoGenerateColumns = false;
+                        for (int i = 0; i < result.ColumnNames.Length; i++)
+                        {
+                            ResultsGrid.Columns.Add(new DataGridTextColumn
+                            {
+                                Header = result.ColumnNames[i],
+                                Binding = new Avalonia.Data.Binding($"[{i}]")
+                            });
+                        }
+                        ResultsGrid.ItemsSource = result.Rows;
+                    }
+                }
+            }
+
+            UpdateEditModeButton();
+            UpdateEditBar();
+        });
+    }
+
+    private void UpdateEditModeButton()
+    {
+        if (_viewModel == null) return;
+
+        if (_viewModel.IsEditMode)
+        {
+            EditModeButton.Content = "Editing";
+            EditModeButton.Background = new SolidColorBrush(Color.Parse("#e67e22"));
+        }
+        else
+        {
+            EditModeButton.Content = "Edit";
+            EditModeButton.Background = new SolidColorBrush(Color.Parse("#4a4a6e"));
+        }
+    }
+
+    private void UpdateEditBar()
+    {
+        if (_viewModel == null) return;
+
+        EditBar.IsVisible = _viewModel.IsEditMode;
+        if (_viewModel.IsEditMode)
+        {
+            var count = _viewModel.PendingChangeCount;
+            PendingChangesText.Text = count == 0
+                ? "No changes"
+                : $"{count} change{(count == 1 ? "" : "s")} pending";
+        }
+    }
+
+    private void SetupEditContextMenu()
+    {
+        var menu = new ContextMenu();
+
+        var deleteItem = new MenuItem { Header = "Mark for Delete" };
+        deleteItem.Click += (_, _) =>
+        {
+            if (ResultsGrid.SelectedItem is EditableRow row)
+            {
+                _viewModel?.MarkRowForDeleteCommand.Execute(row);
+                // Refresh the row visual
+                RefreshRowVisuals();
+            }
+        };
+        menu.Items.Add(deleteItem);
+
+        var undeleteItem = new MenuItem { Header = "Undelete" };
+        undeleteItem.Click += (_, _) =>
+        {
+            if (ResultsGrid.SelectedItem is EditableRow row && row.State == RowEditState.Deleted)
+            {
+                _viewModel?.MarkRowForDeleteCommand.Execute(row);
+                RefreshRowVisuals();
+            }
+        };
+        menu.Items.Add(undeleteItem);
+
+        ResultsGrid.ContextMenu = menu;
+    }
+
+    private void OnDataGridLoadingRow(object? sender, DataGridRowEventArgs e)
+    {
+        if (e.Row.DataContext is EditableRow row)
+            ApplyRowBackground(e.Row, row);
+    }
+
+    private void OnDataGridRowEditEnded(object? sender, DataGridRowEditEndedEventArgs e)
+    {
+        // IEditableObject.EndEdit handles state tracking.
+        // We just need to update the UI.
+        if (e.Row.DataContext is EditableRow row)
+            ApplyRowBackground(e.Row, row);
+
+        _viewModel?.UpdatePendingChangeCount();
+    }
+
+    private void ApplyRowBackground(DataGridRow row, EditableRow editRow)
+    {
+        row.Background = editRow.State switch
+        {
+            RowEditState.Modified => ModifiedBrush,
+            RowEditState.New => NewBrush,
+            RowEditState.Deleted => DeletedBrush,
+            _ => Brushes.Transparent
+        };
+
+        row.Opacity = editRow.State == RowEditState.Deleted ? 0.5 : 1.0;
+    }
+
+    private void RefreshRowVisuals()
+    {
+        // Force DataGrid to re-evaluate row visuals
+        // Toggle ItemsSource to trigger LoadingRow
+        if (_viewModel?.EditableRows != null)
+        {
+            var source = _viewModel.EditableRows;
+            ResultsGrid.ItemsSource = null;
+            ResultsGrid.ItemsSource = source;
+        }
+    }
+
+    private async void OnShowSqlClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_viewModel == null) return;
+
+        var sql = _viewModel.GeneratePreviewSql();
+        if (string.IsNullOrEmpty(sql))
+        {
+            sql = "-- No pending changes";
+        }
+
+        var textBox = new TextBox
+        {
+            Text = sql,
+            IsReadOnly = true,
+            FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
+            FontSize = 13,
+            AcceptsReturn = true,
+            TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
+            Margin = new Thickness(0)
+        };
+
+        var dialog = new Window
+        {
+            Title = "Preview SQL — Changes will be executed in a single transaction",
+            Width = 650,
+            Height = 420,
+            Content = new Border
+            {
+                Padding = new Thickness(10),
+                Child = new ScrollViewer { Content = textBox }
+            },
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        var parent = TopLevel.GetTopLevel(this) as Window;
+        if (parent != null)
+            await dialog.ShowDialog(parent);
     }
 
     // ── Drag-and-Drop ─────────────────────────────────────────────────
@@ -283,6 +513,12 @@ public partial class QueryTabView : UserControl
     {
         if (_viewModel == null || index < 0 || index >= _viewModel.Results.Count) return;
 
+        // Exit edit mode if switching result tabs
+        if (_viewModel.IsEditMode)
+        {
+            _viewModel.CancelChangesCommand.Execute(null);
+        }
+
         _selectedTabIndex = index;
         MessagesPanel.IsVisible = false;
         EmptyState.IsVisible = false;
@@ -308,6 +544,7 @@ public partial class QueryTabView : UserControl
         }
 
         ResultsGrid.ItemsSource = result.Rows;
+        ResultsGrid.IsReadOnly = true;
         ResultsGrid.IsVisible = true;
         UpdateTabHighlight(index);
     }

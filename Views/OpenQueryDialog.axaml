@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="using:SqlVersionControl.Models"
+        x:Class="SqlVersionControl.Views.OpenQueryDialog"
+        x:DataType="models:QueryFileInfo"
+        Title="Open Query"
+        Width="600" Height="450"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="15">
+        <!-- Search -->
+        <TextBox x:Name="SearchBox" Grid.Row="0" Watermark="Search saved queries..."
+                 Margin="0,0,0,10"/>
+
+        <!-- Query List -->
+        <DataGrid x:Name="QueryGrid" Grid.Row="1"
+                  IsReadOnly="True"
+                  GridLinesVisibility="Horizontal"
+                  CanUserResizeColumns="True"
+                  SelectionMode="Single"
+                  BorderThickness="1"
+                  BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="100"/>
+                <DataGridTextColumn Header="Last Modified" Binding="{Binding Modified, StringFormat='{}{0:g}'}" Width="140"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+            <Button x:Name="BrowseButton" Grid.Column="0" Content="Browse..." Padding="15,8"
+                    ToolTip.Tip="Open a .sql file from anywhere on disk"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                <Button x:Name="DeleteButton" Content="Delete" Padding="15,8"
+                        Background="#e63946" Foreground="White"/>
+                <Button x:Name="CancelButton" Content="Cancel" Padding="15,8"/>
+                <Button x:Name="OpenButton" Content="Open" Padding="15,8"
+                        Background="#2a6e4e" Foreground="White"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

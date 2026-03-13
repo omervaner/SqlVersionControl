@@ -17,6 +17,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     /// <summary>Fired when column double-click wants to insert text at cursor.</summary>
     public event Action<string>? InsertAtCursorRequested;
 
+    /// <summary>Fired when "Edit Data" wants to run a SELECT and auto-enter edit mode.</summary>
+    public event Action<string>? EditDataRequested;
+
     public ObjectExplorerViewModel(DatabaseService db)
     {
         _db = db;
@@ -269,5 +272,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public void InsertColumnName(ObjectExplorerNode node)
     {
         InsertAtCursorRequested?.Invoke($"[{node.Name}]");
+    }
+
+    public void EditData(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var sql = $"SELECT TOP 200 * FROM [{schema}].[{node.Name}]";
+        EditDataRequested?.Invoke(sql);
     }
 }

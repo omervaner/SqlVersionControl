@@ -2,7 +2,7 @@
 
 ---
 ## PROJECT STATUS: v1.4.0 (March 2026)
-Menu bar (Task 4), multi-tab query editor (Task 4), version display (Task 4), Query Editor tab (Task 1), Object Explorer (Task 2), and Object Explorer context menus + quick actions (Task 3) added. Execution Plan tab shipped in v1.3.0. Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
+All v1.4.0 tasks complete: Menu bar (Task 4), multi-tab query editor (Task 4), version display (Task 4), Query Editor tab (Task 1), Object Explorer (Task 2), context menus + quick actions (Task 3), drag-and-drop (Task 5), editable result grid (Task 6), and saved queries (Task 7). Execution Plan tab shipped in v1.3.0. Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
 ---
 
 ## Project Identity
@@ -29,13 +29,26 @@ Write and run SQL queries against any database on the connected server:
 - **Object Explorer context menus** (right-click): Table → SELECT TOP 100, SELECT COUNT(*), Script as CREATE; View → SELECT TOP 100, View Definition; Proc → View Definition, Generate EXEC with param placeholders; Function → View Definition; Column → SELECT DISTINCT, Insert Column Name
 - **Double-click quick actions**: Table → SELECT TOP 100 (auto-run); Proc → View Definition; Column → Insert column name at cursor
 - **Drag-and-drop** from Object Explorer into editor: Table/View → `[schema].[name]` at drop position; Function → `[schema].[name]()`; Column → `[name]`; Proc → opens full definition
+- **Editable result grid** (TOAD-style): For simple single-table SELECTs with a PK, "Edit" button appears on result tab header. Toggle enters edit mode — DataGrid becomes writable. Row-based change tracking: snapshot on row enter, compare on row leave, Escape reverts. Yellow=modified, green=new, red=deleted. "Mark for Delete" via right-click. "Add Row" for inserts. "Show SQL" previews parameterized DML. "Apply" executes in a single transaction with row-count verification. "Edit Data" context menu on tables auto-runs SELECT TOP 200 and enters edit mode.
 
 ### Menu Bar (v1.4.0)
 Traditional menu bar (File, Edit, Query, Help) inside the dark titlebar, above the app tab row:
-- **File**: New Query (Ctrl+N), Open/Save/SaveAs (stubs), Exit
+- **File**: New Query (Ctrl+N), Open File (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), Recent Files submenu, Exit
 - **Edit**: Undo, Redo, Cut, Copy, Paste, Find (Ctrl+F), Replace (Ctrl+H) — pass-through to active tab's AvaloniaEdit
 - **Query**: Run (F5), Stop, Change Database
 - **Help**: About (shows version dialog), Check for Updates (opens GitHub releases)
+
+### Saved Queries (v1.4.0 Task 7)
+Full .sql file persistence for query tabs:
+- **Save (Ctrl+S)**: If query has been saved before, overwrites silently. If new, shows Save dialog for naming.
+- **Save As (Ctrl+Shift+S)**: Always shows Save dialog for a new name/file.
+- **Open (Ctrl+O)**: Shows Open Query dialog listing all saved queries with search/filter, or Browse for any .sql file on disk.
+- **Recent Files**: File menu submenu with last 10 opened/saved queries.
+- **Tab titles**: Saved queries show their name instead of "Query N". Unsaved changes append " *" asterisk.
+- **Close tab integration**: "Save" button in the unsaved changes dialog now actually saves before closing.
+- **Storage**: `~/Library/Application Support/SqlVersionControl/queries/` (macOS) / `%APPDATA%/SqlVersionControl/queries/` (Windows)
+- **File format**: Plain `.sql` with metadata comment header (Name, Database, Created, Modified timestamps)
+- **Services**: `QueryFileService` handles all file I/O; `SettingsService` tracks recent query paths.
 
 ### Tab 2: Version History
 Track changes to stored procedures, functions, views, and triggers over time. Syncs from a DDL audit log (`VMAuditDb.dbo.DDL_Log`) and stores versions in `ObjectVersions` table. Features:
@@ -68,6 +81,7 @@ Generate and visualize SQL Server estimated execution plans with human-readable 
 
 ## Tech Stack
 - **Framework**: Avalonia UI 11.x (.NET 9)
+- **Models**: ConnectionSettings, ObjectVersion, QueryResult, EditableRow (IEditableObject + INotifyPropertyChanged, row-based change tracking)
 - **Pattern**: MVVM with CommunityToolkit.Mvvm (`[ObservableProperty]`, `[RelayCommand]`)
 - **SQL**: Microsoft.Data.SqlClient
 - **Diff Engine**: DiffPlex for side-by-side comparison
@@ -102,6 +116,9 @@ CheatTeam/
 | `QueryTabView.axaml(.cs)` | Per-tab query UI — toolbar, editor, results grid, messages |
 | `AboutDialog.axaml(.cs)` | About dialog (version, GitHub link) |
 | `PlanView.axaml(.cs)` | Execution Plan tab — cost bar, operator tree, SQL panel with code-to-plan linking |
+| `SaveQueryDialog.axaml(.cs)` | Save query dialog — name input, database label |
+| `OpenQueryDialog.axaml(.cs)` | Open query dialog — saved queries list, search, browse |
+| `CloseTabDialog.axaml(.cs)` | Unsaved changes prompt — Save/Don't Save/Cancel |
 
 ### ViewModels
 | File | Purpose |
@@ -124,6 +141,8 @@ CheatTeam/
 | `SleepDetector.cs` | Timer-based sleep/wake detection with `WokeFromSleep` event |
 | `PlanTranslator.cs` | Translates raw SQL Server operator names to human-readable labels |
 | `PlanXmlHelper.cs` | Extracts statement character offsets from raw plan XML for code-to-plan linking |
+| `DataEditService.cs` | Editable grid: simple SELECT parsing, PK fetching, DML generation, transactional apply |
+| `QueryFileService.cs` | Saved queries: save/load/list/delete .sql files with metadata headers |
 | `AppVersion.cs` | Static version string helper (reads from assembly) |
 
 ---
@@ -344,6 +363,16 @@ if (SelectedSourceConnection != null && !IsSourceConnected)
 - [x] Menu bar (File/Edit/Query/Help)
 - [x] About dialog with version display
 - [x] Settings dialog shows version at bottom
+- [ ] Editable result grid: edit mode toggle on simple SELECT with PK
+- [ ] Row-based change tracking (yellow=modified, green=new, red=deleted)
+- [ ] Show SQL preview, Apply in transaction, Cancel discards
+- [ ] "Edit Data" context menu on tables (SELECT TOP 200 + auto-edit-mode)
+- [ ] Saved queries: Ctrl+S shows save dialog for new query, overwrites for existing
+- [ ] Open query: Ctrl+O lists saved queries, double-click loads, Browse picks .sql file
+- [ ] Save As: Ctrl+Shift+S always prompts for new name
+- [ ] Recent Files menu populated and clickable
+- [ ] Tab title shows query name + asterisk for unsaved changes
+- [ ] Close tab "Save" button saves before closing
 
 ---
 
@@ -368,8 +397,10 @@ dotnet run
 | `Ctrl+Enter` | Run query (Query Editor tab) |
 | `Cmd/Ctrl+F` | Focus search box / Find in editor |
 | `Cmd/Ctrl+H` | Replace in editor (Query Editor tab) |
+| `Cmd/Ctrl+O` | Open saved query (Query Editor tab) |
+| `Cmd/Ctrl+S` | Save query (Query Editor tab) / Sync from DDL log (other tabs) |
+| `Cmd/Ctrl+Shift+S` | Save As query (Query Editor tab) |
 | `Cmd/Ctrl+R` | Refresh |
-| `Cmd/Ctrl+S` | Sync from DDL log |
 | `Cmd/Ctrl+D` | Dependencies for selected object |
 | `Escape` | Back from dependencies → clear search → deselect |
 
@@ -380,6 +411,7 @@ dotnet run
 ### Data storage
 - Settings: `~/Library/Application Support/SqlVersionControl/settings.json` (macOS)
 - Passwords: `~/Library/Application Support/SqlVersionControl/credentials.json` (macOS) — encrypted at rest (DPAPI on Windows, AES on macOS)
+- Saved queries: `~/Library/Application Support/SqlVersionControl/queries/*.sql` (macOS) — plain .sql with metadata header
 
 ---
 ## END OF CheatTeam PROJECT DOCUMENTATION

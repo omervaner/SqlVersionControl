@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using SqlVersionControl.Models;
@@ -33,6 +34,7 @@ public partial class QueryEditorHost : UserControl
         // Wire Object Explorer events → active tab
         _viewModel.ObjectExplorer.InsertTextRequested += OnInsertText;
         _viewModel.ObjectExplorer.InsertAtCursorRequested += OnInsertAtCursor;
+        _viewModel.ObjectExplorer.EditDataRequested += OnEditDataRequested;
 
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);
@@ -71,6 +73,13 @@ public partial class QueryEditorHost : UserControl
             vm.SetDatabases(_cachedDatabases, selectedDb);
         }
 
+        // Refresh tab strip when unsaved changes indicator changes
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(QueryTabViewModel.HasUnsavedChanges) or nameof(QueryTabViewModel.TabTitle))
+                RebuildTabStrip();
+        };
+
         var tabView = new QueryTabView();
         tabView.Initialize(vm);
         tabView.ProcDropRequested += OnProcDropRequested;
@@ -97,8 +106,18 @@ public partial class QueryEditorHost : UserControl
                 await dialog.ShowDialog(parent);
 
             if (dialog.Result == null) return; // Cancel — abort close
+            // dialog.Result == true → Save first, then close
+            if (dialog.Result == true)
+            {
+                var svc = new QueryFileService();
+                var settings = GetSettingsService();
+                if (settings != null)
+                {
+                    var saved = await SaveActiveQueryAsync(svc, settings);
+                    if (!saved) return; // Save was cancelled — abort close
+                }
+            }
             // dialog.Result == false → Don't Save — proceed
-            // dialog.Result == true → Save — stub for Task 7, proceed for now
         }
 
         _tabs.RemoveAt(index);
@@ -298,6 +317,130 @@ public partial class QueryEditorHost : UserControl
         }
     }
 
+    private SettingsService? GetSettingsService()
+    {
+        var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
+        return mainWindow?.AppSettings;
+    }
+
+    // ── Save / Open Public API (for MainWindow) ──────────────────────
+
+    /// <summary>
+    /// Save active query. If no path yet, shows SaveQueryDialog first.
+    /// Returns true if saved successfully.
+    /// </summary>
+    public async Task<bool> SaveActiveQueryAsync(QueryFileService svc, SettingsService settings)
+    {
+        if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return false;
+        var tab = _tabs[_activeTabIndex];
+        var vm = tab.DataContext as QueryTabViewModel;
+        if (vm == null) return false;
+
+        // Sync text from editor
+        vm.SqlText = tab.Editor.Text;
+
+        if (vm.CurrentQueryPath != null)
+        {
+            vm.Save(svc, settings);
+            RebuildTabStrip();
+            return true;
+        }
+
+        // No path yet — show Save As dialog
+        return await SaveAsActiveQueryAsync(svc, settings);
+    }
+
+    /// <summary>
+    /// Always shows native Save File dialog, then saves.
+    /// </summary>
+    public async Task<bool> SaveAsActiveQueryAsync(QueryFileService svc, SettingsService settings)
+    {
+        if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return false;
+        var tab = _tabs[_activeTabIndex];
+        var vm = tab.DataContext as QueryTabViewModel;
+        if (vm == null) return false;
+
+        // Sync text from editor
+        vm.SqlText = tab.Editor.Text;
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return false;
+
+        var defaultName = vm.CurrentQueryName ?? "query";
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+        {
+            Title = "Save Query",
+            SuggestedFileName = defaultName,
+            DefaultExtension = "sql",
+            FileTypeChoices =
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("SQL Files") { Patterns = ["*.sql"] },
+                new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (file == null) return false;
+
+        var path = file.TryGetLocalPath();
+        if (path == null) return false;
+
+        vm.CurrentQueryPath = path;
+        vm.CurrentQueryName = Path.GetFileNameWithoutExtension(path);
+        vm.Save(svc, settings);
+        RebuildTabStrip();
+        return true;
+    }
+
+    /// <summary>
+    /// Shows native Open File dialog, creates a new tab and loads the selected file.
+    /// </summary>
+    public async Task OpenQueryAsync(QueryFileService svc, SettingsService settings)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = "Open SQL File",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("SQL Files") { Patterns = ["*.sql"] },
+                new Avalonia.Platform.Storage.FilePickerFileType("All Files") { Patterns = ["*"] }
+            ]
+        });
+
+        if (files.Count == 0) return;
+
+        var path = files[0].TryGetLocalPath();
+        if (path == null) return;
+
+        OpenQueryFromPath(path, svc, settings);
+    }
+
+    /// <summary>
+    /// Open a query file directly (for Recent Files menu).
+    /// </summary>
+    public void OpenQueryFromPath(string path, QueryFileService svc, SettingsService settings)
+    {
+        if (!File.Exists(path)) return;
+
+        AddNewTab();
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+        {
+            var tab = _tabs[_activeTabIndex];
+            var vm = tab.DataContext as QueryTabViewModel;
+            if (vm != null)
+            {
+                vm.LoadFromFile(path, svc, settings);
+                // Update editor text to match loaded SQL
+                tab.Editor.Text = vm.SqlText;
+                RebuildTabStrip();
+            }
+        }
+    }
+
     // ── Object Explorer Event Routing ────────────────────────────────
 
     private void OnInsertText(string sql, bool autoRun)
@@ -320,6 +463,19 @@ public partial class QueryEditorHost : UserControl
         if (_viewModel == null) return;
         // ViewDefinitionAsync fires InsertTextRequested → OnInsertText → new tab
         _ = _viewModel.ObjectExplorer.ViewDefinitionAsync(node);
+    }
+
+    private void OnEditDataRequested(string sql)
+    {
+        AddNewTab();
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+        {
+            var tab = _tabs[_activeTabIndex];
+            var vm = tab.DataContext as QueryTabViewModel;
+            if (vm != null)
+                vm.AutoEnterEditMode = true;
+            tab.InsertText(sql, autoRun: true);
+        }
     }
 
     // ── Drag-and-Drop ─────────────────────────────────────────────────
@@ -385,6 +541,7 @@ public partial class QueryEditorHost : UserControl
             case ObjectExplorerNodeType.Table:
                 menu.Items.Add(CreateMenuItem("SELECT TOP 100", () => explorer.SelectTop100(node)));
                 menu.Items.Add(CreateMenuItem("SELECT COUNT(*)", () => explorer.SelectCount(node)));
+                menu.Items.Add(CreateMenuItem("Edit Data", () => explorer.EditData(node)));
                 menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("Script as CREATE", () => explorer.ScriptAsCreate(node)));
                 break;

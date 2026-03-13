@@ -56,15 +56,59 @@
                           ResizeDirection="Rows"/>
 
             <!-- Results Panel -->
-            <Grid Grid.Row="2" RowDefinitions="Auto,*">
-                <!-- Result Tabs Header -->
+            <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*">
+                <!-- Result Tabs Header + Edit Mode Toggle -->
                 <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                         Padding="5,0" IsVisible="{Binding Results.Count}">
-                    <StackPanel x:Name="ResultTabHeaders" Orientation="Horizontal" Spacing="2"/>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel x:Name="ResultTabHeaders" Grid.Column="0" Orientation="Horizontal" Spacing="2"/>
+
+                        <!-- Edit Mode Toggle -->
+                        <Button x:Name="EditModeButton" Grid.Column="1"
+                                Content="Edit"
+                                Command="{Binding ToggleEditModeCommand}"
+                                IsVisible="{Binding CanEditMode}"
+                                Background="#4a4a6e" Foreground="White"
+                                Padding="10,5" Margin="4,3"
+                                FontSize="12"
+                                ToolTip.Tip="Toggle inline editing (requires primary key)"/>
+                    </Grid>
+                </Border>
+
+                <!-- Edit Bar (visible in edit mode with pending changes) -->
+                <Border x:Name="EditBar" Grid.Row="1" IsVisible="False"
+                        Background="#252540" Padding="8,5">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock x:Name="PendingChangesText" Text="0 changes pending"
+                                   Foreground="#aaa" VerticalAlignment="Center" FontSize="12"/>
+
+                        <Button Content="+ Row" x:Name="AddRowButton"
+                                Command="{Binding AddNewRowCommand}"
+                                Background="#4a4a6e" Foreground="White"
+                                Padding="8,4" FontSize="12"
+                                ToolTip.Tip="Add a new empty row"/>
+
+                        <Button Content="Show SQL" x:Name="ShowSqlButton"
+                                Background="#4a4a6e" Foreground="White"
+                                Padding="8,4" FontSize="12"
+                                ToolTip.Tip="Preview the DML statements"/>
+
+                        <Button Content="Apply"
+                                Command="{Binding ApplyChangesCommand}"
+                                Background="#2a6e4e" Foreground="White"
+                                Padding="10,4" FontSize="12"
+                                ToolTip.Tip="Execute all pending changes in a transaction"/>
+
+                        <Button Content="Cancel"
+                                Command="{Binding CancelChangesCommand}"
+                                Background="#e63946" Foreground="White"
+                                Padding="10,4" FontSize="12"
+                                ToolTip.Tip="Discard all pending changes"/>
+                    </StackPanel>
                 </Border>
 
                 <!-- Result Content -->
-                <Panel Grid.Row="1">
+                <Panel Grid.Row="2">
                     <!-- Results DataGrid -->
                     <DataGrid x:Name="ResultsGrid"
                               IsReadOnly="True"

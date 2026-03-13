@@ -16,8 +16,7 @@
             <Button x:Name="DontSaveButton" Content="Don't Save" Padding="15,8"
                     Background="#e63946" Foreground="White"/>
             <Button x:Name="SaveButton" Content="Save" Padding="15,8"
-                    Background="#2a6e4e" Foreground="White" IsEnabled="False"
-                    ToolTip.Tip="Available after Task 7 (Saved Queries)"/>
+                    Background="#2a6e4e" Foreground="White"/>
         </StackPanel>
     </Grid>
 </Window>

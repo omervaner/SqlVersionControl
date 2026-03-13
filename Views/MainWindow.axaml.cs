@@ -14,13 +14,17 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsService _settings;
+    private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
+
+    public SettingsService AppSettings => _settings;
 
     public MainWindow()
     {
         InitializeComponent();
 
         _settings = new SettingsService();
+        _queryFileService = new QueryFileService();
         _viewModel = new MainWindowViewModel();
         DataContext = _viewModel;
 
@@ -78,7 +82,13 @@ public partial class MainWindow : Window
     {
         // File menu
         MenuNewQuery.Click += (_, _) => OnMenuNewQuery();
+        MenuOpenFile.Click += async (_, _) => await OnMenuOpenFileAsync();
+        MenuSave.Click += async (_, _) => await OnMenuSaveAsync();
+        MenuSaveAs.Click += async (_, _) => await OnMenuSaveAsAsync();
         MenuExit.Click += (_, _) => Close();
+
+        // Populate Recent Files submenu
+        RebuildRecentFilesMenu();
 
         // Edit menu — delegate to active tab's editor
         MenuUndo.Click += (_, _) => GetActiveEditor()?.Undo();
@@ -131,6 +141,80 @@ public partial class MainWindow : Window
 
         // Switch to Query Editor tab if not already there
         QueryEditorTab.IsChecked = true;
+    }
+
+    private async Task OnMenuOpenFileAsync()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        if (host == null) return;
+
+        QueryEditorTab.IsChecked = true;
+        await host.OpenQueryAsync(_queryFileService, _settings);
+        RebuildRecentFilesMenu();
+    }
+
+    private async Task OnMenuSaveAsync()
+    {
+        if (QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host != null)
+            {
+                await host.SaveActiveQueryAsync(_queryFileService, _settings);
+                RebuildRecentFilesMenu();
+            }
+        }
+        else if (_viewModel.IsConnected)
+        {
+            // Non-query tab: keep existing DDL sync behavior
+            _ = _viewModel.SyncCommand.ExecuteAsync(null);
+        }
+    }
+
+    private async Task OnMenuSaveAsAsync()
+    {
+        if (QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host != null)
+            {
+                await host.SaveAsActiveQueryAsync(_queryFileService, _settings);
+                RebuildRecentFilesMenu();
+            }
+        }
+    }
+
+    private void RebuildRecentFilesMenu()
+    {
+        MenuRecentFiles.Items.Clear();
+        var recentPaths = _settings.GetRecentQueries();
+
+        if (recentPaths.Count == 0)
+        {
+            var empty = new MenuItem { Header = "(none)", IsEnabled = false };
+            MenuRecentFiles.Items.Add(empty);
+            return;
+        }
+
+        foreach (var path in recentPaths)
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            var item = new MenuItem { Header = name, Tag = path };
+            item.Click += (s, _) =>
+            {
+                if (s is MenuItem mi && mi.Tag is string filePath)
+                {
+                    var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    if (host != null)
+                    {
+                        QueryEditorTab.IsChecked = true;
+                        host.OpenQueryFromPath(filePath, _queryFileService, _settings);
+                        RebuildRecentFilesMenu();
+                    }
+                }
+            };
+            MenuRecentFiles.Items.Add(item);
+        }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
@@ -223,6 +307,12 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case Key.O:
+                if (QueryEditorTab.IsChecked == true)
+                    _ = OnMenuOpenFileAsync();
+                e.Handled = true;
+                break;
+
             case Key.R:
                 if (_viewModel.IsConnected)
                     _ = _viewModel.RefreshCommand.ExecuteAsync(null);
@@ -230,8 +320,21 @@ public partial class MainWindow : Window
                 break;
 
             case Key.S:
-                if (_viewModel.IsConnected)
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && QueryEditorTab.IsChecked == true)
+                {
+                    // Ctrl+Shift+S → Save As
+                    _ = OnMenuSaveAsAsync();
+                }
+                else if (QueryEditorTab.IsChecked == true)
+                {
+                    // Ctrl+S on Query Editor → Save query
+                    _ = OnMenuSaveAsync();
+                }
+                else if (_viewModel.IsConnected)
+                {
+                    // Ctrl+S on other tabs → Sync from DDL log
                     _ = _viewModel.SyncCommand.ExecuteAsync(null);
+                }
                 e.Handled = true;
                 break;
 

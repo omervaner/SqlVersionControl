@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.SaveQueryDialog"
+        Title="Save Query"
+        Width="400" Height="200"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="20">
+        <StackPanel Grid.Row="0" Spacing="5">
+            <TextBlock Text="Query Name:" FontWeight="SemiBold"/>
+            <TextBox x:Name="NameBox" Watermark="Enter query name..."/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Spacing="5" Margin="0,12,0,0">
+            <TextBlock Text="Database:" FontWeight="SemiBold"/>
+            <TextBlock x:Name="DatabaseLabel" Foreground="#888"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="10" Margin="0,15,0,0">
+            <Button x:Name="CancelButton" Content="Cancel" Padding="15,8"/>
+            <Button x:Name="SaveButton" Content="Save" Padding="15,8"
+                    Background="#2a6e4e" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>

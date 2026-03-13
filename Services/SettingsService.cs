@@ -74,6 +74,19 @@ public class SettingsService
         Save();
     }
 
+    public void AddRecentQuery(string path)
+    {
+        Settings.RecentQueryPaths.RemoveAll(p => p == path);
+        Settings.RecentQueryPaths.Insert(0, path);
+
+        if (Settings.RecentQueryPaths.Count > 10)
+            Settings.RecentQueryPaths.RemoveRange(10, Settings.RecentQueryPaths.Count - 10);
+
+        Save();
+    }
+
+    public List<string> GetRecentQueries() => Settings.RecentQueryPaths;
+
     public void SaveLastComparison(SavedConnection? source, SavedConnection? target)
     {
         Settings.LastSourceServer = source?.Server;
@@ -107,6 +120,7 @@ public class SettingsService
 public class AppSettings
 {
     public List<SavedConnection> RecentConnections { get; set; } = new();
+    public List<string> RecentQueryPaths { get; set; } = new();
 
     // Window position/size
     public double? WindowX { get; set; }
