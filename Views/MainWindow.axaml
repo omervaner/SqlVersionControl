@@ -9,32 +9,79 @@
         x:DataType="vm:MainWindowViewModel"
         Title="SQL Version Control"
         Width="1200" Height="700"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="0">
 
     <Grid RowDefinitions="Auto,*">
-        <!-- Tab Header -->
+        <!-- Title Bar: Menu + Tab Row -->
         <Border Grid.Row="0" Background="#0d0d1a">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs" IsChecked="True"
-                                 Classes="TabButton" Content="Version History"/>
-                    <RadioButton x:Name="CompareTab" GroupName="Tabs"
-                                 Classes="TabButton" Content="Compare Databases"/>
-                    <RadioButton x:Name="PlanTab" GroupName="Tabs"
-                                 Classes="TabButton" Content="Execution Plan"/>
-                </StackPanel>
-                <Button x:Name="SettingsButton" Grid.Column="1"
-                        Background="Transparent" Foreground="#888"
-                        Padding="15,10" Margin="0,0,10,0"
-                        ToolTip.Tip="Settings"
-                        Cursor="Hand">
-                    <TextBlock Text="&#x2699;" FontSize="18"/>
-                </Button>
+            <Grid RowDefinitions="Auto,Auto">
+                <!-- Menu Bar -->
+                <Menu Grid.Row="0" Background="Transparent" Foreground="#ccc"
+                      Margin="80,4,0,0">
+                    <MenuItem Header="_File">
+                        <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
+                        <Separator/>
+                        <MenuItem Header="Open File..." IsEnabled="False"/>
+                        <MenuItem Header="Save" IsEnabled="False"/>
+                        <MenuItem Header="Save As..." IsEnabled="False"/>
+                        <Separator/>
+                        <MenuItem Header="Recent Files" IsEnabled="False"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuExit" Header="Exit"/>
+                    </MenuItem>
+                    <MenuItem Header="_Edit">
+                        <MenuItem x:Name="MenuUndo" Header="Undo" InputGesture="Ctrl+Z"/>
+                        <MenuItem x:Name="MenuRedo" Header="Redo" InputGesture="Ctrl+Y"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuCut" Header="Cut" InputGesture="Ctrl+X"/>
+                        <MenuItem x:Name="MenuCopy" Header="Copy" InputGesture="Ctrl+C"/>
+                        <MenuItem x:Name="MenuPaste" Header="Paste" InputGesture="Ctrl+V"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuFind" Header="Find..." InputGesture="Ctrl+F"/>
+                        <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
+                    </MenuItem>
+                    <MenuItem Header="_Query">
+                        <MenuItem x:Name="MenuRun" Header="Run" InputGesture="F5"/>
+                        <MenuItem x:Name="MenuStop" Header="Stop"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuChangeDb" Header="Change Database..."/>
+                    </MenuItem>
+                    <MenuItem Header="_Help">
+                        <MenuItem x:Name="MenuAbout" Header="About..."/>
+                        <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
+                    </MenuItem>
+                </Menu>
+
+                <!-- App Tab Row -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="80,0,0,0">
+                        <RadioButton x:Name="QueryEditorTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Query Editor"/>
+                        <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs" IsChecked="True"
+                                     Classes="TabButton" Content="Version History"/>
+                        <RadioButton x:Name="CompareTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Compare Databases"/>
+                        <RadioButton x:Name="PlanTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Execution Plan"/>
+                    </StackPanel>
+                    <Button x:Name="SettingsButton" Grid.Column="1"
+                            Background="Transparent" Foreground="#888"
+                            Padding="15,10" Margin="0,0,10,0"
+                            ToolTip.Tip="Settings"
+                            Cursor="Hand">
+                        <TextBlock Text="&#x2699;" FontSize="18"/>
+                    </Button>
+                </Grid>
             </Grid>
         </Border>
 
         <!-- Tab Content -->
         <Grid Grid.Row="1">
+            <!-- Query Editor Tab -->
+            <views:QueryEditorHost IsVisible="{Binding #QueryEditorTab.IsChecked}" x:Name="QueryEditorHostControl"/>
+
             <!-- Version History Tab -->
             <Grid IsVisible="{Binding #VersionHistoryTab.IsChecked}" RowDefinitions="Auto,*,Auto">
                 <!-- Top Toolbar -->
@@ -277,6 +324,15 @@
             <Setter Property="Foreground" Value="#ccc"/>
         </Style>
         <Style Selector="Button#SettingsButton:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <!-- Menu bar styling -->
+        <Style Selector="Menu > MenuItem">
+            <Setter Property="Foreground" Value="#ccc"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+        <Style Selector="Menu > MenuItem:pointerover">
             <Setter Property="Foreground" Value="White"/>
         </Style>
     </Window.Styles>

@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
+using AvaloniaEdit.Search;
 using Microsoft.Data.SqlClient;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
@@ -36,13 +39,16 @@ public partial class MainWindow : Window
         {
             compareView.Initialize(_settings);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
-            // Apply theme to Compare tab diff views after initialization
             compareView.RefreshTheme();
         }
 
         // Initialize PlanView with shared services
         var planView = this.FindControl<PlanView>("PlanViewControl");
         planView?.Initialize(_viewModel.DatabaseService, _viewModel);
+
+        // Initialize QueryEditorHost with shared services
+        var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel);
 
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
@@ -56,6 +62,9 @@ public partial class MainWindow : Window
         // Wire up retry button on reconnect overlay
         RetryButton.Click += async (s, e) => await ReconnectAsync();
 
+        // Wire menu items
+        WireMenuItems();
+
         // Sleep/wake detection
         _sleepDetector = new SleepDetector();
         _sleepDetector.WokeFromSleep += OnWokeFromSleep;
@@ -65,25 +74,125 @@ public partial class MainWindow : Window
         Closing += OnClosing;
     }
 
+    private void WireMenuItems()
+    {
+        // File menu
+        MenuNewQuery.Click += (_, _) => OnMenuNewQuery();
+        MenuExit.Click += (_, _) => Close();
+
+        // Edit menu — delegate to active tab's editor
+        MenuUndo.Click += (_, _) => GetActiveEditor()?.Undo();
+        MenuRedo.Click += (_, _) => GetActiveEditor()?.Redo();
+        MenuCut.Click += (_, _) => GetActiveEditor()?.Cut();
+        MenuCopy.Click += (_, _) => GetActiveEditor()?.Copy();
+        MenuPaste.Click += (_, _) => GetActiveEditor()?.Paste();
+        MenuFind.Click += (_, _) => OpenSearchPanel(false);
+        MenuReplace.Click += (_, _) => OpenSearchPanel(true);
+
+        // Query menu
+        MenuRun.Click += (_, _) =>
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.RunActiveQuery();
+        };
+        MenuStop.Click += (_, _) =>
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.StopActiveQuery();
+        };
+        MenuChangeDb.Click += async (_, _) => await ChangeConnectionAsync();
+
+        // Help menu
+        MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
+        MenuCheckUpdates.Click += (_, _) => OpenUrl("https://github.com/omervaner/SqlVersionControl/releases");
+    }
+
+    private AvaloniaEdit.TextEditor? GetActiveEditor()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        return host?.GetActiveEditor();
+    }
+
+    private void OpenSearchPanel(bool withReplace)
+    {
+        var editor = GetActiveEditor();
+        if (editor == null) return;
+
+        var panel = SearchPanel.Install(editor);
+        panel.Open();
+        if (withReplace)
+            panel.IsReplaceMode = true;
+    }
+
+    private void OnMenuNewQuery()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        host?.AddNewTab();
+
+        // Switch to Query Editor tab if not already there
+        QueryEditorTab.IsChecked = true;
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        // F5 — run query when Query Editor tab is active (no ctrl required)
+        if (e.Key == Key.F5 && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host?.HandleKeyDown(e) == true)
+                e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Enter — run query when Query Editor tab is active
+        if (ctrl && e.Key == Key.Enter && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host?.HandleKeyDown(e) == true)
+                e.Handled = true;
+            return;
+        }
+
+        // Ctrl+N — new query tab
+        if (ctrl && e.Key == Key.N)
+        {
+            OnMenuNewQuery();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+W — close active query tab
+        if (ctrl && e.Key == Key.W && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.CloseActiveTab();
+            e.Handled = true;
+            return;
+        }
+
         if (!ctrl && e.Key != Key.Escape) return;
 
         switch (e.Key)
         {
             case Key.D1:
-                VersionHistoryTab.IsChecked = true;
+                QueryEditorTab.IsChecked = true;
                 e.Handled = true;
                 break;
 
             case Key.D2:
-                CompareTab.IsChecked = true;
+                VersionHistoryTab.IsChecked = true;
                 e.Handled = true;
                 break;
 
             case Key.D3:
+                CompareTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.D4:
                 PlanTab.IsChecked = true;
                 e.Handled = true;
                 break;
@@ -94,12 +203,24 @@ public partial class MainWindow : Window
                     var compareView = this.FindControl<CompareView>("CompareViewControl");
                     compareView?.FocusSearch();
                 }
-                else
+                else if (VersionHistoryTab.IsChecked == true)
                 {
                     VersionHistorySearchBox.Focus();
                     VersionHistorySearchBox.SelectAll();
                 }
+                else if (QueryEditorTab.IsChecked == true)
+                {
+                    OpenSearchPanel(false);
+                }
                 e.Handled = true;
+                break;
+
+            case Key.H:
+                if (QueryEditorTab.IsChecked == true)
+                {
+                    OpenSearchPanel(true);
+                    e.Handled = true;
+                }
                 break;
 
             case Key.R:
@@ -206,6 +327,10 @@ public partial class MainWindow : Window
         {
             _viewModel.OnConnected(dialog.Result);
             _sleepDetector.Start();
+
+            // Load databases into Query Editor Host
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host != null) _ = host.ReloadDatabasesAsync();
         }
         else
         {
@@ -216,6 +341,12 @@ public partial class MainWindow : Window
     private async Task ShowSettingsDialogAsync()
     {
         var dialog = new SettingsDialog(_settings, RefreshDiffViews);
+        await dialog.ShowDialog(this);
+    }
+
+    private async Task ShowAboutDialogAsync()
+    {
+        var dialog = new AboutDialog();
         await dialog.ShowDialog(this);
     }
 
@@ -241,11 +372,13 @@ public partial class MainWindow : Window
 
         if (dialog.Result != null)
         {
-            // User connected to a new database - refresh the view
             _viewModel.OnConnected(dialog.Result);
             _sleepDetector.Start();
+
+            // Reload databases into Query Editor Host
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host != null) _ = host.ReloadDatabasesAsync();
         }
-        // If user cancels, just keep current connection (don't close app)
     }
 
     private async void OnWokeFromSleep()
@@ -256,23 +389,19 @@ public partial class MainWindow : Window
 
     private async Task ReconnectAsync()
     {
-        // Show overlay
         ReconnectOverlay.IsVisible = true;
         ReconnectText.Text = "Reconnecting...";
         ReconnectProgress.IsVisible = true;
         RetryButton.IsVisible = false;
 
-        // Clear stale pooled connections
         SqlConnection.ClearAllPools();
 
-        // Retry up to 3 times with 2s delay
         for (int i = 1; i <= 3; i++)
         {
             ReconnectText.Text = $"Reconnecting... (attempt {i}/3)";
 
             if (await _viewModel.DatabaseService.TestConnectionAsync())
             {
-                // Success — hide overlay and refresh
                 ReconnectOverlay.IsVisible = false;
                 _viewModel.StatusMessage = "Reconnected after sleep";
                 return;
@@ -282,9 +411,18 @@ public partial class MainWindow : Window
                 await Task.Delay(2000);
         }
 
-        // All retries failed — show manual retry
         ReconnectText.Text = "Connection lost";
         ReconnectProgress.IsVisible = false;
         RetryButton.IsVisible = true;
+    }
+
+    private static void OpenUrl(string url)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            Process.Start("open", url);
+        else
+            Process.Start("xdg-open", url);
     }
 }

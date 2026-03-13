@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using SqlVersionControl.Services;
 
+
 namespace SqlVersionControl.Views;
 
 public partial class SettingsDialog : Window
@@ -100,6 +101,9 @@ public partial class SettingsDialog : Window
         var folder = s.DataFolderPath ?? SettingsService.DefaultDataFolder;
         DataFolderTextBox.Text = folder;
         FolderHintText.Text = $"Default: {SettingsService.DefaultDataFolder}";
+
+        // Version
+        VersionLabel.Text = AppVersion.DisplayString;
     }
 
     private void SaveAndClose()

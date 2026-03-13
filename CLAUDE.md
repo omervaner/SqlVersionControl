@@ -1,8 +1,8 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.3.0 (March 2026)
-Execution Plan tab shipped (Tasks 1-5, 7 done; Tasks 6 & 8 postponed to v1.4.0). Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
+## PROJECT STATUS: v1.4.0 (March 2026)
+Menu bar (Task 4), multi-tab query editor (Task 4), version display (Task 4), Query Editor tab (Task 1), Object Explorer (Task 2), and Object Explorer context menus + quick actions (Task 3) added. Execution Plan tab shipped in v1.3.0. Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
 ---
 
 ## Project Identity
@@ -13,7 +13,30 @@ Execution Plan tab shipped (Tasks 1-5, 7 done; Tasks 6 & 8 postponed to v1.4.0).
 
 ## What This App Does
 
-### Tab 1: Version History
+### Tab 1: Query Editor (v1.4.0)
+Write and run SQL queries against any database on the connected server:
+- **Multi-tab editor**: SSMS-style tabbed interface (Ctrl+N new tab, Ctrl+W close tab, middle-click close)
+- **Object Explorer** stays shared (left panel), each tab has its own editor, database dropdown, Run/Stop, results grid
+- **Tab strip**: manual StackPanel with close (×) buttons and "+" add button; minimum 1 tab always open
+- **SQL editor**: AvaloniaEdit with TSQL syntax highlighting, line numbers, Consolas font
+- **Database picker**: dropdown to select target database (uses dedicated connection, doesn't block DDL sync)
+- **Run (F5 / Ctrl+Enter)**: executes full text or selected text only (SSMS-style)
+- **Stop**: cancels running query via CancellationToken + SqlCommand.Cancel()
+- **GO batch splitting**: splits on `GO` lines, executes batches sequentially
+- **Results grid**: DataGrid with auto-generated columns, read-only, one tab per result set
+- **Messages tab**: execution time, row counts, PRINT output, errors with line numbers
+- **InfoMessage wired before OpenAsync** so early PRINT messages are captured
+- **Object Explorer context menus** (right-click): Table → SELECT TOP 100, SELECT COUNT(*), Script as CREATE; View → SELECT TOP 100, View Definition; Proc → View Definition, Generate EXEC with param placeholders; Function → View Definition; Column → SELECT DISTINCT, Insert Column Name
+- **Double-click quick actions**: Table → SELECT TOP 100 (auto-run); Proc → View Definition; Column → Insert column name at cursor
+
+### Menu Bar (v1.4.0)
+Traditional menu bar (File, Edit, Query, Help) inside the dark titlebar, above the app tab row:
+- **File**: New Query (Ctrl+N), Open/Save/SaveAs (stubs), Exit
+- **Edit**: Undo, Redo, Cut, Copy, Paste, Find (Ctrl+F), Replace (Ctrl+H) — pass-through to active tab's AvaloniaEdit
+- **Query**: Run (F5), Stop, Change Database
+- **Help**: About (shows version dialog), Check for Updates (opens GitHub releases)
+
+### Tab 2: Version History
 Track changes to stored procedures, functions, views, and triggers over time. Syncs from a DDL audit log (`VMAuditDb.dbo.DDL_Log`) and stores versions in `ObjectVersions` table. Features:
 - Object browser with version counts
 - Recent changes grid showing who changed what and when
@@ -24,14 +47,14 @@ Track changes to stored procedures, functions, views, and triggers over time. Sy
 - **Auto-sync timer**: 60-second background polling syncs new DDL changes without resetting user selection
 - **Copy buttons**: Copy Left / Copy Right buttons on the version selector bar
 
-### Tab 2: Database Compare
+### Tab 3: Database Compare
 Compare objects between two (or three) databases and deploy changes:
 - Source → Target1 comparison with deploy
 - Optional Target2 for three-way comparison (Source → Target1 → Target2)
 - Batch selection and deploy for multiple objects
 - "Show only differences" mode with progress scanning
 
-### Tab 3: Execution Plan (v1.3.0 — in progress)
+### Tab 4: Execution Plan (v1.3.0)
 Generate and visualize SQL Server estimated execution plans with human-readable explanations:
 - **Plan generation**: `SET SHOWPLAN_XML ON` + `EXEC proc` for safe estimated plans
 - **Cost breakdown bar**: horizontal stacked bar showing operator costs proportionally, color-coded by type, clickable
@@ -54,7 +77,7 @@ Generate and visualize SQL Server estimated execution plans with human-readable 
 CheatTeam/
 ├── Views/           - Avalonia XAML views and code-behind
 ├── ViewModels/      - MVVM view models
-├── Models/          - Data models (ConnectionSettings, ObjectVersion, etc.)
+├── Models/          - Data models (ConnectionSettings, ObjectVersion, QueryResult, etc.)
 ├── Services/        - DatabaseService, SettingsService, ThemeManager, PlanTranslator, PlanXmlHelper
 ├── lib/             - Git submodule: PlanViewer.Core (DO NOT MODIFY)
 ├── CLAUDE.md        - This file (developer guide)
@@ -74,6 +97,9 @@ CheatTeam/
 | `SettingsDialog.axaml(.cs)` | App settings with live theme preview |
 | `DeployDialog.axaml(.cs)` | Confirmation dialog for deployments |
 | `RollbackDialog.axaml(.cs)` | Confirmation dialog for rollbacks |
+| `QueryEditorHost.axaml(.cs)` | Query Editor host — Object Explorer + multi-tab management |
+| `QueryTabView.axaml(.cs)` | Per-tab query UI — toolbar, editor, results grid, messages |
+| `AboutDialog.axaml(.cs)` | About dialog (version, GitHub link) |
 | `PlanView.axaml(.cs)` | Execution Plan tab — cost bar, operator tree, SQL panel with code-to-plan linking |
 
 ### ViewModels
@@ -82,6 +108,8 @@ CheatTeam/
 | `MainWindowViewModel.cs` | Manages version history, object browser, recent changes |
 | `CompareViewModel.cs` | Manages database comparison, deploy functionality, three-way compare |
 | `ConnectionViewModel.cs` | Handles connection form logic |
+| `QueryTabViewModel.cs` | Per-tab query VM — run/stop, results, database selection |
+| `QueryEditorHostViewModel.cs` | Host VM — holds shared ObjectExplorerViewModel |
 | `PlanViewModel.cs` | Execution plan generation, operator tree, cost segments, highlight range |
 
 ### Services
@@ -95,6 +123,7 @@ CheatTeam/
 | `SleepDetector.cs` | Timer-based sleep/wake detection with `WokeFromSleep` event |
 | `PlanTranslator.cs` | Translates raw SQL Server operator names to human-readable labels |
 | `PlanXmlHelper.cs` | Extracts statement character offsets from raw plan XML for code-to-plan linking |
+| `AppVersion.cs` | Static version string helper (reads from assembly) |
 
 ---
 
@@ -308,6 +337,12 @@ if (SelectedSourceConnection != null && !IsSourceConnected)
 - [x] Auto-sync timer (60s background polling)
 - [x] Copy buttons on Version History diff panel
 - [x] Keyboard shortcuts (Cmd/Ctrl+1/2/F/R/S/D, Escape)
+- [x] Object Explorer right-click context menus (table, view, proc, function, column)
+- [x] Object Explorer double-click quick actions (table, proc, column)
+- [x] Multi-tab query editor (Ctrl+N new, Ctrl+W close, middle-click close)
+- [x] Menu bar (File/Edit/Query/Help)
+- [x] About dialog with version display
+- [x] Settings dialog shows version at bottom
 
 ---
 
@@ -322,9 +357,16 @@ dotnet run
 ### Keyboard shortcuts
 | Shortcut | Action |
 |---|---|
-| `Cmd/Ctrl+1` | Switch to Version History tab |
-| `Cmd/Ctrl+2` | Switch to Compare Databases tab |
-| `Cmd/Ctrl+F` | Focus search box (selects all text) |
+| `Cmd/Ctrl+1` | Switch to Query Editor tab |
+| `Cmd/Ctrl+2` | Switch to Version History tab |
+| `Cmd/Ctrl+3` | Switch to Compare Databases tab |
+| `Cmd/Ctrl+4` | Switch to Execution Plan tab |
+| `Ctrl+N` | New query tab |
+| `Ctrl+W` | Close active query tab |
+| `F5` | Run query (Query Editor tab) |
+| `Ctrl+Enter` | Run query (Query Editor tab) |
+| `Cmd/Ctrl+F` | Focus search box / Find in editor |
+| `Cmd/Ctrl+H` | Replace in editor (Query Editor tab) |
 | `Cmd/Ctrl+R` | Refresh |
 | `Cmd/Ctrl+S` | Sync from DDL log |
 | `Cmd/Ctrl+D` | Dependencies for selected object |

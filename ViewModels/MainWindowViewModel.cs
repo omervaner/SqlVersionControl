@@ -178,6 +178,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             if (savedDb != null && Databases.Contains(savedDb))
                 SelectedDatabase = savedDb;
+            if (SelectedDatabase == null && Databases.Contains("AAD"))
+                SelectedDatabase = "AAD";
 
             // Load recent changes
             await RefreshAsync();

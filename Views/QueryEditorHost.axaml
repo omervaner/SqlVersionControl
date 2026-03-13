@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SqlVersionControl.ViewModels"
+             xmlns:models="using:SqlVersionControl.Models"
+             x:Class="SqlVersionControl.Views.QueryEditorHost"
+             x:DataType="vm:QueryEditorHostViewModel">
+
+    <Grid ColumnDefinitions="220,Auto,*">
+
+        <!-- Object Explorer Panel (shared across all tabs) -->
+        <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*">
+                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
+                    <TextBlock Text="Object Explorer" FontWeight="SemiBold"/>
+                </Border>
+
+                <TreeView Grid.Row="1" x:Name="ObjectExplorerTree"
+                          Padding="4"
+                          ItemsSource="{Binding ObjectExplorer.RootNodes}">
+                    <TreeView.Styles>
+                        <Style Selector="TreeViewItem" x:DataType="models:ObjectExplorerNode">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                        </Style>
+                    </TreeView.Styles>
+                    <TreeView.ItemTemplate>
+                        <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="models:ObjectExplorerNode">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Icon}" FontSize="10"
+                                           Foreground="{Binding IconColor}"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DisplayName}" FontSize="12"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Grid>
+        </Border>
+
+        <!-- Splitter -->
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                      Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                      ResizeDirection="Columns"/>
+
+        <!-- Right side: Query Tab Strip + Tab Content -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*">
+            <!-- Tab Strip -->
+            <Border Grid.Row="0" Background="#0d0d1a" Padding="4,2">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Tab Content -->
+            <Panel Grid.Row="1" x:Name="TabContentPanel"/>
+        </Grid>
+    </Grid>
+</UserControl>

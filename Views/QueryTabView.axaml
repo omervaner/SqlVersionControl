@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+             xmlns:vm="using:SqlVersionControl.ViewModels"
+             x:Class="SqlVersionControl.Views.QueryTabView"
+             x:DataType="vm:QueryTabViewModel">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Per-tab Toolbar -->
+        <Border Grid.Row="0" Background="#1a1a2e" Padding="10,6">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="Database:" Foreground="White" VerticalAlignment="Center"/>
+                    <ComboBox ItemsSource="{Binding Databases}"
+                              SelectedItem="{Binding SelectedDatabase}"
+                              MinWidth="150"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                    <Button x:Name="RunButton" Content="Run (F5)"
+                            Command="{Binding RunQueryCommand}"
+                            Background="#2a6e4e" Foreground="White" Padding="12,5"
+                            IsEnabled="{Binding !IsRunning}"
+                            ToolTip.Tip="Execute query (F5 or Ctrl+Enter)"/>
+                    <Button Content="Stop"
+                            Command="{Binding StopQueryCommand}"
+                            Background="#e63946" Foreground="White" Padding="12,5"
+                            IsEnabled="{Binding IsRunning}"
+                            ToolTip.Tip="Cancel running query"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="3" Text="{Binding StatusText}"
+                           Foreground="#aaa" VerticalAlignment="Center" Margin="15,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Editor (top) + Results (bottom) -->
+        <Grid Grid.Row="1" RowDefinitions="*,Auto,*">
+            <!-- SQL Editor -->
+            <Border Grid.Row="0" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderThickness="0,0,0,1">
+                <ae:TextEditor x:Name="SqlEditor"
+                               Focusable="True"
+                               IsReadOnly="False"
+                               FontFamily="Consolas, Menlo, Monaco, monospace"
+                               FontSize="13"
+                               ShowLineNumbers="True"
+                               WordWrap="False"
+                               HorizontalScrollBarVisibility="Auto"
+                               VerticalScrollBarVisibility="Auto"/>
+            </Border>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                          ResizeDirection="Rows"/>
+
+            <!-- Results Panel -->
+            <Grid Grid.Row="2" RowDefinitions="Auto,*">
+                <!-- Result Tabs Header -->
+                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                        Padding="5,0" IsVisible="{Binding Results.Count}">
+                    <StackPanel x:Name="ResultTabHeaders" Orientation="Horizontal" Spacing="2"/>
+                </Border>
+
+                <!-- Result Content -->
+                <Panel Grid.Row="1">
+                    <!-- Results DataGrid -->
+                    <DataGrid x:Name="ResultsGrid"
+                              IsReadOnly="True"
+                              GridLinesVisibility="All"
+                              BorderThickness="0"
+                              CanUserResizeColumns="True"
+                              CanUserSortColumns="True"/>
+
+                    <!-- Messages Panel -->
+                    <Border x:Name="MessagesPanel" IsVisible="False"
+                            Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                        <ScrollViewer>
+                            <TextBlock Text="{Binding Messages}" Padding="10"
+                                       FontFamily="Consolas, Menlo, Monaco, monospace"
+                                       FontSize="12" TextWrapping="Wrap"/>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Empty state -->
+                    <TextBlock x:Name="EmptyState" Text="Run a query to see results here"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="14"/>
+                </Panel>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

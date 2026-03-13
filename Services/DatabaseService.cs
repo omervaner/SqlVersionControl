@@ -611,4 +611,319 @@ public class DatabaseService
             return (null, ex.Message);
         }
     }
+
+    /// <summary>
+    /// Builds a connection string targeting a specific database, using the current server credentials.
+    /// Used by Query Editor so it runs on a dedicated connection.
+    /// </summary>
+    public string GetConnectionStringForDatabase(string database)
+    {
+        var builder = new SqlConnectionStringBuilder(_connectionString)
+        {
+            InitialCatalog = database
+        };
+        return builder.ConnectionString;
+    }
+
+    /// <summary>
+    /// Executes one or more SQL batches (split on GO) against the given database.
+    /// Uses a dedicated connection. Wires InfoMessage BEFORE OpenAsync so early PRINTs are captured.
+    /// </summary>
+    public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
+        string database, string sql, CancellationToken ct, int timeoutSeconds = 30)
+    {
+        var results = new List<QueryResult>();
+        var messages = new List<string>();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        var connStr = GetConnectionStringForDatabase(database);
+        using var conn = new SqlConnection(connStr);
+
+        // Wire InfoMessage BEFORE OpenAsync so early PRINT messages are captured
+        conn.InfoMessage += (_, e) => messages.Add(e.Message);
+
+        await conn.OpenAsync(ct);
+
+        // Split on GO lines
+        var batches = SplitOnGo(sql);
+
+        foreach (var batch in batches)
+        {
+            if (string.IsNullOrWhiteSpace(batch)) continue;
+            ct.ThrowIfCancellationRequested();
+
+            var batchSw = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                using var cmd = new SqlCommand(batch, conn);
+                cmd.CommandTimeout = timeoutSeconds;
+
+                // Register cancellation to call SqlCommand.Cancel()
+                await using var reg = ct.Register(() =>
+                {
+                    try { cmd.Cancel(); } catch { /* already disposed */ }
+                });
+
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+
+                do
+                {
+                    var colCount = reader.FieldCount;
+                    if (colCount == 0) continue; // non-SELECT batch (UPDATE/INSERT/etc.)
+
+                    var colNames = new string[colCount];
+                    var colTypes = new Type[colCount];
+                    for (int i = 0; i < colCount; i++)
+                    {
+                        colNames[i] = reader.GetName(i);
+                        colTypes[i] = reader.GetFieldType(i);
+                    }
+
+                    var rows = new List<object?[]>();
+                    while (await reader.ReadAsync(ct))
+                    {
+                        var row = new object?[colCount];
+                        for (int i = 0; i < colCount; i++)
+                        {
+                            row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        }
+                        rows.Add(row);
+                    }
+
+                    results.Add(new QueryResult
+                    {
+                        ColumnNames = colNames,
+                        ColumnTypes = colTypes,
+                        Rows = rows,
+                        RowCount = rows.Count,
+                        ExecutionTimeMs = batchSw.ElapsedMilliseconds
+                    });
+                } while (await reader.NextResultAsync(ct));
+
+                // If no result sets but rows were affected, add a message
+                if (reader.RecordsAffected >= 0)
+                {
+                    messages.Add($"({reader.RecordsAffected} rows affected)");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                messages.Add("Query was cancelled by user.");
+                throw;
+            }
+            catch (SqlException ex)
+            {
+                var errorMsg = ex.LineNumber > 0
+                    ? $"Error (Line {ex.LineNumber}): {ex.Message}"
+                    : $"Error: {ex.Message}";
+                messages.Add(errorMsg);
+
+                results.Add(new QueryResult { Error = errorMsg });
+            }
+        }
+
+        sw.Stop();
+        messages.Insert(0, $"Total execution time: {sw.ElapsedMilliseconds}ms");
+
+        return (results, string.Join(Environment.NewLine, messages));
+    }
+
+    /// <summary>
+    /// Splits SQL text on GO batch separators (line must be exactly GO, case-insensitive, with optional whitespace).
+    /// </summary>
+    private static List<string> SplitOnGo(string sql)
+    {
+        var batches = new List<string>();
+        var lines = sql.Split('\n');
+        var current = new System.Text.StringBuilder();
+
+        foreach (var line in lines)
+        {
+            if (System.Text.RegularExpressions.Regex.IsMatch(line.Trim(), @"^GO\s*$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                if (current.Length > 0)
+                {
+                    batches.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+            else
+            {
+                current.AppendLine(line);
+            }
+        }
+
+        if (current.Length > 0)
+            batches.Add(current.ToString());
+
+        return batches;
+    }
+
+    // ── Object Explorer schema queries ──────────────────────────────
+
+    public async Task<List<(string Schema, string Name)>> GetTablesAsync(string database)
+    {
+        var results = new List<(string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT s.name, t.name
+            FROM [{safeDb}].sys.tables t
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            WHERE t.is_ms_shipped = 0
+            ORDER BY s.name, t.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1)));
+
+        return results;
+    }
+
+    public async Task<List<(string Schema, string Name)>> GetViewsAsync(string database)
+    {
+        var results = new List<(string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT s.name, v.name
+            FROM [{safeDb}].sys.views v
+            JOIN [{safeDb}].sys.schemas s ON v.schema_id = s.schema_id
+            WHERE v.is_ms_shipped = 0
+            ORDER BY s.name, v.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1)));
+
+        return results;
+    }
+
+    public async Task<List<(string Schema, string Name, string Type)>> GetProcsAndFunctionsAsync(string database)
+    {
+        var results = new List<(string, string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT s.name, o.name, o.type_desc
+            FROM [{safeDb}].sys.objects o
+            JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE o.type IN ('P', 'FN', 'TF', 'IF')
+              AND o.is_ms_shipped = 0
+            ORDER BY o.type_desc, s.name, o.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+
+        return results;
+    }
+
+    public async Task<string?> GetObjectDefinitionAsync(string database, string schema, string objectName)
+    {
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT m.definition
+            FROM [{safeDb}].sys.sql_modules m
+            JOIN [{safeDb}].sys.objects o ON m.object_id = o.object_id
+            JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE s.name = @schema AND o.name = @objectName";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@objectName", objectName);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result as string;
+    }
+
+    public async Task<List<(string Name, string TypeName)>> GetProcParametersAsync(
+        string database, string schema, string procName)
+    {
+        var results = new List<(string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT p.name, TYPE_NAME(p.user_type_id) AS TypeName
+            FROM [{safeDb}].sys.parameters p
+            JOIN [{safeDb}].sys.objects o ON p.object_id = o.object_id
+            JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE s.name = @schema AND o.name = @procName
+            ORDER BY p.parameter_id";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@procName", procName);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1)));
+
+        return results;
+    }
+
+    public async Task<List<(string Name, string TypeName, int MaxLength, bool IsNullable, bool IsPrimaryKey)>>
+        GetColumnsAsync(string database, string schema, string table)
+    {
+        var results = new List<(string, string, int, bool, bool)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT c.name,
+                   TYPE_NAME(c.user_type_id) AS TypeName,
+                   c.max_length,
+                   c.is_nullable,
+                   CASE WHEN ic.column_id IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey
+            FROM [{safeDb}].sys.columns c
+            JOIN [{safeDb}].sys.tables t ON c.object_id = t.object_id
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            LEFT JOIN [{safeDb}].sys.index_columns ic
+              ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+              AND ic.index_id = (SELECT TOP 1 i.index_id FROM [{safeDb}].sys.indexes i
+                                 WHERE i.object_id = t.object_id AND i.is_primary_key = 1)
+            WHERE s.name = @schema AND t.name = @table
+            ORDER BY c.column_id";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", table);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt16(2),
+                reader.GetBoolean(3),
+                reader.GetInt32(4) == 1
+            ));
+        }
+
+        return results;
+    }
 }
