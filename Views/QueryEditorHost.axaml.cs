@@ -37,6 +37,8 @@ public partial class QueryEditorHost : UserControl
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);
         ObjectExplorerTree.AddHandler(InputElement.PointerReleasedEvent, OnTreePointerReleased, handledEventsToo: true);
+        ObjectExplorerTree.AddHandler(InputElement.PointerMovedEvent, OnTreePointerMoved, handledEventsToo: true);
+        ObjectExplorerTree.AddHandler(InputElement.PointerPressedEvent, OnTreePointerPressed, handledEventsToo: true);
 
         // Create first tab
         AddNewTab();
@@ -71,6 +73,7 @@ public partial class QueryEditorHost : UserControl
 
         var tabView = new QueryTabView();
         tabView.Initialize(vm);
+        tabView.ProcDropRequested += OnProcDropRequested;
 
         _tabs.Add(tabView);
         TabContentPanel.Children.Add(tabView);
@@ -78,11 +81,26 @@ public partial class QueryEditorHost : UserControl
         SwitchToTab(_tabs.Count - 1);
     }
 
-    public void CloseTab(int index)
+    public async Task CloseTabAsync(int index)
     {
         if (index < 0 || index >= _tabs.Count) return;
 
         var tabView = _tabs[index];
+        var vm = tabView.DataContext as QueryTabViewModel;
+
+        // Prompt if unsaved changes
+        if (vm?.HasUnsavedChanges == true)
+        {
+            var dialog = new CloseTabDialog(vm.TabTitle);
+            var parent = TopLevel.GetTopLevel(this) as Window;
+            if (parent != null)
+                await dialog.ShowDialog(parent);
+
+            if (dialog.Result == null) return; // Cancel — abort close
+            // dialog.Result == false → Don't Save — proceed
+            // dialog.Result == true → Save — stub for Task 7, proceed for now
+        }
+
         _tabs.RemoveAt(index);
         TabContentPanel.Children.Remove(tabView);
 
@@ -102,10 +120,10 @@ public partial class QueryEditorHost : UserControl
         SwitchToTab(_activeTabIndex);
     }
 
-    public void CloseActiveTab()
+    public async Task CloseActiveTabAsync()
     {
         if (_activeTabIndex >= 0)
-            CloseTab(_activeTabIndex);
+            await CloseTabAsync(_activeTabIndex);
     }
 
     private void SwitchToTab(int index)
@@ -163,7 +181,7 @@ public partial class QueryEditorHost : UserControl
                 MinHeight = 0,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             };
-            closeBtn.Click += (_, _) => CloseTab(idx);
+            closeBtn.Click += async (_, _) => await CloseTabAsync(idx);
             headerPanel.Children.Add(closeBtn);
 
             var tabBtn = new Button
@@ -178,10 +196,10 @@ public partial class QueryEditorHost : UserControl
             tabBtn.Click += (_, _) => SwitchToTab(idx);
 
             // Middle-click to close
-            tabBtn.PointerPressed += (_, e) =>
+            tabBtn.PointerPressed += async (_, e) =>
             {
                 if (e.GetCurrentPoint(tabBtn).Properties.IsMiddleButtonPressed)
-                    CloseTab(idx);
+                    await CloseTabAsync(idx);
             };
 
             TabStrip.Children.Add(tabBtn);
@@ -284,14 +302,73 @@ public partial class QueryEditorHost : UserControl
 
     private void OnInsertText(string sql, bool autoRun)
     {
+        // Always open context menu / Object Explorer actions in a new tab
+        AddNewTab();
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
             _tabs[_activeTabIndex].InsertText(sql, autoRun);
     }
 
     private void OnInsertAtCursor(string text)
     {
+        // Column insert stays in current tab (user is building a query)
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
             _tabs[_activeTabIndex].InsertAtCursor(text);
+    }
+
+    private void OnProcDropRequested(ObjectExplorerNode node)
+    {
+        if (_viewModel == null) return;
+        // ViewDefinitionAsync fires InsertTextRequested → OnInsertText → new tab
+        _ = _viewModel.ObjectExplorer.ViewDefinitionAsync(node);
+    }
+
+    // ── Drag-and-Drop ─────────────────────────────────────────────────
+
+    private Point _dragStartPoint;
+    private bool _dragPending;
+    private ObjectExplorerNode? _dragNode;
+    private const double DragThreshold = 8;
+
+    private void OnTreePointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(ObjectExplorerTree).Properties.IsLeftButtonPressed &&
+            e.Source is Visual visual)
+        {
+            var treeViewItem = visual.FindAncestorOfType<TreeViewItem>();
+            if (treeViewItem?.DataContext is ObjectExplorerNode node &&
+                node.NodeType is ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
+                    or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
+                    or ObjectExplorerNodeType.Column)
+            {
+                _dragStartPoint = e.GetPosition(ObjectExplorerTree);
+                _dragNode = node;
+                _dragPending = true;
+                return;
+            }
+        }
+        _dragPending = false;
+        _dragNode = null;
+    }
+
+    private async void OnTreePointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_dragPending || _dragNode == null) return;
+
+        var pos = e.GetPosition(ObjectExplorerTree);
+        var delta = pos - _dragStartPoint;
+        if (Math.Abs(delta.X) < DragThreshold && Math.Abs(delta.Y) < DragThreshold)
+            return;
+
+        _dragPending = false;
+        var node = _dragNode;
+        _dragNode = null;
+
+#pragma warning disable CS0618 // DataObject/DoDragDrop obsolete
+        var data = new DataObject();
+        data.Set("ObjectExplorerNode", node);
+
+        await DragDrop.DoDragDrop(e, data, DragDropEffects.Copy);
+#pragma warning restore CS0618
     }
 
     // ── Context Menu + Double-Click ──────────────────────────────────

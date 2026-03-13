@@ -21,8 +21,40 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private string _tabTitle = "Query 1";
 
     // SqlText and SelectedSqlText are set by the View (AvaloniaEdit doesn't support two-way binding)
-    public string SqlText { get; set; } = "";
     public string SelectedSqlText { get; set; } = "";
+
+    private string _sqlText = "";
+    private string _cleanText = ""; // Text state considered "saved" (initial or after save)
+    private bool _initialized;
+
+    public string SqlText
+    {
+        get => _sqlText;
+        set
+        {
+            _sqlText = value;
+            if (_initialized)
+                HasUnsavedChanges = _sqlText != _cleanText;
+        }
+    }
+
+    [ObservableProperty] private bool _hasUnsavedChanges;
+
+    /// <summary>Mark current text as "clean" (e.g. after save).</summary>
+    public void MarkClean()
+    {
+        _cleanText = _sqlText;
+        HasUnsavedChanges = false;
+    }
+
+    /// <summary>Set initial editor text without marking as dirty.</summary>
+    public void SetInitialText(string text)
+    {
+        _sqlText = text;
+        _cleanText = text;
+        _initialized = true;
+        HasUnsavedChanges = false;
+    }
 
     public QueryTabViewModel(DatabaseService db)
     {

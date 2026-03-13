@@ -31,6 +31,11 @@ public partial class QueryTabView : UserControl
         LoadSyntaxHighlighting();
         ConfigureEditor();
 
+        // Enable drag-and-drop on editor
+        DragDrop.SetAllowDrop(SqlEditor, true);
+        SqlEditor.AddHandler(DragDrop.DropEvent, OnEditorDrop);
+        SqlEditor.AddHandler(DragDrop.DragOverEvent, OnEditorDragOver);
+
         vm.Results.CollectionChanged += OnResultsChanged;
     }
 
@@ -118,7 +123,10 @@ public partial class QueryTabView : UserControl
     {
         SqlEditor.Options.ConvertTabsToSpaces = true;
         SqlEditor.Options.IndentationSize = 4;
-        SqlEditor.Text = "-- Write your SQL query here\n-- Press F5 or Ctrl+Enter to execute\n\n";
+
+        var defaultText = "-- Write your SQL query here\n-- Press F5 or Ctrl+Enter to execute\n\n";
+        SqlEditor.Text = defaultText;
+        _viewModel?.SetInitialText(defaultText);
 
         SqlEditor.TextChanged += (_, _) =>
         {
@@ -126,6 +134,81 @@ public partial class QueryTabView : UserControl
                 _viewModel.SqlText = SqlEditor.Text;
         };
     }
+
+    // ── Drag-and-Drop ─────────────────────────────────────────────────
+
+    private void OnEditorDragOver(object? sender, DragEventArgs e)
+    {
+#pragma warning disable CS0618 // DragEventArgs.Data is obsolete
+        if (e.Data.Contains("ObjectExplorerNode"))
+            e.DragEffects = DragDropEffects.Copy;
+        else
+            e.DragEffects = DragDropEffects.None;
+#pragma warning restore CS0618
+    }
+
+    private void OnEditorDrop(object? sender, DragEventArgs e)
+    {
+#pragma warning disable CS0618 // DragEventArgs.Data is obsolete
+        if (!e.Data.Contains("ObjectExplorerNode")) return;
+        var node = e.Data.Get("ObjectExplorerNode") as ObjectExplorerNode;
+#pragma warning restore CS0618
+        if (node == null) return;
+
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+
+        switch (node.NodeType)
+        {
+            case ObjectExplorerNodeType.Table:
+                InsertAtDropPosition(e, $"SELECT TOP 100 * FROM [{schema}].[{node.Name}]");
+                break;
+
+            case ObjectExplorerNodeType.View:
+                InsertAtDropPosition(e, $"[{schema}].[{node.Name}]");
+                break;
+
+            case ObjectExplorerNodeType.Function:
+                InsertAtDropPosition(e, $"[{schema}].[{node.Name}]()");
+                break;
+
+            case ObjectExplorerNodeType.Column:
+                InsertAtDropPosition(e, $"[{node.Name}]");
+                break;
+
+            case ObjectExplorerNodeType.Proc:
+                HandleProcDrop(node);
+                break;
+        }
+    }
+
+    private void InsertAtDropPosition(DragEventArgs e, string text)
+    {
+        // Try to get the drop position in the editor
+        var pos = e.GetPosition(SqlEditor);
+        var textPos = SqlEditor.GetPositionFromPoint(pos);
+        if (textPos != null)
+        {
+            var offset = SqlEditor.Document.GetOffset(textPos.Value.Line, textPos.Value.Column);
+            SqlEditor.Document.Insert(offset, text);
+            SqlEditor.CaretOffset = offset + text.Length;
+        }
+        else
+        {
+            // Fallback: insert at cursor
+            var offset = SqlEditor.CaretOffset;
+            SqlEditor.Document.Insert(offset, text);
+            SqlEditor.CaretOffset = offset + text.Length;
+        }
+        SqlEditor.Focus();
+    }
+
+    private void HandleProcDrop(ObjectExplorerNode node)
+    {
+        ProcDropRequested?.Invoke(node);
+    }
+
+    /// <summary>Fired when a proc is dropped — host should fetch definition and route back.</summary>
+    public event Action<ObjectExplorerNode>? ProcDropRequested;
 
     // ── Result Tabs ──────────────────────────────────────────────────
 

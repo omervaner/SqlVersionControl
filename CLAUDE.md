@@ -28,6 +28,7 @@ Write and run SQL queries against any database on the connected server:
 - **InfoMessage wired before OpenAsync** so early PRINT messages are captured
 - **Object Explorer context menus** (right-click): Table → SELECT TOP 100, SELECT COUNT(*), Script as CREATE; View → SELECT TOP 100, View Definition; Proc → View Definition, Generate EXEC with param placeholders; Function → View Definition; Column → SELECT DISTINCT, Insert Column Name
 - **Double-click quick actions**: Table → SELECT TOP 100 (auto-run); Proc → View Definition; Column → Insert column name at cursor
+- **Drag-and-drop** from Object Explorer into editor: Table/View → `[schema].[name]` at drop position; Function → `[schema].[name]()`; Column → `[name]`; Proc → opens full definition
 
 ### Menu Bar (v1.4.0)
 Traditional menu bar (File, Edit, Query, Help) inside the dark titlebar, above the app tab row:

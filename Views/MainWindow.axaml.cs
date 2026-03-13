@@ -168,7 +168,7 @@ public partial class MainWindow : Window
         if (ctrl && e.Key == Key.W && QueryEditorTab.IsChecked == true)
         {
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-            host?.CloseActiveTab();
+            if (host != null) _ = host.CloseActiveTabAsync();
             e.Handled = true;
             return;
         }
