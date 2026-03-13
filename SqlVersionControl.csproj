@@ -9,7 +9,7 @@
     <RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers>
 
     <!-- App Metadata -->
-    <Version>1.4.0</Version>
+    <Version>1.4.5</Version>
     <AssemblyTitle>SQL Version Control</AssemblyTitle>
     <Product>SQL Version Control</Product>
     <Description>Track and manage SQL Server stored procedure versions with diff view and rollback support</Description>

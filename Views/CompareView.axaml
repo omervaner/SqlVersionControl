@@ -7,11 +7,11 @@
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Top Bar Row 1: Source, Search, Target1 -->
-        <Border Grid.Row="0" Background="#1a1a2e" Padding="10,8">
+        <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="10,8">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <!-- Source Connection -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="Source:" Foreground="White" VerticalAlignment="Center" FontSize="12"/>
+                    <TextBlock Text="Source:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <ComboBox ItemsSource="{Binding SourceConnections}"
                               SelectedItem="{Binding SelectedSourceConnection}"
                               MinWidth="160"
@@ -22,8 +22,8 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Name="AddSourceButton" Content="+" ToolTip.Tip="Add new connection"
-                            Padding="6,2" FontWeight="Bold" Background="#4a4a6e" Foreground="White"/>
+                    <Button Name="AddSourceButton" Content="+" Classes="btn-secondary"
+                            ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
                 </StackPanel>
 
                 <!-- Search (centered) -->
@@ -33,7 +33,7 @@
 
                 <!-- Target1 Connection + T2 Toggle -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="Target 1:" Foreground="White" VerticalAlignment="Center" FontSize="12"/>
+                    <TextBlock Text="Target 1:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <ComboBox ItemsSource="{Binding TargetConnections}"
                               SelectedItem="{Binding SelectedTargetConnection}"
                               MinWidth="160"
@@ -44,21 +44,21 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Name="AddTargetButton" Content="+" ToolTip.Tip="Add new connection"
-                            Padding="6,2" FontWeight="Bold" Background="#4a4a6e" Foreground="White"/>
+                    <Button Name="AddTargetButton" Content="+" Classes="btn-secondary"
+                            ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
                     <Button Command="{Binding ToggleTarget2Command}"
                             Content="{Binding ToggleTarget2ButtonText}"
+                            Classes="btn-toggle"
                             ToolTip.Tip="Add/remove third database for 3-way compare"
-                            Padding="8,2" FontWeight="Bold" Background="#2980b9" Foreground="White"
-                            Margin="8,0,0,0"/>
+                            Padding="8,2" FontWeight="Bold" Margin="8,0,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Top Bar Row 2: Target2 (only visible when ShowTarget2 is true) -->
-        <Border Grid.Row="1" Background="#252540" Padding="10,6" IsVisible="{Binding ShowTarget2}">
+        <Border Grid.Row="1" Background="{DynamicResource PanelHeaderBackground}" Padding="10,6" IsVisible="{Binding ShowTarget2}">
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                <TextBlock Text="Target 2:" Foreground="White" VerticalAlignment="Center" FontSize="12"/>
+                <TextBlock Text="Target 2:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                 <ComboBox ItemsSource="{Binding Target2Connections}"
                           SelectedItem="{Binding SelectedTarget2Connection}"
                           MinWidth="160"
@@ -69,9 +69,9 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <Button Name="AddTarget2Button" Content="+" ToolTip.Tip="Add new connection"
-                        Padding="6,2" FontWeight="Bold" Background="#4a4a6e" Foreground="White"/>
-                <TextBlock Text="{Binding Target2Status}" Foreground="#aaa"
+                <Button Name="AddTarget2Button" Content="+" Classes="btn-secondary"
+                        ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
+                <TextBlock Text="{Binding Target2Status}" Foreground="{DynamicResource TextSecondary}"
                            VerticalAlignment="Center" FontSize="11" Margin="8,0,0,0"/>
             </StackPanel>
         </Border>
@@ -95,7 +95,7 @@
                     <Border Grid.Row="1" Padding="10,5" Background="#805c3a00"
                             IsVisible="{Binding IsScanning}">
                         <StackPanel Spacing="5">
-                            <TextBlock Text="{Binding ScanProgressText}" FontSize="10" Foreground="#e6a23c"/>
+                            <TextBlock Text="{Binding ScanProgressText}" FontSize="10" Foreground="{DynamicResource WarningSeverityWarning}"/>
                             <ProgressBar Value="{Binding ScanProgress}" Minimum="0" Maximum="100" Height="8"/>
                         </StackPanel>
                     </Border>
@@ -104,18 +104,18 @@
                     <Border Grid.Row="2" Padding="10,8" Background="#402980b9"
                             IsVisible="{Binding HasSummary}">
                         <StackPanel Spacing="3">
-                            <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#5dade2">Summary:</TextBlock>
+                            <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}">Summary:</TextBlock>
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock FontSize="10">
-                                    <Run Text="~" Foreground="#f39c12" FontWeight="Bold"/>
+                                    <Run Text="~" Foreground="{DynamicResource WarningSeverityWarning}" FontWeight="Bold"/>
                                     <Run Text="{Binding ModifiedCount}"/> Modified
                                 </TextBlock>
                                 <TextBlock FontSize="10">
-                                    <Run Text="+" Foreground="#2ecc71" FontWeight="Bold"/>
+                                    <Run Text="+" Foreground="{DynamicResource ButtonPrimary}" FontWeight="Bold"/>
                                     <Run Text="{Binding SourceOnlyCount}"/> Source
                                 </TextBlock>
                                 <TextBlock FontSize="10">
-                                    <Run Text="-" Foreground="#e74c3c" FontWeight="Bold"/>
+                                    <Run Text="-" Foreground="{DynamicResource ButtonDanger}" FontWeight="Bold"/>
                                     <Run Text="{Binding TargetOnlyCount}"/> Target
                                 </TextBlock>
                             </StackPanel>
@@ -137,7 +137,7 @@
                                                VerticalAlignment="Center" Width="12"/>
                                     <StackPanel>
                                         <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding SchemaName}" FontSize="10" Foreground="#666"/>
+                                        <TextBlock Text="{Binding SchemaName}" FontSize="10" Foreground="{DynamicResource TextDisabled}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </DataTemplate>
@@ -200,7 +200,7 @@
                     </Grid>
 
                     <!-- Splitter between diff views -->
-                    <GridSplitter Grid.Row="1" Height="5" Background="#4a4a6e"
+                    <GridSplitter Grid.Row="1" Height="5" Background="{DynamicResource ButtonSecondary}"
                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
 
                     <!-- Second Diff: Target1 ↔ Target2 -->
@@ -220,28 +220,28 @@
         </Grid>
 
         <!-- Bottom Bar: Deploy Button and Status -->
-        <Border Grid.Row="3" Background="#1a1a2e" Padding="10,8">
+        <Border Grid.Row="3" Background="{DynamicResource ToolbarBackground}" Padding="10,8">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto">
                 <!-- Refresh Button -->
-                <Button Grid.Column="0" Content="⟳ Refresh" Command="{Binding RefreshCommand}"
-                        Padding="12,6" Background="#4a4a6e" Foreground="White" Margin="0,0,15,0"
+                <Button Grid.Column="0" Content="⟳ Refresh" Classes="btn-secondary"
+                        Command="{Binding RefreshCommand}" Margin="0,0,15,0"
                         FontWeight="SemiBold"/>
 
                 <TextBlock Grid.Column="1" Text="{Binding StatusMessage}"
-                           Foreground="#aaa" VerticalAlignment="Center"/>
+                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
 
                 <!-- Selection controls -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Margin="0,0,15,0">
-                    <Button Content="All" Command="{Binding SelectAllCommand}"
-                            FontSize="10" Padding="8,4" Background="#4a4a6e" Foreground="White"/>
-                    <Button Content="None" Command="{Binding DeselectAllCommand}"
-                            FontSize="10" Padding="8,4" Background="#4a4a6e" Foreground="White"/>
+                    <Button Content="All" Classes="btn-secondary"
+                            Command="{Binding SelectAllCommand}" FontSize="10" Padding="8,4"/>
+                    <Button Content="None" Classes="btn-secondary"
+                            Command="{Binding DeselectAllCommand}" FontSize="10" Padding="8,4"/>
                 </StackPanel>
 
                 <!-- Deploy Selected -->
                 <Button Grid.Column="3" Command="{Binding DeploySelectedCommand}"
                         IsVisible="{Binding HasSelection}"
-                        Background="#e67e22" Foreground="White"
+                        Background="{DynamicResource PlanScanOrange}" Foreground="{DynamicResource ButtonForeground}"
                         Padding="12,6" Margin="0,0,10,0">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <TextBlock Text="Deploy"/>
@@ -252,18 +252,17 @@
 
                 <!-- Deploy Source → Target1 -->
                 <Button Grid.Column="4" Content="Deploy to Target 1"
+                        Classes="btn-primary"
                         Command="{Binding DeployCommand}"
                         IsEnabled="{Binding CanDeploy}"
-                        Background="#2a6e4e" Foreground="White"
-                        Padding="12,6" Margin="0,0,10,0"/>
+                        Margin="0,0,10,0"/>
 
                 <!-- Deploy Target1 → Target2 (only visible in three-way mode) -->
                 <Button Grid.Column="5" Content="Deploy to Target 2"
+                        Classes="btn-toggle"
                         Command="{Binding Deploy2Command}"
                         IsEnabled="{Binding CanDeploy2}"
-                        IsVisible="{Binding ShowTarget2}"
-                        Background="#2980b9" Foreground="White"
-                        Padding="12,6"/>
+                        IsVisible="{Binding ShowTarget2}"/>
             </Grid>
         </Border>
     </Grid>

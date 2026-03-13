@@ -147,6 +147,35 @@ CheatTeam/
 
 ---
 
+## ⚠️ THE #1 RULE — SINGLE SOURCE OF TRUTH ⚠️
+
+**If you are about to write the same logic in a second place, STOP. Make it a method and call it from both places.**
+
+This is the most important rule in the entire project. Duplicated logic with slight variations is the #1 source of bugs. Every time code gets copy-pasted and modified, the copies drift apart and cause bugs that take hours to find.
+
+**Real examples from this project that caused painful debugging sessions:**
+- DataGrid column building was copy-pasted into THREE places in QueryTabView.axaml.cs (SelectResultTab, OnEditModeChanged enter, OnEditModeChanged exit). When NULL display was added, only one copy got the converter. Result: NULLs worked in read-only mode but disappeared in edit mode.
+- Syntax highlighting loading used two different approaches (disk file in QueryTabView, embedded resource in DiffView). The disk approach silently failed, falling back to built-in TSQL with wrong colors. Result: keywords were unreadable dark blue for weeks.
+- Database list population was duplicated across MainWindowViewModel, QueryEditorViewModel, and CompareViewModel. The save/restore pattern for SelectedDatabase was applied inconsistently. Result: dropdowns kept going blank.
+
+**The pattern:**
+```csharp
+// BAD: Same logic in multiple places
+void MethodA() { /* build columns with converter */ }
+void MethodB() { /* build columns without converter — oops */ }
+void MethodC() { /* build columns with wrong binding mode — oops */ }
+
+// GOOD: One method, called everywhere
+void BuildColumns(QueryResult result, bool isEditMode) { /* single source of truth */ }
+void MethodA() { BuildColumns(result, false); }
+void MethodB() { BuildColumns(result, true); }
+void MethodC() { BuildColumns(result, false); }
+```
+
+**Before writing ANY code, ask: does this logic already exist somewhere? If yes, extract it into a shared method.**
+
+---
+
 ## Critical Architecture Patterns
 
 ### 1. Settings Sharing (IMPORTANT!)
@@ -324,20 +353,15 @@ if (SelectedSourceConnection != null && !IsSourceConnected)
 
 ## UI Color Scheme
 
-### Fixed Colors (Both Themes)
-- Top/bottom bars: `#1a1a2e` (dark purple)
-- Target2 bar: `#252540`
-- Accent buttons: `#4a4a6e`
-- Deploy green: `#2a6e4e`
-- Deploy orange: `#e67e22`
-- Target2 blue: `#2980b9`
-- Danger red: `#e63946`
+**ALL colors are defined in `Styles/AppTheme.axaml` (Ghostty Default Dark palette).** No hardcoded hex values anywhere else.
 
-### Theme-Adaptive (Dynamic Resources)
-- Panel backgrounds: `SystemControlBackgroundChromeMediumLowBrush`
-- Headers: `SystemControlBackgroundChromeMediumBrush`
-- Borders/splitters: `SystemControlForegroundBaseMediumLowBrush`
-- Secondary text: `SystemControlForegroundBaseMediumBrush`
+Every AXAML file uses `{DynamicResource KeyName}` — change one value in AppTheme.axaml and the entire app updates.
+
+Key resources: `EditorBackground`, `ToolbarBackground`, `SidebarBackground`, `TitleBarBackground`, `TextPrimary`, `TextSecondary`, `ButtonPrimary`, `ButtonDanger`, `ButtonSecondary`, `BorderDefault`, `AccentBlue`.
+
+Syntax highlighting colors are in `ThemeManager.cs` (must match AppTheme.axaml): `SyntaxKeyword` (#88a1bb), `SyntaxString` (#b7bd73), `SyntaxComment` (#666666), `SyntaxNumber` (#e9c880), `SyntaxVariable` (#ad95b8).
+
+**NEVER add a hardcoded `#xxxxxx` to any AXAML file.** Add a new resource to AppTheme.axaml and reference it with `{DynamicResource}`.
 
 ---
 

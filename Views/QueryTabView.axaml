@@ -7,30 +7,31 @@
 
     <Grid RowDefinitions="Auto,*">
         <!-- Per-tab Toolbar -->
-        <Border Grid.Row="0" Background="#1a1a2e" Padding="10,6">
+        <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="10,6">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Database:" Foreground="White" VerticalAlignment="Center"/>
-                    <ComboBox ItemsSource="{Binding Databases}"
+                    <TextBlock Text="Database:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="DatabaseCombo"
+                              ItemsSource="{Binding Databases}"
                               SelectedItem="{Binding SelectedDatabase}"
                               MinWidth="150"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
                     <Button x:Name="RunButton" Content="Run (F5)"
+                            Classes="btn-primary"
                             Command="{Binding RunQueryCommand}"
-                            Background="#2a6e4e" Foreground="White" Padding="12,5"
                             IsEnabled="{Binding !IsRunning}"
                             ToolTip.Tip="Execute query (F5 or Ctrl+Enter)"/>
                     <Button Content="Stop"
+                            Classes="btn-danger"
                             Command="{Binding StopQueryCommand}"
-                            Background="#e63946" Foreground="White" Padding="12,5"
                             IsEnabled="{Binding IsRunning}"
                             ToolTip.Tip="Cancel running query"/>
                 </StackPanel>
 
                 <TextBlock Grid.Column="3" Text="{Binding StatusText}"
-                           Foreground="#aaa" VerticalAlignment="Center" Margin="15,0,0,0"/>
+                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="15,0,0,0"/>
             </Grid>
         </Border>
 
@@ -66,9 +67,9 @@
                         <!-- Edit Mode Toggle -->
                         <Button x:Name="EditModeButton" Grid.Column="1"
                                 Content="Edit"
+                                Classes="btn-secondary"
                                 Command="{Binding ToggleEditModeCommand}"
                                 IsVisible="{Binding CanEditMode}"
-                                Background="#4a4a6e" Foreground="White"
                                 Padding="10,5" Margin="4,3"
                                 FontSize="12"
                                 ToolTip.Tip="Toggle inline editing (requires primary key)"/>
@@ -77,31 +78,31 @@
 
                 <!-- Edit Bar (visible in edit mode with pending changes) -->
                 <Border x:Name="EditBar" Grid.Row="1" IsVisible="False"
-                        Background="#252540" Padding="8,5">
+                        Background="{DynamicResource PanelHeaderBackground}" Padding="8,5">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBlock x:Name="PendingChangesText" Text="0 changes pending"
-                                   Foreground="#aaa" VerticalAlignment="Center" FontSize="12"/>
+                                   Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" FontSize="12"/>
 
                         <Button Content="+ Row" x:Name="AddRowButton"
+                                Classes="btn-secondary"
                                 Command="{Binding AddNewRowCommand}"
-                                Background="#4a4a6e" Foreground="White"
                                 Padding="8,4" FontSize="12"
                                 ToolTip.Tip="Add a new empty row"/>
 
                         <Button Content="Show SQL" x:Name="ShowSqlButton"
-                                Background="#4a4a6e" Foreground="White"
+                                Classes="btn-secondary"
                                 Padding="8,4" FontSize="12"
                                 ToolTip.Tip="Preview the DML statements"/>
 
                         <Button Content="Apply"
+                                Classes="btn-primary"
                                 Command="{Binding ApplyChangesCommand}"
-                                Background="#2a6e4e" Foreground="White"
                                 Padding="10,4" FontSize="12"
                                 ToolTip.Tip="Execute all pending changes in a transaction"/>
 
                         <Button Content="Cancel"
+                                Classes="btn-danger"
                                 Command="{Binding CancelChangesCommand}"
-                                Background="#e63946" Foreground="White"
                                 Padding="10,4" FontSize="12"
                                 ToolTip.Tip="Discard all pending changes"/>
                     </StackPanel>
@@ -112,10 +113,31 @@
                     <!-- Results DataGrid -->
                     <DataGrid x:Name="ResultsGrid"
                               IsReadOnly="True"
+                              HeadersVisibility="All"
                               GridLinesVisibility="All"
                               BorderThickness="0"
                               CanUserResizeColumns="True"
-                              CanUserSortColumns="True"/>
+                              CanUserSortColumns="True">
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridCell">
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                            <Style Selector="DataGridCell TextBlock">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                            <Style Selector="DataGridCell TextBox">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                            <Style Selector="DataGridRow">
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                        </DataGrid.Styles>
+                        <DataGrid.RowHeight>26</DataGrid.RowHeight>
+                    </DataGrid>
 
                     <!-- Messages Panel -->
                     <Border x:Name="MessagesPanel" IsVisible="False"

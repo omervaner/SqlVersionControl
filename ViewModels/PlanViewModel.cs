@@ -382,6 +382,9 @@ public class PlanNodeViewModel
     };
 
     public double IndentWidth => Level * 20;
+    public Avalonia.Thickness IndentBorderThickness => Level > 0
+        ? new Avalonia.Thickness(1, 0, 0, 0)
+        : new Avalonia.Thickness(0);
 
     public PlanNodeViewModel(PlanNode node, int level, PlanStatement? statement = null)
     {
@@ -420,11 +423,11 @@ public class WarningDisplayItem
         _ => "\u2139"                               // ℹ
     };
 
-    public string SeverityColor => Severity switch
+    public Avalonia.Media.ISolidColorBrush SeverityBrush => Severity switch
     {
-        PlanWarningSeverity.Critical => "#e74c3c",
-        PlanWarningSeverity.Warning => "#f39c12",
-        _ => "#888888"
+        PlanWarningSeverity.Critical => Avalonia.Media.SolidColorBrush.Parse("#e74c3c"),
+        PlanWarningSeverity.Warning => Avalonia.Media.SolidColorBrush.Parse("#f39c12"),
+        _ => Avalonia.Media.SolidColorBrush.Parse("#888888")
     };
 
     public WarningDisplayItem(PlanWarning warning, string? operatorName)

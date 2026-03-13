@@ -53,15 +53,14 @@ public partial class MainWindow : Window
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         qeHost?.Initialize(_viewModel.DatabaseService, _viewModel);
+        if (qeHost != null)
+            qeHost.ActiveTabChanged += () => { if (QueryEditorTab.IsChecked == true) BindActiveQueryTab(); };
 
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
 
         // Wire up settings button
         SettingsButton.Click += async (s, e) => await ShowSettingsDialogAsync();
-
-        // Wire up change DB button
-        ChangeDbButton.Click += async (s, e) => await ChangeConnectionAsync();
 
         // Wire up retry button on reconnect overlay
         RetryButton.Click += async (s, e) => await ReconnectAsync();
@@ -72,6 +71,13 @@ public partial class MainWindow : Window
         // Sleep/wake detection
         _sleepDetector = new SleepDetector();
         _sleepDetector.WokeFromSleep += OnWokeFromSleep;
+
+        // Status bar: track tab switches and connection changes
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        QueryEditorTab.Click += (_, _) => UpdateStatusBar();
+        VersionHistoryTab.Click += (_, _) => UpdateStatusBar();
+        CompareTab.Click += (_, _) => UpdateStatusBar();
+        PlanTab.Click += (_, _) => UpdateStatusBar();
 
         KeyDown += OnKeyDown;
         Opened += OnOpened;
@@ -110,11 +116,30 @@ public partial class MainWindow : Window
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
             host?.StopActiveQuery();
         };
-        MenuChangeDb.Click += async (_, _) => await ChangeConnectionAsync();
+        MenuChangeDb.Click += async (_, _) => await OnMenuChangeDatabaseAsync();
 
         // Help menu
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
         MenuCheckUpdates.Click += (_, _) => OpenUrl("https://github.com/omervaner/SqlVersionControl/releases");
+    }
+
+    private async Task OnMenuChangeDatabaseAsync()
+    {
+        if (QueryEditorTab.IsChecked == true)
+        {
+            // Focus the active query tab's database dropdown
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.FocusActiveDatabasePicker();
+        }
+        else if (CompareTab.IsChecked == true)
+        {
+            // Compare tab has its own source/target pickers — no-op
+        }
+        else
+        {
+            // Version History / Execution Plan — change server connection
+            await ChangeConnectionAsync();
+        }
     }
 
     private AvaloniaEdit.TextEditor? GetActiveEditor()
@@ -430,6 +455,7 @@ public partial class MainWindow : Window
         {
             _viewModel.OnConnected(dialog.Result);
             _sleepDetector.Start();
+            UpdateStatusBar();
 
             // Load databases into Query Editor Host
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
@@ -477,6 +503,7 @@ public partial class MainWindow : Window
         {
             _viewModel.OnConnected(dialog.Result);
             _sleepDetector.Start();
+            UpdateStatusBar();
 
             // Reload databases into Query Editor Host
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
@@ -527,5 +554,76 @@ public partial class MainWindow : Window
             Process.Start("open", url);
         else
             Process.Start("xdg-open", url);
+    }
+
+    // ── Status Bar ──────────────────────────────────────────────────
+
+    private QueryTabViewModel? _boundQueryTab;
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.ConnectionDisplay))
+        {
+            UpdateStatusBar();
+            this.Title = _viewModel.IsConnected
+                ? $"SQL Version Control — {_viewModel.ConnectionDisplay}"
+                : "SQL Version Control";
+        }
+    }
+
+    private void UpdateStatusBar()
+    {
+        // Connection indicator
+        if (_viewModel.IsConnected)
+        {
+            ConnectionDot.Fill = Avalonia.Media.Brushes.LimeGreen;
+            ConnectionText.Text = _viewModel.ConnectionDisplay;
+        }
+        else
+        {
+            ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
+            ConnectionText.Text = "Disconnected";
+        }
+
+        // Query status section — only visible on Query Editor tab
+        var isQE = QueryEditorTab.IsChecked == true;
+        QueryStatusSeparator.IsVisible = isQE;
+        QueryStatusText.IsVisible = isQE;
+
+        if (isQE)
+            BindActiveQueryTab();
+        else
+            UnbindQueryTab();
+    }
+
+    private void BindActiveQueryTab()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        var activeVm = host?.ActiveTabViewModel;
+
+        if (activeVm == _boundQueryTab) return;
+
+        UnbindQueryTab();
+
+        if (activeVm == null) return;
+        _boundQueryTab = activeVm;
+        _boundQueryTab.PropertyChanged += OnQueryTabPropertyChanged;
+        QueryStatusText.Text = _boundQueryTab.QueryStatusText;
+    }
+
+    private void UnbindQueryTab()
+    {
+        if (_boundQueryTab != null)
+        {
+            _boundQueryTab.PropertyChanged -= OnQueryTabPropertyChanged;
+            _boundQueryTab = null;
+        }
+        QueryStatusText.Text = "";
+    }
+
+    private void OnQueryTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(QueryTabViewModel.QueryStatusText) && _boundQueryTab != null)
+            QueryStatusText.Text = _boundQueryTab.QueryStatusText;
     }
 }

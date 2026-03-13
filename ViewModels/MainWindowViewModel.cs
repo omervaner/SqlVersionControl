@@ -26,6 +26,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _statusMessage = "Not connected";
 
     [ObservableProperty]
+    private string _connectionDisplay = "Disconnected";
+
+    [ObservableProperty]
+    private bool _isQueryEditorActive;
+
+    [ObservableProperty]
     private string? _selectedDatabase;
 
     [ObservableProperty]
@@ -97,6 +103,8 @@ public partial class MainWindowViewModel : ViewModelBase
         _db.SetConnection(settings);
         IsConnected = true;
         StatusMessage = $"Connected to {settings.Server}/{settings.Database} - loading...";
+        var login = settings.UseWindowsAuth ? "Windows" : settings.Username;
+        ConnectionDisplay = $"{settings.Server} / {settings.Database} ({login})";
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
         StartAutoSyncTimer();

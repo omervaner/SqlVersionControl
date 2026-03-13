@@ -1,0 +1,106 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============================================================ -->
+    <!-- SqlVersionControl App Theme — Ghostty Default Dark Palette   -->
+    <!-- ALL colors in the app come from here. NO hardcoded hex       -->
+    <!-- values in any AXAML or code-behind file.                     -->
+    <!-- ============================================================ -->
+
+    <!-- === SHELL / CHROME === -->
+    <SolidColorBrush x:Key="TitleBarBackground" Color="#1d1f21"/>
+    <SolidColorBrush x:Key="MenuBarBackground" Color="#1d1f21"/>
+    <SolidColorBrush x:Key="TabStripBackground" Color="#252729"/>
+    <SolidColorBrush x:Key="ActiveTabBackground" Color="#292c33"/>
+    <SolidColorBrush x:Key="InactiveTabBackground" Color="#1d1f21"/>
+    <SolidColorBrush x:Key="StatusBarConnected" Color="#88a1bb"/>
+    <SolidColorBrush x:Key="StatusBarDisconnected" Color="#ad95b8"/>
+
+    <!-- === PANELS === -->
+    <SolidColorBrush x:Key="SidebarBackground" Color="#252729"/>
+    <SolidColorBrush x:Key="ToolbarBackground" Color="#252729"/>
+    <SolidColorBrush x:Key="PanelHeaderBackground" Color="#1d1f21"/>
+
+    <!-- === CONTENT AREAS === -->
+    <SolidColorBrush x:Key="EditorBackground" Color="#292c33"/>
+    <SolidColorBrush x:Key="ResultsGridBackground" Color="#292c33"/>
+    <SolidColorBrush x:Key="ResultsAlternateRow" Color="#2e3138"/>
+
+    <!-- === BORDERS / SEPARATORS === -->
+    <SolidColorBrush x:Key="BorderDefault" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="SplitterBackground" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="IndentGuide" Color="#3a3d44"/>
+
+    <!-- === TEXT === -->
+    <SolidColorBrush x:Key="TextPrimary" Color="#c5c8c6"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#666666"/>
+    <SolidColorBrush x:Key="TextDisabled" Color="#4a4a4a"/>
+    <SolidColorBrush x:Key="TextNull" Color="#666666"/>
+    <SolidColorBrush x:Key="TextBright" Color="#eaeaea"/>
+
+    <!-- === SELECTION / FOCUS === -->
+    <SolidColorBrush x:Key="SelectionActive" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="HoverBackground" Color="#2e3138"/>
+    <SolidColorBrush x:Key="SelectedItemBackground" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="AccentBlue" Color="#83a5d6"/>
+    <SolidColorBrush x:Key="FocusBorder" Color="#88a1bb"/>
+
+    <!-- === BUTTONS === -->
+    <SolidColorBrush x:Key="ButtonPrimary" Color="#b7bd73"/>
+    <SolidColorBrush x:Key="ButtonDanger" Color="#bf6b69"/>
+    <SolidColorBrush x:Key="ButtonSecondary" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="ButtonToggleActive" Color="#88a1bb"/>
+    <SolidColorBrush x:Key="ButtonForeground" Color="#1d1f21"/>
+
+    <!-- === SQL SYNTAX HIGHLIGHTING (Ghostty Default Dark palette) === -->
+    <Color x:Key="SyntaxKeyword">#88a1bb</Color>
+    <Color x:Key="SyntaxString">#b7bd73</Color>
+    <Color x:Key="SyntaxComment">#666666</Color>
+    <Color x:Key="SyntaxNumber">#e9c880</Color>
+    <Color x:Key="SyntaxVariable">#ad95b8</Color>
+    <Color x:Key="SyntaxFunction">#e1c65e</Color>
+    <Color x:Key="SyntaxIdentifier">#95bdb7</Color>
+
+    <!-- === DIFF COLORS === -->
+    <Color x:Key="DiffDeletedBackground">#3d2020</Color>
+    <Color x:Key="DiffInsertedBackground">#203d20</Color>
+    <Color x:Key="DiffModifiedBackground">#3d3d20</Color>
+    <Color x:Key="DiffImaginaryBackground">#252729</Color>
+
+    <!-- === EXECUTION PLAN === -->
+    <SolidColorBrush x:Key="PlanSeekGreen" Color="#b7bd73"/>
+    <SolidColorBrush x:Key="PlanScanRed" Color="#bf6b69"/>
+    <SolidColorBrush x:Key="PlanScanOrange" Color="#e9c880"/>
+    <SolidColorBrush x:Key="PlanSortYellow" Color="#e1c65e"/>
+    <SolidColorBrush x:Key="PlanJoinBlue" Color="#88a1bb"/>
+    <SolidColorBrush x:Key="PlanParallelPurple" Color="#ad95b8"/>
+    <SolidColorBrush x:Key="PlanDefaultGrey" Color="#666666"/>
+
+    <!-- === WARNINGS === -->
+    <SolidColorBrush x:Key="WarningSeverityCritical" Color="#c55757"/>
+    <SolidColorBrush x:Key="WarningSeverityWarning" Color="#e9c880"/>
+    <SolidColorBrush x:Key="WarningSeverityInfo" Color="#666666"/>
+
+    <!-- === EFFICIENCY SCORE === -->
+    <SolidColorBrush x:Key="ScoreHealthy" Color="#b7bd73"/>
+    <SolidColorBrush x:Key="ScoreNeedsAttention" Color="#e9c880"/>
+    <SolidColorBrush x:Key="ScorePoor" Color="#bf6b69"/>
+
+    <!-- === EDIT MODE ROW COLORS === -->
+    <SolidColorBrush x:Key="RowModified" Color="#3d3d20"/>
+    <SolidColorBrush x:Key="RowInserted" Color="#203d20"/>
+    <SolidColorBrush x:Key="RowDeleted" Color="#3d2020"/>
+
+    <!-- === OBJECT EXPLORER === -->
+    <SolidColorBrush x:Key="TreeItemSeparator" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="TreeHover" Color="#2e3138"/>
+    <SolidColorBrush x:Key="TreeSelected" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="TreeSelectedAccent" Color="#88a1bb"/>
+    <SolidColorBrush x:Key="ColumnTypeForeground" Color="#666666"/>
+    <SolidColorBrush x:Key="ColumnPKForeground" Color="#e9c880"/>
+    <SolidColorBrush x:Key="ExpandArrowForeground" Color="#aaaaaa"/>
+
+    <!-- === OVERLAY === -->
+    <SolidColorBrush x:Key="OverlayBackground" Color="#CC292c33"/>
+
+</ResourceDictionary>

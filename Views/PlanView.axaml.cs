@@ -12,7 +12,7 @@ public partial class PlanView : UserControl
     private readonly List<(int NodeId, Border Border)> _costBarBorders = new();
 
     private static readonly IBrush HighlightBrush =
-        new SolidColorBrush(Color.FromArgb(60, 255, 200, 50));
+        new SolidColorBrush(Color.FromArgb(80, 74, 158, 255)); // SelectionActive tint
 
     public PlanView()
     {
@@ -123,16 +123,15 @@ public partial class PlanView : UserControl
                 ClipToBounds = true
             };
 
-            // Label inside the segment — show for anything ≥ 5%
-            if (seg.Percentage >= 5)
+            // Label inside the segment — show for ≥ 15%, tooltip-only for smaller
+            if (seg.Percentage >= 15)
             {
-                var isBig = seg.Percentage >= 20;
                 border.Child = new TextBlock
                 {
                     Text = seg.Label,
                     Foreground = Brushes.White,
-                    FontSize = isBig ? 13 : 11,
-                    FontWeight = isBig ? FontWeight.Bold : FontWeight.Normal,
+                    FontSize = 12,
+                    FontWeight = FontWeight.Bold,
                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                     HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                     TextTrimming = TextTrimming.CharacterEllipsis,

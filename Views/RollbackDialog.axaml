@@ -8,10 +8,10 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
         <!-- Header -->
-        <Border Grid.Row="0" Background="#e63946" Padding="20,15">
+        <Border Grid.Row="0" Background="{DynamicResource ButtonDanger}" Padding="20,15">
             <StackPanel>
-                <TextBlock Text="⚠ Rollback Confirmation" FontSize="18" FontWeight="Bold" Foreground="White"/>
-                <TextBlock Name="WarningText" Foreground="#ffcdd2" FontSize="12" Margin="0,5,0,0"/>
+                <TextBlock Text="⚠ Rollback Confirmation" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource ButtonForeground}"/>
+                <TextBlock Name="WarningText" Foreground="{DynamicResource TextPrimary}" FontSize="12" Margin="0,5,0,0"/>
             </StackPanel>
         </Border>
 
@@ -19,12 +19,12 @@
         <Grid Grid.Row="1" RowDefinitions="Auto,*">
             <TextBlock Grid.Row="0" Text="This ALTER statement will be executed:"
                        FontWeight="SemiBold" Margin="15,10,15,5"/>
-            <Border Grid.Row="1" Background="#1e1e1e" Margin="15,0,15,10">
+            <Border Grid.Row="1" Background="{DynamicResource EditorBackground}" Margin="15,0,15,10">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                     <TextBlock Name="PreviewText"
                                FontFamily="Consolas,Menlo,Monaco,monospace"
                                FontSize="11"
-                               Foreground="#d4d4d4"
+                               Foreground="{DynamicResource TextPrimary}"
                                Padding="10"/>
                 </ScrollViewer>
             </Border>
@@ -32,9 +32,9 @@
 
         <!-- Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="15">
-            <Button Name="CancelButton" Content="Cancel" Padding="20,8" Margin="0,0,10,0"/>
+            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="20,8" Margin="0,0,10,0"/>
             <Button Name="ConfirmButton" Content="Execute Rollback"
-                    Background="#e63946" Foreground="White" Padding="20,8"/>
+                    Classes="btn-danger" Padding="20,8"/>
         </StackPanel>
     </Grid>
 </Window>

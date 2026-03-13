@@ -10,26 +10,108 @@
         <!-- Object Explorer Panel (shared across all tabs) -->
         <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
-            <Grid RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,Auto,*">
                 <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
                     <TextBlock Text="Object Explorer" FontWeight="SemiBold"/>
                 </Border>
 
-                <TreeView Grid.Row="1" x:Name="ObjectExplorerTree"
+                <!-- Search/Filter Bar -->
+                <Border Grid.Row="1" Padding="6,4">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0"
+                                 x:Name="FilterBox"
+                                 Watermark="Filter objects..."
+                                 Text="{Binding ObjectExplorer.FilterText}"
+                                 FontSize="12"
+                                 Padding="6,4"/>
+                        <Button Grid.Column="1"
+                                Content="&#xd7;"
+                                Command="{Binding ObjectExplorer.ClearFilterCommand}"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                FontSize="14"
+                                Padding="4,2"
+                                MinWidth="0" MinHeight="0"
+                                Margin="2,0,0,0"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Clear filter"/>
+                    </Grid>
+                </Border>
+
+                <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
                           Padding="4"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>
+                        <!-- Compact spacing + two-way expand binding + filter visibility -->
                         <Style Selector="TreeViewItem" x:DataType="models:ObjectExplorerNode">
                             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                            <Setter Property="IsVisible" Value="{Binding IsVisibleInFilter}"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="MinHeight" Value="0"/>
+                        </Style>
+
+                        <!-- Separator line (1px bottom border) -->
+                        <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
+                            <Setter Property="BorderBrush" Value="{DynamicResource TreeItemSeparator}"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        </Style>
+
+                        <!-- Hover highlight -->
+                        <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+                            <Setter Property="Background" Value="{DynamicResource TreeHover}"/>
+                        </Style>
+
+                        <!-- Selection highlight with left accent -->
+                        <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+                            <Setter Property="Background" Value="{DynamicResource TreeSelected}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource TreeSelectedAccent}"/>
+                            <Setter Property="BorderThickness" Value="3,0,0,1"/>
+                        </Style>
+
+                        <!-- Brighter expand/collapse arrow -->
+                        <Style Selector="TreeViewItem /template/ ToggleButton#PART_ExpandCollapseChevron">
+                            <Setter Property="Foreground" Value="{DynamicResource ExpandArrowForeground}"/>
+                        </Style>
+
+                        <!-- Indent guides: left border on nested items -->
+                        <Style Selector="TreeViewItem TreeViewItem">
+                            <Setter Property="BorderBrush" Value="{DynamicResource IndentGuide}"/>
+                            <Setter Property="BorderThickness" Value="1,0,0,0"/>
                         </Style>
                     </TreeView.Styles>
                     <TreeView.ItemTemplate>
                         <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="models:ObjectExplorerNode">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                                <!-- Icon dot (all nodes) -->
                                 <TextBlock Text="{Binding Icon}" FontSize="10"
                                            Foreground="{Binding IconColor}"
                                            VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding DisplayName}" FontSize="12"
+
+                                <!-- Display name (non-column nodes) -->
+                                <TextBlock Text="{Binding DisplayName}"
+                                           FontSize="{Binding DisplayFontSize}"
+                                           FontWeight="{Binding IsBold, Converter={StaticResource BoolToFontWeight}}"
+                                           IsVisible="{Binding !IsColumn}"
+                                           VerticalAlignment="Center"/>
+
+                                <!-- Column: name -->
+                                <TextBlock Text="{Binding Name}" FontSize="12"
+                                           IsVisible="{Binding IsColumn}"
+                                           VerticalAlignment="Center"/>
+                                <!-- Column: type -->
+                                <TextBlock Text="{Binding TypeInfo}" FontSize="11"
+                                           Foreground="{DynamicResource ColumnTypeForeground}"
+                                           IsVisible="{Binding IsColumn}"
+                                           VerticalAlignment="Center"/>
+                                <!-- Column: PK badge -->
+                                <TextBlock Text="PK" FontSize="11" FontWeight="Bold"
+                                           Foreground="{DynamicResource ColumnPKForeground}"
+                                           IsVisible="{Binding ShowPK}"
+                                           VerticalAlignment="Center"/>
+                                <!-- Column: nullable -->
+                                <TextBlock Text="{Binding NullabilityText}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           IsVisible="{Binding IsColumn}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                         </TreeDataTemplate>
@@ -46,7 +128,7 @@
         <!-- Right side: Query Tab Strip + Tab Content -->
         <Grid Grid.Column="2" RowDefinitions="Auto,*">
             <!-- Tab Strip -->
-            <Border Grid.Row="0" Background="#0d0d1a" Padding="4,2">
+            <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,2">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
                 </ScrollViewer>

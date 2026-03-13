@@ -1,12 +1,16 @@
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using AvaloniaEdit.Highlighting.Xshd;
+using SqlVersionControl.Converters;
 using SqlVersionControl.Models;
+using SqlVersionControl.Services;
 using SqlVersionControl.ViewModels;
 
 namespace SqlVersionControl.Views;
@@ -16,10 +20,14 @@ public partial class QueryTabView : UserControl
     private QueryTabViewModel? _viewModel;
     private int _selectedTabIndex = -1;
 
-    // Row state colors
-    private static readonly IBrush ModifiedBrush = new SolidColorBrush(Color.Parse("#44ffff00")); // Yellow tint
-    private static readonly IBrush NewBrush = new SolidColorBrush(Color.Parse("#4400cc00"));       // Green tint
-    private static readonly IBrush DeletedBrush = new SolidColorBrush(Color.Parse("#44ff3333"));   // Red tint
+    // Row state colors — resolved from AppTheme resources at runtime
+    private IBrush GetRowBrush(string key) =>
+        Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
+            ? b : Brushes.Transparent;
+
+    private IBrush ModifiedBrush => GetRowBrush("RowModified");
+    private IBrush NewBrush => GetRowBrush("RowInserted");
+    private IBrush DeletedBrush => GetRowBrush("RowDeleted");
 
     public QueryTabView()
     {
@@ -27,6 +35,12 @@ public partial class QueryTabView : UserControl
     }
 
     public TextEditor Editor => SqlEditor;
+
+    public void FocusDatabasePicker()
+    {
+        DatabaseCombo.IsDropDownOpen = true;
+        DatabaseCombo.Focus();
+    }
 
     public void Initialize(QueryTabViewModel vm)
     {
@@ -59,6 +73,9 @@ public partial class QueryTabView : UserControl
         // DataGrid row events for edit mode
         ResultsGrid.LoadingRow += OnDataGridLoadingRow;
         ResultsGrid.RowEditEnded += OnDataGridRowEditEnded;
+
+        // Double-click result grid to auto-enter edit mode
+        ResultsGrid.DoubleTapped += OnResultsGridDoubleTapped;
     }
 
     /// <summary>
@@ -120,25 +137,65 @@ public partial class QueryTabView : UserControl
 
     private void LoadSyntaxHighlighting()
     {
+        IHighlightingDefinition? definition = null;
+
         try
         {
-            var dir = AppContext.BaseDirectory;
-            var xshdPath = Path.Combine(dir, "Assets", "SQL.xshd");
-
-            if (File.Exists(xshdPath))
-            {
-                using var stream = File.OpenRead(xshdPath);
-                using var reader = new System.Xml.XmlTextReader(stream);
-                SqlEditor.SyntaxHighlighting = HighlightingLoader.Load(reader, HighlightingManager.Instance);
-                return;
-            }
+            var uri = new Uri("avares://SqlVersionControl/Assets/SQL.xshd");
+            using var stream = Avalonia.Platform.AssetLoader.Open(uri);
+            using var reader = new System.Xml.XmlTextReader(stream);
+            definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
         }
         catch
         {
             // Fall through to built-in
         }
 
-        SqlEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("TSQL");
+        definition ??= HighlightingManager.Instance.GetDefinition("TSQL");
+
+        // Apply ThemeManager colors to the highlighting definition
+        if (definition != null)
+        {
+            ApplyThemeColors(definition);
+            SqlEditor.SyntaxHighlighting = definition;
+        }
+
+        // Set editor background/foreground from theme
+        if (Application.Current?.Resources.TryGetResource("EditorBackground", null, out var edBg) == true && edBg is IBrush edBrush)
+            SqlEditor.Background = edBrush;
+        if (Application.Current?.Resources.TryGetResource("TextPrimary", null, out var edFg) == true && edFg is IBrush fgBrush)
+            SqlEditor.Foreground = fgBrush;
+    }
+
+    private static void ApplyThemeColors(IHighlightingDefinition definition)
+    {
+        foreach (var color in definition.NamedHighlightingColors)
+        {
+            switch (color.Name)
+            {
+                case "Keyword":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Keyword);
+                    break;
+                case "String":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.String);
+                    break;
+                case "Comment":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Comment);
+                    break;
+                case "Number":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Number);
+                    break;
+                case "Variable":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Variable);
+                    break;
+                case "SystemFunction":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.SystemFunction);
+                    break;
+                case "Identifier":
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Identifier);
+                    break;
+            }
+        }
     }
 
     private void ConfigureEditor()
@@ -171,31 +228,17 @@ public partial class QueryTabView : UserControl
             if (_viewModel.IsEditMode && _viewModel.EditableRows != null &&
                 resultIndex < _viewModel.Results.Count)
             {
-                var result = _viewModel.Results[resultIndex];
-
-                // Rebuild columns with TwoWay binding so DataGrid can write back edits
-                ResultsGrid.Columns.Clear();
-                ResultsGrid.AutoGenerateColumns = false;
-                for (int i = 0; i < result.ColumnNames.Length; i++)
-                {
-                    ResultsGrid.Columns.Add(new DataGridTextColumn
-                    {
-                        Header = result.ColumnNames[i],
-                        Binding = new Avalonia.Data.Binding($"[{i}]",
-                            Avalonia.Data.BindingMode.TwoWay),
-                        IsReadOnly = false
-                    });
-                }
-
+                // Enter edit mode: toggle columns writable + swap to EditableRows
+                SetColumnsReadOnly(false);
                 ResultsGrid.IsReadOnly = false;
                 ResultsGrid.CanUserSortColumns = false;
                 ResultsGrid.ItemsSource = _viewModel.EditableRows;
-
                 SetupEditContextMenu();
             }
             else
             {
-                // Restore read-only mode — rebuild columns with default (OneWay) binding
+                // Exit edit mode: toggle columns read-only + swap back to raw rows
+                SetColumnsReadOnly(true);
                 ResultsGrid.IsReadOnly = true;
                 ResultsGrid.CanUserSortColumns = true;
                 ResultsGrid.ContextMenu = null;
@@ -204,25 +247,45 @@ public partial class QueryTabView : UserControl
                 {
                     var result = _viewModel.Results[resultIndex];
                     if (result.Error == null)
-                    {
-                        ResultsGrid.Columns.Clear();
-                        ResultsGrid.AutoGenerateColumns = false;
-                        for (int i = 0; i < result.ColumnNames.Length; i++)
-                        {
-                            ResultsGrid.Columns.Add(new DataGridTextColumn
-                            {
-                                Header = result.ColumnNames[i],
-                                Binding = new Avalonia.Data.Binding($"[{i}]")
-                            });
-                        }
                         ResultsGrid.ItemsSource = result.Rows;
-                    }
                 }
             }
 
             UpdateEditModeButton();
             UpdateEditBar();
         });
+    }
+
+    private void SetColumnsReadOnly(bool readOnly)
+    {
+        foreach (var col in ResultsGrid.Columns)
+        {
+            if (col is DataGridTextColumn textCol)
+                textCol.IsReadOnly = readOnly;
+        }
+    }
+
+    private async void OnResultsGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_viewModel is not { CanEditMode: true, IsEditMode: false }) return;
+
+        // Capture which row/column was double-clicked before edit mode rebuilds the grid
+        var rowIndex = ResultsGrid.SelectedIndex;
+        var colIndex = ResultsGrid.CurrentColumn is { } col
+            ? ResultsGrid.Columns.IndexOf(col) : -1;
+
+        // Enter edit mode (rebuilds columns + ItemsSource)
+        await _viewModel.ToggleEditModeCommand.ExecuteAsync(null);
+
+        // Wait a frame for the grid to rebuild, then select the cell and begin editing
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (rowIndex >= 0 && _viewModel?.EditableRows != null && rowIndex < _viewModel.EditableRows.Count)
+                ResultsGrid.SelectedIndex = rowIndex;
+            if (colIndex >= 0 && colIndex < ResultsGrid.Columns.Count)
+                ResultsGrid.CurrentColumn = ResultsGrid.Columns[colIndex];
+            ResultsGrid.BeginEdit();
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     private void UpdateEditModeButton()
@@ -232,12 +295,12 @@ public partial class QueryTabView : UserControl
         if (_viewModel.IsEditMode)
         {
             EditModeButton.Content = "Editing";
-            EditModeButton.Background = new SolidColorBrush(Color.Parse("#e67e22"));
+            EditModeButton.Background = GetRowBrush("PlanScanOrange");
         }
         else
         {
             EditModeButton.Content = "Edit";
-            EditModeButton.Background = new SolidColorBrush(Color.Parse("#4a4a6e"));
+            EditModeButton.Background = GetRowBrush("ButtonSecondary");
         }
     }
 
@@ -285,10 +348,62 @@ public partial class QueryTabView : UserControl
         ResultsGrid.ContextMenu = menu;
     }
 
+    private IBrush AlternateBrush => GetRowBrush("ResultsAlternateRow");
+
     private void OnDataGridLoadingRow(object? sender, DataGridRowEventArgs e)
     {
-        if (e.Row.DataContext is EditableRow row)
-            ApplyRowBackground(e.Row, row);
+        // Row numbers in row header
+        e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+
+        if (e.Row.DataContext is EditableRow editRow)
+        {
+            ApplyRowBackground(e.Row, editRow);
+        }
+        else
+        {
+            // Alternating row colors for read-only results
+            e.Row.Background = e.Row.GetIndex() % 2 == 1 ? AlternateBrush : Brushes.Transparent;
+        }
+
+        // Style NULL cells (grey italic) for both read-only and edit mode
+        StyleNullCells(e.Row);
+    }
+
+    private void StyleNullCells(DataGridRow row)
+    {
+        row.LayoutUpdated += OnRowLayoutForNulls;
+
+        void OnRowLayoutForNulls(object? s, EventArgs args)
+        {
+            row.LayoutUpdated -= OnRowLayoutForNulls;
+
+            // Get the underlying values array from either row type
+            object?[]? values = row.DataContext switch
+            {
+                object?[] arr => arr,
+                EditableRow er => er.Values,
+                _ => null
+            };
+            if (values == null) return;
+
+            var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
+            for (int i = 0; i < values.Length && i < cells.Count; i++)
+            {
+                var tb = cells[i].FindDescendantOfType<TextBlock>();
+                if (tb == null) continue;
+
+                if (values[i] == null)
+                {
+                    tb.FontStyle = FontStyle.Italic;
+                    tb.Foreground = _nullForeground;
+                }
+                else
+                {
+                    tb.FontStyle = FontStyle.Normal;
+                    tb.ClearValue(TextBlock.ForegroundProperty);
+                }
+            }
+        }
     }
 
     private void OnDataGridRowEditEnded(object? sender, DataGridRowEditEndedEventArgs e)
@@ -308,7 +423,7 @@ public partial class QueryTabView : UserControl
             RowEditState.Modified => ModifiedBrush,
             RowEditState.New => NewBrush,
             RowEditState.Deleted => DeletedBrush,
-            _ => Brushes.Transparent
+            _ => row.GetIndex() % 2 == 1 ? AlternateBrush : Brushes.Transparent
         };
 
         row.Opacity = editRow.State == RowEditState.Deleted ? 0.5 : 1.0;
@@ -479,8 +594,8 @@ public partial class QueryTabView : UserControl
                 Content = label,
                 Padding = new Thickness(10, 5),
                 Margin = new Thickness(2, 3),
-                Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.Parse("#4a4a6e")),
+                Foreground = GetRowBrush("TextBright"),
+                Background = GetRowBrush("ButtonSecondary"),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Tag = idx
             };
@@ -494,8 +609,8 @@ public partial class QueryTabView : UserControl
             Content = "Messages",
             Padding = new Thickness(10, 5),
             Margin = new Thickness(2, 3),
-            Foreground = Brushes.White,
-            Background = new SolidColorBrush(Color.Parse("#4a4a6e")),
+            Foreground = GetRowBrush("ButtonForeground"),
+            Background = GetRowBrush("ButtonSecondary"),
             Cursor = new Cursor(StandardCursorType.Hand),
             Tag = -1
         };
@@ -531,6 +646,22 @@ public partial class QueryTabView : UserControl
             return;
         }
 
+        BuildColumns(result);
+        ResultsGrid.ItemsSource = result.Rows;
+        ResultsGrid.IsReadOnly = true;
+        ResultsGrid.IsVisible = true;
+        UpdateTabHighlight(index);
+    }
+
+    private static readonly NullDisplayConverter _nullTextConverter = new();
+    private static readonly IBrush _nullForeground = new SolidColorBrush(Color.FromRgb(102, 102, 102));
+
+    /// <summary>
+    /// Single source of truth for building result grid columns.
+    /// Columns use TwoWay + NullDisplayConverter so they work for both read-only and edit mode.
+    /// </summary>
+    private void BuildColumns(QueryResult result)
+    {
         ResultsGrid.Columns.Clear();
         ResultsGrid.AutoGenerateColumns = false;
 
@@ -539,14 +670,10 @@ public partial class QueryTabView : UserControl
             ResultsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
-                Binding = new Avalonia.Data.Binding($"[{i}]")
+                Binding = new Binding($"[{i}]", BindingMode.TwoWay) { Converter = _nullTextConverter },
+                IsReadOnly = true,
             });
         }
-
-        ResultsGrid.ItemsSource = result.Rows;
-        ResultsGrid.IsReadOnly = true;
-        ResultsGrid.IsVisible = true;
-        UpdateTabHighlight(index);
     }
 
     private void SelectMessagesTab()
@@ -560,8 +687,8 @@ public partial class QueryTabView : UserControl
 
     private void UpdateTabHighlight(int selectedIndex)
     {
-        var activeBrush = new SolidColorBrush(Color.Parse("#4a9eff"));
-        var normalBrush = new SolidColorBrush(Color.Parse("#4a4a6e"));
+        var activeBrush = GetRowBrush("AccentBlue");
+        var normalBrush = GetRowBrush("ButtonSecondary");
 
         for (int i = 0; i < ResultTabHeaders.Children.Count; i++)
         {

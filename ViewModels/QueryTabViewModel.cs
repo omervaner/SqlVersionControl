@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SqlVersionControl.Models;
@@ -20,6 +21,7 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private string _statusText = "Ready";
     [ObservableProperty] private string _tabTitle = "Query 1";
+    [ObservableProperty] private string _queryStatusText = "";
 
     // SqlText and SelectedSqlText are set by the View (AvaloniaEdit doesn't support two-way binding)
     public string SelectedSqlText { get; set; } = "";
@@ -163,15 +165,18 @@ public partial class QueryTabViewModel : ObservableObject
 
         IsRunning = true;
         StatusText = "Executing...";
+        QueryStatusText = "Running...";
         Results.Clear();
         Messages = "";
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
+        var sw = Stopwatch.StartNew();
 
         try
         {
             var (results, messages) = await _db.ExecuteQueryAsync(
                 SelectedDatabase, sql, _cts.Token);
+            sw.Stop();
 
             foreach (var r in results)
                 Results.Add(r);
@@ -182,7 +187,11 @@ public partial class QueryTabViewModel : ObservableObject
                 SelectedResultIndex = 0;
 
             var totalRows = results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var elapsed = sw.ElapsedMilliseconds < 1000
+                ? $"{sw.ElapsedMilliseconds}ms"
+                : $"{sw.Elapsed.TotalSeconds:F1}s";
             StatusText = $"{Results.Count} result set(s), {totalRows} total rows";
+            QueryStatusText = $"{totalRows} rows, {elapsed}";
 
             // Check if result is eligible for edit mode
             CheckEditEligibility(sql);
@@ -200,13 +209,17 @@ public partial class QueryTabViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
+            sw.Stop();
             StatusText = "Query cancelled";
+            QueryStatusText = "Cancelled";
             AutoEnterEditMode = false;
         }
         catch (Exception ex)
         {
+            sw.Stop();
             Messages = $"Error: {ex.Message}";
             StatusText = "Error";
+            QueryStatusText = "Error";
             AutoEnterEditMode = false;
         }
         finally

@@ -30,15 +30,13 @@
 
         <!-- Buttons -->
         <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
-            <Button x:Name="BrowseButton" Grid.Column="0" Content="Browse..." Padding="15,8"
+            <Button x:Name="BrowseButton" Grid.Column="0" Content="Browse..." Classes="btn-secondary" Padding="15,8"
                     ToolTip.Tip="Open a .sql file from anywhere on disk"/>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                <Button x:Name="DeleteButton" Content="Delete" Padding="15,8"
-                        Background="#e63946" Foreground="White"/>
-                <Button x:Name="CancelButton" Content="Cancel" Padding="15,8"/>
-                <Button x:Name="OpenButton" Content="Open" Padding="15,8"
-                        Background="#2a6e4e" Foreground="White"/>
+                <Button x:Name="DeleteButton" Content="Delete" Classes="btn-danger" Padding="15,8"/>
+                <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="15,8"/>
+                <Button x:Name="OpenButton" Content="Open" Classes="btn-primary" Padding="15,8"/>
             </StackPanel>
         </Grid>
     </Grid>

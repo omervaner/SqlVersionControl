@@ -23,13 +23,9 @@ public class DiffLine
 
     public IBrush Foreground => Type switch
     {
-        ChangeType.Deleted => ThemeManager.IsDarkTheme
-            ? new SolidColorBrush(Color.FromRgb(255, 150, 150))
-            : new SolidColorBrush(Color.FromRgb(180, 50, 50)),
-        ChangeType.Inserted => ThemeManager.IsDarkTheme
-            ? new SolidColorBrush(Color.FromRgb(150, 255, 150))
-            : new SolidColorBrush(Color.FromRgb(50, 150, 50)),
-        ChangeType.Imaginary => new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+        ChangeType.Deleted => new SolidColorBrush(ThemeManager.GetDeletedForeground()),
+        ChangeType.Inserted => new SolidColorBrush(ThemeManager.GetInsertedForeground()),
+        ChangeType.Imaginary => new SolidColorBrush(ThemeManager.GetImaginaryForeground()),
         _ => new SolidColorBrush(ThemeManager.GetDefaultForeground())
     };
 

@@ -4,6 +4,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using SqlVersionControl.Behaviors;
 using SqlVersionControl.ViewModels;
 using SqlVersionControl.Views;
 
@@ -14,6 +15,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        DataGridAutoFitBehavior.Initialize();
     }
 
     public override void OnFrameworkInitializationCompleted()

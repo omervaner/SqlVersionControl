@@ -13,12 +13,12 @@
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="0">
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,*,Auto">
         <!-- Title Bar: Menu + Tab Row -->
-        <Border Grid.Row="0" Background="#0d0d1a">
+        <Border Grid.Row="0" Background="{DynamicResource TitleBarBackground}">
             <Grid RowDefinitions="Auto,Auto">
                 <!-- Menu Bar -->
-                <Menu Grid.Row="0" Background="Transparent" Foreground="#ccc"
+                <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
                       Margin="80,4,0,0">
                     <MenuItem Header="_File">
                         <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
@@ -67,7 +67,7 @@
                                      Classes="TabButton" Content="Execution Plan"/>
                     </StackPanel>
                     <Button x:Name="SettingsButton" Grid.Column="1"
-                            Background="Transparent" Foreground="#888"
+                            Background="Transparent" Foreground="{DynamicResource TextSecondary}"
                             Padding="15,10" Margin="0,0,10,0"
                             ToolTip.Tip="Settings"
                             Cursor="Hand">
@@ -85,10 +85,10 @@
             <!-- Version History Tab -->
             <Grid IsVisible="{Binding #VersionHistoryTab.IsChecked}" RowDefinitions="Auto,*,Auto">
                 <!-- Top Toolbar -->
-                <Border Grid.Row="0" Background="#1a1a2e" Padding="15,10">
+                <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="15,10">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="Database:" Foreground="White" VerticalAlignment="Center"/>
+                            <TextBlock Text="Database:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding Databases}"
                                       SelectedItem="{Binding SelectedDatabase}"
                                       MinWidth="150"/>
@@ -99,25 +99,22 @@
                                      Text="{Binding SearchText}"
                                      Watermark="Search objects..."
                                      Width="200"/>
-                            <Button x:Name="ChangeDbButton" Content="Change DB"
-                                    Background="#4a4a6e" Foreground="White" Padding="10,5"
-                                    ToolTip.Tip="Connect to a different database"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10">
-                            <Button Content="Sync" Command="{Binding SyncCommand}"
-                                    Background="#2a6e4e" Foreground="White" Padding="10,5"
+                            <Button Content="Sync" Classes="btn-primary"
+                                    Command="{Binding SyncCommand}"
                                     ToolTip.Tip="Sync new changes from DDL log"/>
-                            <Button Content="Refresh" Command="{Binding RefreshCommand}"
-                                    Background="#2a2a4e" Foreground="White" Padding="10,5"/>
+                            <Button Content="Refresh" Classes="btn-secondary"
+                                    Command="{Binding RefreshCommand}"/>
                             <Button x:Name="DependenciesButton" Content="Dependencies"
-                                    Background="#2980b9" Foreground="White" Padding="10,5"
+                                    Classes="btn-toggle"
                                     ToolTip.Tip="Show dependencies for selected object"
                                     IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                         </StackPanel>
 
                         <TextBlock Grid.Column="4" Text="{Binding StatusMessage}"
-                                   Foreground="#aaa" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                                   Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     </Grid>
                 </Border>
 
@@ -139,9 +136,9 @@
                                     <TextBlock Grid.Column="0" FontWeight="SemiBold"
                                                Text="{Binding DependencySourceName, StringFormat='Deps of {0}'}"
                                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                    <Button Grid.Column="1" Content="Back" Command="{Binding BackFromDependenciesCommand}"
-                                            Background="#4a4a6e" Foreground="White" Padding="8,2"
-                                            FontSize="11" VerticalAlignment="Center" Cursor="Hand"/>
+                                    <Button Grid.Column="1" Content="Back" Classes="btn-secondary"
+                                            Command="{Binding BackFromDependenciesCommand}"
+                                            Padding="8,2" FontSize="11" VerticalAlignment="Center" Cursor="Hand"/>
                                 </Grid>
                             </Border>
 
@@ -154,7 +151,7 @@
                                         <Panel>
                                             <!-- Section header (dependency mode) -->
                                             <TextBlock Text="{Binding SectionTitle}" FontWeight="Bold"
-                                                       FontSize="12" Foreground="#4a9eff" Margin="0,6,0,2"
+                                                       FontSize="12" Foreground="{DynamicResource AccentBlue}" Margin="0,6,0,2"
                                                        IsVisible="{Binding IsSectionHeader}"/>
                                             <!-- Normal object item -->
                                             <StackPanel Orientation="Horizontal" Spacing="8"
@@ -163,7 +160,7 @@
                                                 <StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                                         <TextBlock Text="{Binding ObjectName}" FontWeight="SemiBold"/>
-                                                        <TextBlock Text="(in code)" FontSize="10" Foreground="#e6a23c"
+                                                        <TextBlock Text="(in code)" FontSize="10" Foreground="{DynamicResource WarningSeverityWarning}"
                                                                    FontStyle="Italic" VerticalAlignment="Center"
                                                                    IsVisible="{Binding IsCodeMatch}"/>
                                                     </StackPanel>
@@ -228,15 +225,16 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <Button Content="Copy" Command="{Binding CopyLeftCodeCommand}"
-                                                Background="#4a4a6e" Foreground="White" Padding="8,4"
+                                        <Button Content="Copy" Classes="btn-secondary"
+                                                Command="{Binding CopyLeftCodeCommand}"
+                                                Padding="8,4"
                                                 ToolTip.Tip="Copy left definition to clipboard"
                                                 IsVisible="{Binding LeftVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                                     </StackPanel>
 
                                     <Button Grid.Column="1" Content="Rollback to Left"
+                                            Classes="btn-danger"
                                             Command="{Binding RollbackCommand}"
-                                            Background="#e63946" Foreground="White" Padding="10,5"
                                             IsVisible="{Binding LeftVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
                                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
@@ -250,8 +248,9 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <Button Content="Copy" Command="{Binding CopyRightCodeCommand}"
-                                                Background="#4a4a6e" Foreground="White" Padding="8,4"
+                                        <Button Content="Copy" Classes="btn-secondary"
+                                                Command="{Binding CopyRightCodeCommand}"
+                                                Padding="8,4"
                                                 ToolTip.Tip="Copy right definition to clipboard"
                                                 IsVisible="{Binding RightVersion, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                                     </StackPanel>
@@ -266,8 +265,8 @@
                 </Grid>
 
                 <!-- Status Bar -->
-                <Border Grid.Row="2" Background="#1a1a2e" Padding="10,5">
-                    <TextBlock Text="{Binding StatusMessage}" Foreground="#aaa" FontSize="11"/>
+                <Border Grid.Row="2" Background="{DynamicResource ToolbarBackground}" Padding="10,5">
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource TextSecondary}" FontSize="11"/>
                 </Border>
             </Grid>
 
@@ -279,26 +278,58 @@
         </Grid>
 
         <!-- Reconnection Overlay (z-order: on top of everything) -->
-        <Panel Grid.Row="0" Grid.RowSpan="2" Background="#CC1a1a2e"
+        <Panel Grid.Row="0" Grid.RowSpan="2" Background="{DynamicResource OverlayBackground}"
                IsVisible="False" x:Name="ReconnectOverlay">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="15">
                 <TextBlock x:Name="ReconnectText" Text="Reconnecting..."
-                           Foreground="White" FontSize="20" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimary}" FontSize="20" FontWeight="SemiBold"
                            HorizontalAlignment="Center"/>
                 <ProgressBar x:Name="ReconnectProgress" IsIndeterminate="True"
-                             Width="250" Foreground="#4a9eff"/>
+                             Width="250" Foreground="{DynamicResource AccentBlue}"/>
                 <Button x:Name="RetryButton" Content="Click to Retry"
-                        Background="#4a4a6e" Foreground="White" Padding="20,8"
+                        Classes="btn-secondary" Padding="20,8"
                         HorizontalAlignment="Center" IsVisible="False"
                         Cursor="Hand"/>
             </StackPanel>
         </Panel>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="2" Background="{DynamicResource TitleBarBackground}"
+                BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
+                Padding="12,4" Height="26">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+                <!-- Connection indicator -->
+                <Ellipse x:Name="ConnectionDot" Grid.Column="0"
+                         Width="8" Height="8" VerticalAlignment="Center"
+                         Fill="#e74c3c"/>
+                <TextBlock x:Name="ConnectionText" Grid.Column="1"
+                           Text="Disconnected" Margin="6,0,0,0"
+                           Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           VerticalAlignment="Center"/>
+
+                <!-- Separator -->
+                <TextBlock Grid.Column="2" Text="|" Margin="12,0"
+                           Foreground="{DynamicResource TextDisabled}" FontSize="11"
+                           VerticalAlignment="Center"
+                           x:Name="QueryStatusSeparator" IsVisible="False"/>
+
+                <!-- Query status (only on Query Editor tab) -->
+                <TextBlock x:Name="QueryStatusText" Grid.Column="3"
+                           Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           VerticalAlignment="Center" IsVisible="False"/>
+
+                <!-- General status (right-aligned) -->
+                <TextBlock Grid.Column="5" Text="{Binding StatusMessage}"
+                           Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
     </Grid>
 
     <Window.Styles>
         <Style Selector="RadioButton.TabButton">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#888"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="Padding" Value="20,12"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -315,25 +346,25 @@
             </Setter>
         </Style>
         <Style Selector="RadioButton.TabButton:checked">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
         </Style>
         <Style Selector="RadioButton.TabButton:checked /template/ Border#PART_Border">
-            <Setter Property="BorderBrush" Value="#4a9eff"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBlue}"/>
         </Style>
         <Style Selector="RadioButton.TabButton:pointerover">
-            <Setter Property="Foreground" Value="#ccc"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
         </Style>
         <Style Selector="Button#SettingsButton:pointerover">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
         </Style>
         <!-- Menu bar styling -->
         <Style Selector="Menu > MenuItem">
-            <Setter Property="Foreground" Value="#ccc"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="8,4"/>
         </Style>
         <Style Selector="Menu > MenuItem:pointerover">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
         </Style>
     </Window.Styles>
 </Window>

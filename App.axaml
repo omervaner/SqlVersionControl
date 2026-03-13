@@ -3,20 +3,71 @@
              xmlns:conv="using:SqlVersionControl.Converters"
              x:Class="SqlVersionControl.App"
              xmlns:local="using:SqlVersionControl"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
         <local:ViewLocator/>
     </Application.DataTemplates>
 
     <Application.Resources>
-        <conv:BoolToConnectTextConverter x:Key="BoolToConnectText"/>
-        <conv:StatusToColorConverter x:Key="StatusToColorConverter"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Styles/AppTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToConnectTextConverter x:Key="BoolToConnectText"/>
+            <conv:StatusToColorConverter x:Key="StatusToColorConverter"/>
+            <conv:NullDisplayConverter x:Key="NullDisplay"/>
+            <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
+
+        <!-- Global DataGrid theme — applies to ALL DataGrids in the app -->
+        <Style Selector="DataGrid">
+            <Setter Property="Background" Value="{DynamicResource EditorBackground}"/>
+            <Setter Property="RowBackground" Value="{DynamicResource EditorBackground}"/>
+            <!-- AlternatingRowBackground not available in Avalonia DataGrid -->
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource BorderDefault}"/>
+        </Style>
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource PanelHeaderBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        </Style>
+        <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+            <Setter Property="Fill" Value="{DynamicResource HoverBackground}"/>
+        </Style>
+        <Style Selector="DataGridRowHeader">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <!-- Global button style classes -->
+        <Style Selector="Button.btn-primary">
+            <Setter Property="Background" Value="{DynamicResource ButtonPrimary}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style Selector="Button.btn-danger">
+            <Setter Property="Background" Value="{DynamicResource ButtonDanger}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style Selector="Button.btn-secondary">
+            <Setter Property="Background" Value="{DynamicResource ButtonSecondary}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBright}"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style Selector="Button.btn-toggle">
+            <Setter Property="Background" Value="{DynamicResource ButtonToggleActive}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
     </Application.Styles>
 </Application>

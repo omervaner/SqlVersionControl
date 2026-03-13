@@ -19,7 +19,8 @@ public class DataEditService
     /// </summary>
     public static (string? Schema, string? Table) ParseSimpleSelect(string sql)
     {
-        var normalized = sql.Trim().TrimEnd(';');
+        // Strip leading line comments (-- ...) and block comments (/* ... */)
+        var normalized = Regex.Replace(sql, @"(--[^\r\n]*[\r\n]*|/\*[\s\S]*?\*/\s*)", "").Trim().TrimEnd(';');
 
         if (!Regex.IsMatch(normalized, @"^\s*SELECT\b", RegexOptions.IgnoreCase))
             return (null, null);

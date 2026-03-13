@@ -35,14 +35,14 @@
                 </StackPanel>
             </StackPanel>
 
-            <TextBlock Name="ErrorText" Foreground="#e63946" TextWrapping="Wrap" IsVisible="False"/>
+            <TextBlock Name="ErrorText" Foreground="{DynamicResource WarningSeverityCritical}" TextWrapping="Wrap" IsVisible="False"/>
         </StackPanel>
 
         <!-- Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,15,0,0">
-            <Button Name="CancelButton" Content="Cancel" Padding="15,8"/>
-            <Button Name="TestButton" Content="Test" Padding="15,8"/>
-            <Button Name="ConnectButton" Content="Connect" Background="#2a6e4e" Foreground="White" Padding="15,8"/>
+            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="15,8"/>
+            <Button Name="TestButton" Content="Test" Classes="btn-secondary" Padding="15,8"/>
+            <Button Name="ConnectButton" Content="Connect" Classes="btn-primary" Padding="15,8"/>
         </StackPanel>
     </Grid>
 </Window>

@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
 
@@ -8,8 +10,10 @@ namespace SqlVersionControl.ViewModels;
 public partial class ObjectExplorerViewModel : ObservableObject
 {
     private readonly DatabaseService _db;
+    private Timer? _filterDebounce;
 
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _rootNodes = [];
+    [ObservableProperty] private string _filterText = "";
 
     /// <summary>Fired when a context menu action wants to set editor text. Bool = auto-run.</summary>
     public event Action<string, bool>? InsertTextRequested;
@@ -23,6 +27,74 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public ObjectExplorerViewModel(DatabaseService db)
     {
         _db = db;
+    }
+
+    partial void OnFilterTextChanged(string value)
+    {
+        _filterDebounce?.Dispose();
+        _filterDebounce = new Timer(_ =>
+            Dispatcher.UIThread.Post(ApplyFilter), null, 200, Timeout.Infinite);
+    }
+
+    public void ApplyFilter()
+    {
+        var filter = FilterText?.Trim() ?? "";
+        foreach (var db in RootNodes)
+            ApplyFilterToNode(db, filter);
+    }
+
+    private bool ApplyFilterToNode(ObjectExplorerNode node, string filter)
+    {
+        // No filter → everything visible
+        if (string.IsNullOrEmpty(filter))
+        {
+            node.IsVisibleInFilter = true;
+            foreach (var child in node.Children)
+                ApplyFilterToNode(child, filter);
+            return true;
+        }
+
+        switch (node.NodeType)
+        {
+            case ObjectExplorerNodeType.Column:
+                // Columns follow parent visibility — always visible
+                node.IsVisibleInFilter = true;
+                return true;
+
+            case ObjectExplorerNodeType.Table:
+            case ObjectExplorerNodeType.View:
+            case ObjectExplorerNodeType.Proc:
+            case ObjectExplorerNodeType.Function:
+                // Leaf objects: match against name
+                var matches = node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+                node.IsVisibleInFilter = matches;
+                // Still recurse children (columns) so they stay visible
+                foreach (var child in node.Children)
+                    child.IsVisibleInFilter = true;
+                return matches;
+
+            case ObjectExplorerNodeType.Database:
+            case ObjectExplorerNodeType.Folder:
+                // Containers: visible if any child matches
+                var anyChildVisible = false;
+                foreach (var child in node.Children)
+                {
+                    if (ApplyFilterToNode(child, filter))
+                        anyChildVisible = true;
+                }
+                node.IsVisibleInFilter = anyChildVisible;
+                return anyChildVisible;
+
+            default:
+                node.IsVisibleInFilter = true;
+                return true;
+        }
+    }
+
+    [RelayCommand]
+    public void ClearFilter()
+    {
+        FilterText = "";
     }
 
     public async Task LoadDatabasesAsync(IEnumerable<string> databases)
@@ -177,6 +249,10 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 NodeType = ObjectExplorerNodeType.Folder
             });
         }
+        else
+        {
+            folderNode.ChildCount = folderNode.Children.Count;
+        }
     }
 
     private async Task LoadColumnsAsync(ObjectExplorerNode tableNode)
@@ -196,6 +272,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 NodeType = ObjectExplorerNodeType.Column,
                 TypeInfo = typeInfo,
                 IsPrimaryKey = isPk,
+                IsNullable = isNullable,
                 ParentTableName = tableNode.Name
             });
         }

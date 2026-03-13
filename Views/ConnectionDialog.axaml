@@ -11,10 +11,10 @@
 
     <Grid RowDefinitions="Auto,*">
         <!-- Header -->
-        <Border Grid.Row="0" Background="#1a1a2e" Padding="20,15">
+        <Border Grid.Row="0" Background="{DynamicResource TitleBarBackground}" Padding="20,15">
             <StackPanel>
-                <TextBlock Text="SQL Version Control" FontSize="22" FontWeight="Bold" Foreground="White"/>
-                <TextBlock Text="Connect to your database server" Foreground="#aaa" FontSize="12"/>
+                <TextBlock Text="SQL Version Control" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextBright}"/>
+                <TextBlock Text="Connect to your database server" Foreground="{DynamicResource TextSecondary}" FontSize="12"/>
             </StackPanel>
         </Border>
 
@@ -68,15 +68,15 @@
                 <TextBox Text="{Binding Password}" PasswordChar="●" IsVisible="{Binding !UseWindowsAuth}"/>
             </StackPanel>
 
-            <TextBlock Text="{Binding ErrorMessage}" Foreground="#e63946" Margin="0,15,0,0"
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource WarningSeverityCritical}" Margin="0,15,0,0"
                        TextWrapping="Wrap" IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
             <Button Content="{Binding IsConnecting, Converter={StaticResource BoolToConnectText}}"
+                    Classes="btn-primary"
                     Command="{Binding ConnectCommand}"
                     IsEnabled="{Binding !IsConnecting}"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
-                    Background="#1a1a2e" Foreground="White"
                     Padding="15,10" Margin="0,20,0,0"/>
         </StackPanel>
     </Grid>

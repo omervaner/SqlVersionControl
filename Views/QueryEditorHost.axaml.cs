@@ -20,6 +20,15 @@ public partial class QueryEditorHost : UserControl
     private int _tabCounter;
     private List<string> _cachedDatabases = [];
 
+    /// <summary>Get the active query tab's ViewModel (for status bar binding).</summary>
+    public QueryTabViewModel? ActiveTabViewModel =>
+        _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count
+            ? _tabs[_activeTabIndex].DataContext as QueryTabViewModel
+            : null;
+
+    /// <summary>Fired when the active query tab changes (for status bar rebinding).</summary>
+    public event Action? ActiveTabChanged;
+
     public QueryEditorHost()
     {
         InitializeComponent();
@@ -156,17 +165,22 @@ public partial class QueryEditorHost : UserControl
             _tabs[i].IsVisible = i == index;
 
         RebuildTabStrip();
+        ActiveTabChanged?.Invoke();
     }
+
+    private IBrush FindBrush(string key) =>
+        Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
+            ? b : Brushes.Transparent;
 
     private void RebuildTabStrip()
     {
         TabStrip.Children.Clear();
 
-        var activeBg = new SolidColorBrush(Color.Parse("#2a2a4e"));
+        var activeBg = FindBrush("ActiveTabBackground");
         var normalBg = Brushes.Transparent;
-        var activeFg = Brushes.White;
-        var normalFg = new SolidColorBrush(Color.Parse("#888888"));
-        var closeFg = new SolidColorBrush(Color.Parse("#888888"));
+        var activeFg = FindBrush("TextBright");
+        var normalFg = FindBrush("TextSecondary");
+        var closeFg = FindBrush("TextSecondary");
 
         for (int i = 0; i < _tabs.Count; i++)
         {
@@ -229,7 +243,7 @@ public partial class QueryEditorHost : UserControl
         {
             Content = "+",
             Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(Color.Parse("#888888")),
+            Foreground = FindBrush("TextSecondary"),
             Padding = new Thickness(10, 6),
             FontSize = 16,
             FontWeight = FontWeight.Bold,
@@ -287,6 +301,12 @@ public partial class QueryEditorHost : UserControl
     {
         if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return null;
         return _tabs[_activeTabIndex].Editor;
+    }
+
+    public void FocusActiveDatabasePicker()
+    {
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            _tabs[_activeTabIndex].FocusDatabasePicker();
     }
 
     /// <summary>
@@ -582,6 +602,10 @@ public partial class QueryEditorHost : UserControl
 
     private void OnTreePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        // Reset drag state on any button release — prevents drag from stealing double-click
+        _dragPending = false;
+        _dragNode = null;
+
         if (e.InitialPressMouseButton != MouseButton.Right) return;
         if (e.Source is not Visual visual) return;
 
@@ -594,10 +618,12 @@ public partial class QueryEditorHost : UserControl
 
     private void OnTreeDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (_viewModel == null || e.Source is not Visual visual) return;
+        if (_viewModel == null || e.Source is not Visual visual)
+            return;
 
         var treeViewItem = visual.FindAncestorOfType<TreeViewItem>();
-        if (treeViewItem?.DataContext is not ObjectExplorerNode node) return;
+        if (treeViewItem?.DataContext is not ObjectExplorerNode node)
+            return;
 
         var explorer = _viewModel.ObjectExplorer;
 
