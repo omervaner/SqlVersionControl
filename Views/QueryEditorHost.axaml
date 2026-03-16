@@ -113,6 +113,11 @@
                                            Foreground="{DynamicResource TextSecondary}"
                                            IsVisible="{Binding IsColumn}"
                                            VerticalAlignment="Center"/>
+                                <!-- Loading indicator -->
+                                <TextBlock Text="Loading..." FontSize="11" FontStyle="Italic"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           IsVisible="{Binding IsLoading}"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
                         </TreeDataTemplate>
                     </TreeView.ItemTemplate>
@@ -129,9 +134,19 @@
         <Grid Grid.Column="2" RowDefinitions="Auto,*">
             <!-- Tab Strip -->
             <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,2">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
-                </ScrollViewer>
+                <Grid ColumnDefinitions="*,Auto">
+                    <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
+                    </ScrollViewer>
+                    <Button Grid.Column="1" x:Name="QueryHistoryButton"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextSecondary}"
+                            Padding="10,6" FontSize="14"
+                            Cursor="Hand"
+                            ToolTip.Tip="Query History">
+                        <TextBlock Text="&#x1f552;" FontSize="14"/>
+                    </Button>
+                </Grid>
             </Border>
 
             <!-- Tab Content -->

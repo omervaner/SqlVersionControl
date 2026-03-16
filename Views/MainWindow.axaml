@@ -14,9 +14,9 @@
         ExtendClientAreaTitleBarHeightHint="0">
 
     <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Title Bar: Menu + Tab Row -->
+        <!-- Title Bar: Menu + Color Stripe + Tab Row -->
         <Border Grid.Row="0" Background="{DynamicResource TitleBarBackground}">
-            <Grid RowDefinitions="Auto,Auto">
+            <Grid RowDefinitions="Auto,Auto,Auto">
                 <!-- Menu Bar -->
                 <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
                       Margin="80,4,0,0">
@@ -28,6 +28,7 @@
                         <MenuItem x:Name="MenuSaveAs" Header="Save As..." InputGesture="Ctrl+Shift+S"/>
                         <Separator/>
                         <MenuItem x:Name="MenuRecentFiles" Header="Recent Files"/>
+                        <MenuItem x:Name="MenuQueryHistory" Header="Query History"/>
                         <Separator/>
                         <MenuItem x:Name="MenuExit" Header="Exit"/>
                     </MenuItem>
@@ -46,7 +47,7 @@
                         <MenuItem x:Name="MenuRun" Header="Run" InputGesture="F5"/>
                         <MenuItem x:Name="MenuStop" Header="Stop"/>
                         <Separator/>
-                        <MenuItem x:Name="MenuChangeDb" Header="Change Database..."/>
+                        <MenuItem x:Name="MenuChangeDb" Header="Change Connection..."/>
                     </MenuItem>
                     <MenuItem Header="_Help">
                         <MenuItem x:Name="MenuAbout" Header="About..."/>
@@ -54,12 +55,16 @@
                     </MenuItem>
                 </Menu>
 
+                <!-- Connection Color Stripe -->
+                <Border Grid.Row="1" x:Name="ConnectionStripe" Height="3"
+                        Background="#88a1bb" IsVisible="False"/>
+
                 <!-- App Tab Row -->
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="80,0,0,0">
-                        <RadioButton x:Name="QueryEditorTab" GroupName="Tabs"
+                        <RadioButton x:Name="QueryEditorTab" GroupName="Tabs" IsChecked="True"
                                      Classes="TabButton" Content="Query Editor"/>
-                        <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs" IsChecked="True"
+                        <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Version History"/>
                         <RadioButton x:Name="CompareTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Compare Databases"/>

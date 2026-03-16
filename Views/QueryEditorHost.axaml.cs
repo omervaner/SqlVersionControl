@@ -15,10 +15,13 @@ public partial class QueryEditorHost : UserControl
 {
     private QueryEditorHostViewModel? _viewModel;
     private DatabaseService? _db;
+    private SessionService? _sessionService;
     private readonly List<QueryTabView> _tabs = [];
     private int _activeTabIndex = -1;
     private int _tabCounter;
     private List<string> _cachedDatabases = [];
+    private bool _restoringSession;
+    private Timer? _autosaveTimer;
 
     /// <summary>Get the active query tab's ViewModel (for status bar binding).</summary>
     public QueryTabViewModel? ActiveTabViewModel =>
@@ -34,9 +37,10 @@ public partial class QueryEditorHost : UserControl
         InitializeComponent();
     }
 
-    public void Initialize(DatabaseService db, MainWindowViewModel mainVm)
+    public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService)
     {
         _db = db;
+        _sessionService = sessionService;
         _viewModel = new QueryEditorHostViewModel(db);
         DataContext = _viewModel;
 
@@ -51,12 +55,27 @@ public partial class QueryEditorHost : UserControl
         ObjectExplorerTree.AddHandler(InputElement.PointerMovedEvent, OnTreePointerMoved, handledEventsToo: true);
         ObjectExplorerTree.AddHandler(InputElement.PointerPressedEvent, OnTreePointerPressed, handledEventsToo: true);
 
-        // Create first tab
-        AddNewTab();
+        // Wire history button
+        QueryHistoryButton.Click += OnHistoryButtonClicked;
+
+        // Restore session or create default tab
+        RestoreSession();
 
         // Load databases if already connected
         if (mainVm.IsConnected)
             _ = ReloadDatabasesAsync();
+
+        // Start autosave timer (30s interval)
+        _autosaveTimer = new Timer(_ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(SaveSession),
+            null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _autosaveTimer?.Dispose();
+        _autosaveTimer = null;
+        base.OnDetachedFromVisualTree(e);
     }
 
     // ── Tab Lifecycle ────────────────────────────────────────────────
@@ -89,6 +108,9 @@ public partial class QueryEditorHost : UserControl
                 RebuildTabStrip();
         };
 
+        // Record query history on successful execution
+        vm.QueryExecuted += (sql, db, rows) => _sessionService?.AddQueryToHistory(sql, db, rows);
+
         var tabView = new QueryTabView();
         tabView.Initialize(vm);
         tabView.ProcDropRequested += OnProcDropRequested;
@@ -97,6 +119,10 @@ public partial class QueryEditorHost : UserControl
         TabContentPanel.Children.Add(tabView);
 
         SwitchToTab(_tabs.Count - 1);
+
+        // Save session on tab created (unless we're restoring)
+        if (!_restoringSession)
+            SaveSession();
     }
 
     public async Task CloseTabAsync(int index)
@@ -146,6 +172,9 @@ public partial class QueryEditorHost : UserControl
             _activeTabIndex--;
 
         SwitchToTab(_activeTabIndex);
+
+        // Save session on tab closed
+        SaveSession();
     }
 
     public async Task CloseActiveTabAsync()
@@ -158,6 +187,7 @@ public partial class QueryEditorHost : UserControl
     {
         if (index < 0 || index >= _tabs.Count) return;
 
+        var changed = _activeTabIndex != index;
         _activeTabIndex = index;
 
         // Show/hide tab views
@@ -166,6 +196,10 @@ public partial class QueryEditorHost : UserControl
 
         RebuildTabStrip();
         ActiveTabChanged?.Invoke();
+
+        // Save session on tab switch
+        if (changed && !_restoringSession)
+            SaveSession();
     }
 
     private IBrush FindBrush(string key) =>
@@ -461,6 +495,163 @@ public partial class QueryEditorHost : UserControl
         }
     }
 
+    // ── Session Save / Restore ─────────────────────────────────────
+
+    /// <summary>
+    /// Save current tab state to session file. Called on tab create, close, switch, and app close.
+    /// </summary>
+    public void SaveSession()
+    {
+        if (_sessionService == null) return;
+
+        var tabs = new List<TabState>();
+        foreach (var tabView in _tabs)
+        {
+            if (tabView.DataContext is not QueryTabViewModel vm) continue;
+
+            // Sync latest editor text
+            vm.SqlText = tabView.Editor.Text;
+
+            tabs.Add(new TabState
+            {
+                SqlText = vm.SqlText,
+                SelectedDatabase = vm.SelectedDatabase,
+                SavedPath = vm.CurrentQueryPath,
+                QueryName = vm.CurrentQueryName,
+                CursorPosition = tabView.Editor.CaretOffset
+            });
+        }
+
+        _sessionService.SaveTabs(tabs, _activeTabIndex);
+    }
+
+    private void RestoreSession()
+    {
+        if (_sessionService == null)
+        {
+            AddNewTab();
+            return;
+        }
+
+        var data = _sessionService.Data;
+        if (data.Tabs.Count == 0)
+        {
+            AddNewTab();
+            return;
+        }
+
+        _restoringSession = true;
+        try
+        {
+            foreach (var tabState in data.Tabs)
+            {
+                AddNewTab();
+                if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) continue;
+
+                var tabView = _tabs[_activeTabIndex];
+                var vm = tabView.DataContext as QueryTabViewModel;
+                if (vm == null) continue;
+
+                // Restore saved query metadata
+                if (tabState.SavedPath != null)
+                {
+                    vm.CurrentQueryPath = tabState.SavedPath;
+                    vm.CurrentQueryName = tabState.QueryName;
+                    if (tabState.QueryName != null)
+                        vm.TabTitle = tabState.QueryName;
+                }
+
+                // Restore database selection (will be applied when databases load)
+                if (tabState.SelectedDatabase != null)
+                    vm.SelectedDatabase = tabState.SelectedDatabase;
+
+                // Restore editor text
+                tabView.Editor.Text = tabState.SqlText;
+                vm.SetInitialText(tabState.SqlText);
+
+                // Restore cursor position
+                if (tabState.CursorPosition >= 0 && tabState.CursorPosition <= tabState.SqlText.Length)
+                    tabView.Editor.CaretOffset = tabState.CursorPosition;
+
+                RebuildTabStrip();
+            }
+
+            // Restore active tab
+            var targetIndex = Math.Clamp(data.ActiveTabIndex, 0, _tabs.Count - 1);
+            SwitchToTab(targetIndex);
+        }
+        finally
+        {
+            _restoringSession = false;
+        }
+    }
+
+    // ── Query History ────────────────────────────────────────────────
+
+    private void OnHistoryButtonClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_sessionService == null) return;
+
+        var history = _sessionService.GetQueryHistory();
+        var menu = new MenuFlyout();
+
+        if (history.Count == 0)
+        {
+            var empty = new MenuItem { Header = "(no history)", IsEnabled = false };
+            menu.Items.Add(empty);
+        }
+        else
+        {
+            foreach (var entry in history)
+            {
+                var truncated = entry.SqlText.ReplaceLineEndings(" ");
+                if (truncated.Length > 80)
+                    truncated = truncated[..77] + "...";
+
+                var timeAgo = FormatTimeAgo(entry.ExecutedAt);
+                var dbLabel = entry.Database ?? "";
+
+                var item = new MenuItem
+                {
+                    Header = truncated
+                };
+                ToolTip.SetTip(item, $"{entry.SqlText}\n\n{dbLabel} — {timeAgo} — {entry.RowCount:N0} rows");
+
+                var sql = entry.SqlText;
+                var db = entry.Database;
+                item.Click += (_, _) =>
+                {
+                    AddNewTab();
+                    if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+                    {
+                        var tab = _tabs[_activeTabIndex];
+                        var vm = tab.DataContext as QueryTabViewModel;
+                        if (vm != null)
+                        {
+                            tab.Editor.Text = sql;
+                            vm.SetInitialText(sql);
+                            if (db != null && vm.Databases.Contains(db))
+                                vm.SelectedDatabase = db;
+                        }
+                    }
+                };
+                menu.Items.Add(item);
+            }
+        }
+
+        menu.ShowAt(QueryHistoryButton, true);
+    }
+
+    private static string FormatTimeAgo(DateTime when)
+    {
+        var span = DateTime.Now - when;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        return when.ToString("MMM d");
+    }
+
     // ── Object Explorer Event Routing ────────────────────────────────
 
     private void OnInsertText(string sql, bool autoRun)
@@ -584,6 +775,11 @@ public partial class QueryEditorHost : UserControl
             case ObjectExplorerNodeType.Column:
                 menu.Items.Add(CreateMenuItem("SELECT DISTINCT", () => explorer.SelectDistinct(node)));
                 menu.Items.Add(CreateMenuItem("Insert Column Name", () => explorer.InsertColumnName(node)));
+                break;
+
+            case ObjectExplorerNodeType.Database:
+            case ObjectExplorerNodeType.Folder:
+                menu.Items.Add(CreateMenuItem("Refresh", () => explorer.RefreshNode(node)));
                 break;
 
             default:

@@ -130,6 +130,9 @@ public partial class QueryTabViewModel : ObservableObject
     /// <summary>Fired when edit mode state changes (view should reconfigure the grid).</summary>
     public event Action? EditModeChanged;
 
+    /// <summary>Fired after a successful query execution (sql, database, totalRows).</summary>
+    public event Action<string, string?, int>? QueryExecuted;
+
     public QueryTabViewModel(DatabaseService db)
     {
         _db = db;
@@ -190,8 +193,13 @@ public partial class QueryTabViewModel : ObservableObject
             var elapsed = sw.ElapsedMilliseconds < 1000
                 ? $"{sw.ElapsedMilliseconds}ms"
                 : $"{sw.Elapsed.TotalSeconds:F1}s";
-            StatusText = $"{Results.Count} result set(s), {totalRows} total rows";
-            QueryStatusText = $"{totalRows} rows, {elapsed}";
+            StatusText = totalRows > 10_000
+                ? $"{Results.Count} result set(s), {totalRows:N0} total rows (large)"
+                : $"{Results.Count} result set(s), {totalRows:N0} total rows";
+            QueryStatusText = $"{totalRows:N0} rows, {elapsed}";
+
+            // Record in query history
+            QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);
 
             // Check if result is eligible for edit mode
             CheckEditEligibility(sql);
@@ -345,6 +353,74 @@ public partial class QueryTabViewModel : ObservableObject
         var emptyValues = new object?[EditColumnNames.Length];
         var newRow = new EditableRow(emptyValues, result.ColumnTypes, RowEditState.New);
         EditableRows.Add(newRow);
+        UpdatePendingChangeCount();
+    }
+
+    /// <summary>
+    /// Paste parsed TSV rows into the editable grid, starting at the given row index.
+    /// Overwrites existing rows (marking Modified) and appends new rows beyond the end.
+    /// </summary>
+    public void PasteRows(List<string[]> parsedRows, int startIndex)
+    {
+        if (!IsEditMode || EditableRows == null || EditColumnNames == null) return;
+
+        var result = Results.Count > 0 ? Results[0] : null;
+        if (result == null) return;
+
+        var colCount = EditColumnNames.Length;
+
+        for (int r = 0; r < parsedRows.Count; r++)
+        {
+            var cells = parsedRows[r];
+            var targetIndex = startIndex + r;
+
+            if (targetIndex < EditableRows.Count)
+            {
+                // Overwrite existing row (skip deleted rows)
+                var existing = EditableRows[targetIndex];
+                if (existing.State == RowEditState.Deleted) continue;
+
+                existing.TakeSnapshot();
+                for (int c = 0; c < cells.Length && c < colCount; c++)
+                    existing[c] = cells[c];
+
+                if (existing.State != RowEditState.New)
+                    existing.State = existing.HasChanges() ? RowEditState.Modified : RowEditState.None;
+            }
+            else
+            {
+                // Append new row
+                var values = new object?[colCount];
+                var newRow = new EditableRow(values, result.ColumnTypes, RowEditState.New);
+                for (int c = 0; c < cells.Length && c < colCount; c++)
+                    newRow[c] = cells[c];
+                EditableRows.Add(newRow);
+            }
+        }
+
+        UpdatePendingChangeCount();
+    }
+
+    /// <summary>
+    /// Undo the edit state of a single row: revert Modified, remove New, un-delete Deleted.
+    /// </summary>
+    public void UndoRow(EditableRow row)
+    {
+        if (!IsEditMode || EditableRows == null) return;
+
+        switch (row.State)
+        {
+            case RowEditState.New:
+                EditableRows.Remove(row);
+                break;
+            case RowEditState.Modified:
+                row.Revert();
+                break;
+            case RowEditState.Deleted:
+                row.State = row.HasChanges() ? RowEditState.Modified : RowEditState.None;
+                break;
+        }
+
         UpdatePendingChangeCount();
     }
 

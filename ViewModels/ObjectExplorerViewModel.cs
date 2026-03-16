@@ -125,6 +125,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         if (!node.HasDummyChild) return;
 
         node.Children.Clear();
+        node.IsLoading = true;
 
         try
         {
@@ -149,6 +150,26 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 NodeType = ObjectExplorerNodeType.Folder
             });
         }
+        finally
+        {
+            node.IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Invalidates cached children for the node and re-triggers lazy loading from the server.
+    /// </summary>
+    public void RefreshNode(ObjectExplorerNode node)
+    {
+        // Clear all loaded children and reset to dummy — this invalidates the cache
+        // so HasDummyChild returns true and the next expand fetches fresh data from DB.
+        node.Children.Clear();
+        node.ChildCount = 0;
+        node.Children.Add(ObjectExplorerNode.CreateDummy());
+
+        // Collapse then re-expand to trigger the lazy load
+        node.IsExpanded = false;
+        node.IsExpanded = true;
     }
 
     private Task LoadDatabaseChildrenAsync(ObjectExplorerNode dbNode)
@@ -183,61 +204,47 @@ public partial class ObjectExplorerViewModel : ObservableObject
         {
             case "Tables":
                 var tables = await _db.GetTablesAsync(db);
-                foreach (var (schema, name) in tables)
+                var tableNodes = tables.Select(t => WireNode(new ObjectExplorerNode
                 {
-                    folderNode.Children.Add(WireNode(new ObjectExplorerNode
-                    {
-                        Name = name,
-                        Schema = schema,
-                        DatabaseName = db,
-                        NodeType = ObjectExplorerNodeType.Table,
-                        Children = [ObjectExplorerNode.CreateDummy()]
-                    }));
-                }
+                    Name = t.Name, Schema = t.Schema, DatabaseName = db,
+                    NodeType = ObjectExplorerNodeType.Table,
+                    Children = [ObjectExplorerNode.CreateDummy()]
+                }));
+                await AddChildrenInBatchesAsync(folderNode, tableNodes);
                 break;
 
             case "Views":
                 var views = await _db.GetViewsAsync(db);
-                foreach (var (schema, name) in views)
+                var viewNodes = views.Select(v => new ObjectExplorerNode
                 {
-                    folderNode.Children.Add(new ObjectExplorerNode
-                    {
-                        Name = name,
-                        Schema = schema,
-                        DatabaseName = db,
-                        NodeType = ObjectExplorerNodeType.View
-                    });
-                }
+                    Name = v.Name, Schema = v.Schema, DatabaseName = db,
+                    NodeType = ObjectExplorerNodeType.View
+                });
+                await AddChildrenInBatchesAsync(folderNode, viewNodes);
                 break;
 
             case "Stored Procedures":
                 var procsAndFuncs = await _db.GetProcsAndFunctionsAsync(db);
-                foreach (var (schema, name, typeDesc) in procsAndFuncs
-                    .Where(x => x.Type == "SQL_STORED_PROCEDURE"))
-                {
-                    folderNode.Children.Add(new ObjectExplorerNode
+                var procNodes = procsAndFuncs
+                    .Where(x => x.Type == "SQL_STORED_PROCEDURE")
+                    .Select(p => new ObjectExplorerNode
                     {
-                        Name = name,
-                        Schema = schema,
-                        DatabaseName = db,
+                        Name = p.Name, Schema = p.Schema, DatabaseName = db,
                         NodeType = ObjectExplorerNodeType.Proc
                     });
-                }
+                await AddChildrenInBatchesAsync(folderNode, procNodes);
                 break;
 
             case "Functions":
                 var funcs = await _db.GetProcsAndFunctionsAsync(db);
-                foreach (var (schema, name, typeDesc) in funcs
-                    .Where(x => x.Type != "SQL_STORED_PROCEDURE"))
-                {
-                    folderNode.Children.Add(new ObjectExplorerNode
+                var funcNodes = funcs
+                    .Where(x => x.Type != "SQL_STORED_PROCEDURE")
+                    .Select(f => new ObjectExplorerNode
                     {
-                        Name = name,
-                        Schema = schema,
-                        DatabaseName = db,
+                        Name = f.Name, Schema = f.Schema, DatabaseName = db,
                         NodeType = ObjectExplorerNodeType.Function
                     });
-                }
+                await AddChildrenInBatchesAsync(folderNode, funcNodes);
                 break;
         }
 
@@ -252,6 +259,40 @@ public partial class ObjectExplorerViewModel : ObservableObject
         else
         {
             folderNode.ChildCount = folderNode.Children.Count;
+        }
+
+        // Re-apply filter if active so new children get filtered
+        if (!string.IsNullOrEmpty(FilterText))
+            ApplyFilter();
+    }
+
+    private async Task AddChildrenInBatchesAsync(
+        ObjectExplorerNode parent,
+        IEnumerable<ObjectExplorerNode> children,
+        int batchSize = 50)
+    {
+        var batch = new List<ObjectExplorerNode>();
+        foreach (var child in children)
+        {
+            batch.Add(child);
+            if (batch.Count >= batchSize)
+            {
+                var toAdd = batch.ToList();
+                batch.Clear();
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    foreach (var node in toAdd)
+                        parent.Children.Add(node);
+                });
+            }
+        }
+        if (batch.Count > 0)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var node in batch)
+                    parent.Children.Add(node);
+            });
         }
     }
 

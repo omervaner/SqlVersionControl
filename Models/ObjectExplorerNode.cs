@@ -29,6 +29,7 @@ public partial class ObjectExplorerNode : ObservableObject
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _children = [];
     [ObservableProperty] private int _childCount;
     [ObservableProperty] private bool _isVisibleInFilter = true;
+    [ObservableProperty] private bool _isLoading;
 
     partial void OnChildCountChanged(int value) => OnPropertyChanged(nameof(DisplayName));
 

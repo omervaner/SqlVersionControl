@@ -68,6 +68,13 @@
                 <TextBox Text="{Binding Password}" PasswordChar="●" IsVisible="{Binding !UseWindowsAuth}"/>
             </StackPanel>
 
+            <!-- Connection Name + Color (shared across both modes) -->
+            <TextBlock Text="Connection Name (optional)" FontWeight="SemiBold" Margin="0,15,0,5"/>
+            <TextBox Text="{Binding ConnectionName}" Watermark="e.g., PROD, DEV, UAT"/>
+
+            <TextBlock Text="Environment Color" FontWeight="SemiBold" Margin="0,15,0,5"/>
+            <StackPanel x:Name="ColorPicker" Orientation="Horizontal" Spacing="8"/>
+
             <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource WarningSeverityCritical}" Margin="0,15,0,0"
                        TextWrapping="Wrap" IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 

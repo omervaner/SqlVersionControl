@@ -64,15 +64,23 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel x:Name="ResultTabHeaders" Grid.Column="0" Orientation="Horizontal" Spacing="2"/>
 
-                        <!-- Edit Mode Toggle -->
-                        <Button x:Name="EditModeButton" Grid.Column="1"
-                                Content="Edit"
-                                Classes="btn-secondary"
-                                Command="{Binding ToggleEditModeCommand}"
-                                IsVisible="{Binding CanEditMode}"
-                                Padding="10,5" Margin="4,3"
-                                FontSize="12"
-                                ToolTip.Tip="Toggle inline editing (requires primary key)"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                            <Button x:Name="ExportButton"
+                                    Content="Export"
+                                    Classes="btn-secondary"
+                                    Padding="10,5" Margin="4,3"
+                                    FontSize="12"
+                                    ToolTip.Tip="Export results to Excel (.xlsx)"/>
+                            <!-- Edit Mode Toggle -->
+                            <Button x:Name="EditModeButton"
+                                    Content="Edit"
+                                    Classes="btn-secondary"
+                                    Command="{Binding ToggleEditModeCommand}"
+                                    IsVisible="{Binding CanEditMode}"
+                                    Padding="10,5" Margin="4,3"
+                                    FontSize="12"
+                                    ToolTip.Tip="Toggle inline editing (requires primary key)"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

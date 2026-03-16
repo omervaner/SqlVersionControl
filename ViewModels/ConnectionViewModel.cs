@@ -42,10 +42,28 @@ public partial class ConnectionViewModel : ViewModelBase
     [ObservableProperty]
     private bool _useRecentConnection;
 
+    [ObservableProperty]
+    private string _connectionName = "";
+
+    [ObservableProperty]
+    private string _connectionColor = "#88a1bb";
+
     public bool HasRecentConnections => RecentConnections.Count > 0;
 
     // Show password field when using recent connection with SQL auth
     public bool NeedsPassword => UseRecentConnection && SelectedConnection != null && !SelectedConnection.UseWindowsAuth;
+
+    /// <summary>Predefined environment colors.</summary>
+    public static readonly (string Hex, string Label)[] PresetColors =
+    [
+        ("#e74c3c", "PROD"),
+        ("#e9c880", "UAT"),
+        ("#b7bd73", "DEV"),
+        ("#88a1bb", "OTHER"),
+    ];
+
+    /// <summary>The SavedConnection resulting from the last successful connect (includes Name/Color).</summary>
+    public SavedConnection? ResultConnection { get; private set; }
 
     public ConnectionViewModel(DatabaseService db, SettingsService settings, Action<ConnectionSettings> onConnected)
     {
@@ -75,6 +93,8 @@ public partial class ConnectionViewModel : ViewModelBase
             Database = value.Database;
             Username = value.Username;
             UseWindowsAuth = value.UseWindowsAuth;
+            ConnectionName = value.Name ?? "";
+            ConnectionColor = value.Color ?? "#88a1bb";
             // Pre-fill password from encrypted store if available
             Password = PasswordStore.Get(value.Server, value.Database, value.Username) ?? "";
         }
@@ -151,13 +171,17 @@ public partial class ConnectionViewModel : ViewModelBase
             }
 
             // Save to recent connections (moves to top if already exists)
-            _settings.AddRecentConnection(new SavedConnection
+            var saved = new SavedConnection
             {
                 Server = settings.Server,
                 Database = settings.Database,
                 Username = settings.Username,
-                UseWindowsAuth = settings.UseWindowsAuth
-            });
+                UseWindowsAuth = settings.UseWindowsAuth,
+                Name = string.IsNullOrWhiteSpace(ConnectionName) ? null : ConnectionName.Trim(),
+                Color = ConnectionColor
+            };
+            _settings.AddRecentConnection(saved);
+            ResultConnection = saved;
             _onConnected(settings);
         }
         else

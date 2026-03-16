@@ -148,5 +148,9 @@ public class SavedConnection
     public string Database { get; set; } = "";
     public string Username { get; set; } = "";
     public bool UseWindowsAuth { get; set; }
-    public string DisplayName => $"{Server} / {Database} ({Username})";
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+    public string DisplayName => Name != null
+        ? $"{Name} / {Database} ({(UseWindowsAuth ? "Windows" : Username)})"
+        : $"{Server} / {Database} ({(UseWindowsAuth ? "Windows" : Username)})";
 }

@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
@@ -67,8 +68,9 @@ public partial class QueryTabView : UserControl
                 UpdateEditModeButton();
         };
 
-        // Show SQL preview button
+        // Show SQL preview button + Export
         ShowSqlButton.Click += OnShowSqlClicked;
+        ExportButton.Click += OnExportClicked;
 
         // DataGrid row events for edit mode
         ResultsGrid.LoadingRow += OnDataGridLoadingRow;
@@ -76,6 +78,9 @@ public partial class QueryTabView : UserControl
 
         // Double-click result grid to auto-enter edit mode
         ResultsGrid.DoubleTapped += OnResultsGridDoubleTapped;
+
+        // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
+        ResultsGrid.KeyDown += OnResultsGridKeyDown;
     }
 
     /// <summary>
@@ -288,6 +293,52 @@ public partial class QueryTabView : UserControl
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
+    private async void OnResultsGridKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is not { IsEditMode: true }) return;
+
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+                   e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        if (ctrl && e.Key == Key.Z)
+        {
+            e.Handled = true; // Prevent bubbling to AvaloniaEdit's undo
+            if (ResultsGrid.SelectedItem is EditableRow row && row.State != RowEditState.None)
+            {
+                _viewModel.UndoRow(row);
+                RefreshRowVisuals();
+            }
+            return;
+        }
+
+        if (ctrl && e.Key == Key.V)
+        {
+            e.Handled = true;
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard == null) return;
+
+            var text = await clipboard.GetTextAsync();
+            if (string.IsNullOrEmpty(text)) return;
+
+            // Parse TSV: rows separated by newlines, columns by tabs
+            var lines = text.Split('\n')
+                .Select(l => l.TrimEnd('\r'))
+                .Where(l => l.Length > 0)  // Skip trailing empty line
+                .Select(l => l.Split('\t'))
+                .ToList();
+
+            if (lines.Count == 0) return;
+
+            // Paste starting at selected row, or append at end
+            var startIndex = ResultsGrid.SelectedIndex >= 0
+                ? ResultsGrid.SelectedIndex
+                : _viewModel.EditableRows?.Count ?? 0;
+
+            _viewModel.PasteRows(lines, startIndex);
+            RefreshRowVisuals();
+        }
+    }
+
     private void UpdateEditModeButton()
     {
         if (_viewModel == null) return;
@@ -478,6 +529,47 @@ public partial class QueryTabView : UserControl
         var parent = TopLevel.GetTopLevel(this) as Window;
         if (parent != null)
             await dialog.ShowDialog(parent);
+    }
+
+    private async void OnExportClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_viewModel == null) return;
+
+        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+            ? _selectedTabIndex : 0;
+        if (resultIndex >= _viewModel.Results.Count) return;
+
+        var result = _viewModel.Results[resultIndex];
+        if (result.Error != null) return;
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(
+            new Avalonia.Platform.Storage.FilePickerSaveOptions
+            {
+                Title = "Export to Excel",
+                SuggestedFileName = "results",
+                DefaultExtension = "xlsx",
+                FileTypeChoices =
+                [
+                    new Avalonia.Platform.Storage.FilePickerFileType("Excel Files") { Patterns = ["*.xlsx"] },
+                ]
+            });
+
+        if (file == null) return;
+        var path = file.TryGetLocalPath();
+        if (path == null) return;
+
+        try
+        {
+            ExportService.ExportToExcel(result, path);
+            _viewModel.StatusText = $"Exported {result.RowCount:N0} rows to {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusText = $"Export failed: {ex.Message}";
+        }
     }
 
     // ── Drag-and-Drop ─────────────────────────────────────────────────

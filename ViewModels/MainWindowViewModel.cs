@@ -29,6 +29,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _connectionDisplay = "Disconnected";
 
     [ObservableProperty]
+    private string _connectionColor = "#88a1bb";
+
+    [ObservableProperty]
     private bool _isQueryEditorActive;
 
     [ObservableProperty]
@@ -98,13 +101,16 @@ public partial class MainWindowViewModel : ViewModelBase
     // Event for rollback confirmation (View subscribes to this)
     public event Func<ObjectVersion, Task<bool>>? RollbackRequested;
 
-    public void OnConnected(ConnectionSettings settings)
+    public void OnConnected(ConnectionSettings settings, SavedConnection? profile = null)
     {
         _db.SetConnection(settings);
         IsConnected = true;
         StatusMessage = $"Connected to {settings.Server}/{settings.Database} - loading...";
         var login = settings.UseWindowsAuth ? "Windows" : settings.Username;
-        ConnectionDisplay = $"{settings.Server} / {settings.Database} ({login})";
+        ConnectionDisplay = profile?.Name != null
+            ? $"{profile.Name} / {settings.Database} ({login})"
+            : $"{settings.Server} / {settings.Database} ({login})";
+        ConnectionColor = profile?.Color ?? "#88a1bb";
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
         StartAutoSyncTimer();
@@ -165,31 +171,32 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            // Ensure schema exists
+            // Ensure schema exists (must complete first — other operations need the tables)
             await _db.EnsureSchemaAsync();
 
-            // Sync from DDL log
-            StatusMessage = "Syncing from DDL log...";
-            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase);
-            if (synced > 0)
-            {
-                StatusMessage = $"Synced {synced} new changes from DDL log";
-            }
-
-            // Load databases (save/restore selection since Clear() nulls the ComboBox binding)
+            // Run DDL sync and database list fetch in parallel — they're independent
+            StatusMessage = "Loading...";
             var savedDb = SelectedDatabase;
-            var dbs = await _db.GetDatabasesAsync();
+            var syncTask = _db.SyncFromDdlLogAsync(SelectedDatabase);
+            var dbsTask = _db.GetDatabasesAsync();
+
+            await Task.WhenAll(syncTask, dbsTask);
+
+            var synced = syncTask.Result;
+            if (synced > 0)
+                StatusMessage = $"Synced {synced} new changes from DDL log";
+
+            // Update database list (save/restore selection since Clear() nulls the ComboBox binding)
+            var dbs = dbsTask.Result;
             Databases.Clear();
             foreach (var db in dbs)
-            {
                 Databases.Add(db);
-            }
             if (savedDb != null && Databases.Contains(savedDb))
                 SelectedDatabase = savedDb;
             if (SelectedDatabase == null && Databases.Contains("AAD"))
                 SelectedDatabase = "AAD";
 
-            // Load recent changes
+            // Load recent changes and objects in parallel
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -221,16 +228,21 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         StatusMessage = "Loading...";
 
-        var changes = await _db.GetRecentChangesAsync(SelectedDatabase);
+        // Run recent changes and objects fetch in parallel — they're independent
+        var changesTask = _db.GetRecentChangesAsync(SelectedDatabase);
+        var objectsTask = SelectedDatabase != null
+            ? _db.GetObjectsAsync(SelectedDatabase)
+            : Task.FromResult(new List<DatabaseObject>());
+
+        await Task.WhenAll(changesTask, objectsTask);
+
         RecentChanges.Clear();
-        foreach (var c in changes)
-        {
+        foreach (var c in changesTask.Result)
             RecentChanges.Add(c);
-        }
 
         if (SelectedDatabase != null)
         {
-            _allObjects = await _db.GetObjectsAsync(SelectedDatabase);
+            _allObjects = objectsTask.Result;
             FilterObjects();
         }
 

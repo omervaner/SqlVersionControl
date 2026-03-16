@@ -14,6 +14,7 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsService _settings;
+    private readonly SessionService _sessionService;
     private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
 
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _settings = new SettingsService();
+        _sessionService = new SessionService();
         _queryFileService = new QueryFileService();
         _viewModel = new MainWindowViewModel();
         DataContext = _viewModel;
@@ -52,7 +54,7 @@ public partial class MainWindow : Window
 
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel);
+        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService);
         if (qeHost != null)
             qeHost.ActiveTabChanged += () => { if (QueryEditorTab.IsChecked == true) BindActiveQueryTab(); };
 
@@ -93,8 +95,9 @@ public partial class MainWindow : Window
         MenuSaveAs.Click += async (_, _) => await OnMenuSaveAsAsync();
         MenuExit.Click += (_, _) => Close();
 
-        // Populate Recent Files submenu
+        // Populate Recent Files and Query History submenus
         RebuildRecentFilesMenu();
+        RebuildQueryHistoryMenu();
 
         // Edit menu — delegate to active tab's editor
         MenuUndo.Click += (_, _) => GetActiveEditor()?.Undo();
@@ -125,21 +128,7 @@ public partial class MainWindow : Window
 
     private async Task OnMenuChangeDatabaseAsync()
     {
-        if (QueryEditorTab.IsChecked == true)
-        {
-            // Focus the active query tab's database dropdown
-            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-            host?.FocusActiveDatabasePicker();
-        }
-        else if (CompareTab.IsChecked == true)
-        {
-            // Compare tab has its own source/target pickers — no-op
-        }
-        else
-        {
-            // Version History / Execution Plan — change server connection
-            await ChangeConnectionAsync();
-        }
+        await ChangeConnectionAsync();
     }
 
     private AvaloniaEdit.TextEditor? GetActiveEditor()
@@ -239,6 +228,55 @@ public partial class MainWindow : Window
                 }
             };
             MenuRecentFiles.Items.Add(item);
+        }
+    }
+
+    private void RebuildQueryHistoryMenu()
+    {
+        MenuQueryHistory.Items.Clear();
+        var history = _sessionService.GetQueryHistory();
+
+        if (history.Count == 0)
+        {
+            var empty = new MenuItem { Header = "(none)", IsEnabled = false };
+            MenuQueryHistory.Items.Add(empty);
+            return;
+        }
+
+        foreach (var entry in history)
+        {
+            var truncated = entry.SqlText.ReplaceLineEndings(" ");
+            if (truncated.Length > 80)
+                truncated = truncated[..77] + "...";
+
+            var dbLabel = !string.IsNullOrEmpty(entry.Database) ? $" [{entry.Database}]" : "";
+            var item = new MenuItem { Header = $"{truncated}{dbLabel}" };
+            ToolTip.SetTip(item, entry.SqlText);
+
+            var sql = entry.SqlText;
+            var db = entry.Database;
+            item.Click += (_, _) =>
+            {
+                var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                if (host != null)
+                {
+                    QueryEditorTab.IsChecked = true;
+                    host.AddNewTab();
+                    if (host.ActiveTabViewModel is { } vm)
+                    {
+                        var editor = host.GetActiveEditor();
+                        if (editor != null)
+                        {
+                            editor.Text = sql;
+                            vm.SetInitialText(sql);
+                        }
+                        if (db != null && vm.Databases.Contains(db))
+                            vm.SelectedDatabase = db;
+                    }
+                    RebuildQueryHistoryMenu();
+                }
+            };
+            MenuQueryHistory.Items.Add(item);
         }
     }
 
@@ -411,6 +449,10 @@ public partial class MainWindow : Window
     {
         _sleepDetector.Stop();
 
+        // Save session (tabs + query history)
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        host?.SaveSession();
+
         // Save window position/size
         var s = _settings.Settings;
         s.IsMaximized = WindowState == WindowState.Maximized;
@@ -453,7 +495,7 @@ public partial class MainWindow : Window
 
         if (dialog.Result != null)
         {
-            _viewModel.OnConnected(dialog.Result);
+            _viewModel.OnConnected(dialog.Result, dialog.ResultConnection);
             _sleepDetector.Start();
             UpdateStatusBar();
 
@@ -501,7 +543,7 @@ public partial class MainWindow : Window
 
         if (dialog.Result != null)
         {
-            _viewModel.OnConnected(dialog.Result);
+            _viewModel.OnConnected(dialog.Result, dialog.ResultConnection);
             _sleepDetector.Start();
             UpdateStatusBar();
 
@@ -562,7 +604,8 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.ConnectionDisplay))
+        if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.ConnectionDisplay)
+            or nameof(MainWindowViewModel.ConnectionColor))
         {
             UpdateStatusBar();
             this.Title = _viewModel.IsConnected
@@ -573,16 +616,21 @@ public partial class MainWindow : Window
 
     private void UpdateStatusBar()
     {
-        // Connection indicator
+        // Connection indicator — use profile color for dot + stripe, fallback #88a1bb
         if (_viewModel.IsConnected)
         {
-            ConnectionDot.Fill = Avalonia.Media.Brushes.LimeGreen;
+            var color = Avalonia.Media.Color.Parse(_viewModel.ConnectionColor);
+            var brush = new Avalonia.Media.SolidColorBrush(color);
+            ConnectionDot.Fill = brush;
             ConnectionText.Text = _viewModel.ConnectionDisplay;
+            ConnectionStripe.Background = brush;
+            ConnectionStripe.IsVisible = true;
         }
         else
         {
             ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
             ConnectionText.Text = "Disconnected";
+            ConnectionStripe.IsVisible = false;
         }
 
         // Query status section — only visible on Query Editor tab

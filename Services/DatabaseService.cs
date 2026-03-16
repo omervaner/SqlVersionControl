@@ -630,7 +630,7 @@ public class DatabaseService
     /// Uses a dedicated connection. Wires InfoMessage BEFORE OpenAsync so early PRINTs are captured.
     /// </summary>
     public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
-        string database, string sql, CancellationToken ct, int timeoutSeconds = 30)
+        string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
     {
         var results = new List<QueryResult>();
         var messages = new List<string>();
