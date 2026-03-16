@@ -154,6 +154,6 @@ public class SavedConnection
     public string? Name { get; set; }
     public string? Color { get; set; }
     public string DisplayName => Name != null
-        ? $"{Name} / {Database} ({(UseWindowsAuth ? "Windows" : Username)})"
+        ? $"{Name} ({Server}) / {Database} ({(UseWindowsAuth ? "Windows" : Username)})"
         : $"{Server} / {Database} ({(UseWindowsAuth ? "Windows" : Username)})";
 }
