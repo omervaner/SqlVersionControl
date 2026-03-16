@@ -143,6 +143,7 @@ CheatTeam/
 | `PlanXmlHelper.cs` | Extracts statement character offsets from raw plan XML for code-to-plan linking |
 | `DataEditService.cs` | Editable grid: simple SELECT parsing, PK fetching, DML generation, transactional apply |
 | `QueryFileService.cs` | Saved queries: save/load/list/delete .sql files with metadata headers |
+| `UpdateService.cs` | Velopack auto-update: check GitHub Releases, download, apply & restart |
 | `AppVersion.cs` | Static version string helper (reads from assembly) |
 
 ---
@@ -255,7 +256,30 @@ dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64-single
 ```
 
-### macOS App Bundle
+### Velopack Packaging (Auto-Update)
+```bash
+# Install Velopack CLI (one time)
+dotnet tool install -g vpk
+
+# macOS ARM64
+dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
+vpk pack --packId SqlVersionControl --packVersion 1.6.0 \
+  --packDir publish/osx-arm64 --mainExe SqlVersionControl \
+  --icon AppIcon.icns --outputDir Releases
+
+# Windows x64
+dotnet publish -c Release -r win-x64 --self-contained -o publish/win-x64
+vpk pack --packId SqlVersionControl --packVersion 1.6.0 \
+  --packDir publish/win-x64 --mainExe SqlVersionControl.exe \
+  --icon Assets/AppIcon.ico --outputDir Releases
+
+# Upload to GitHub Release
+vpk upload github --repoUrl https://github.com/omervaner/SqlVersionControl \
+  --token $GITHUB_TOKEN --publish --tag v1.6.0 --releaseName "v1.6.0" \
+  --outputDir Releases
+```
+
+### macOS App Bundle (legacy, pre-Velopack)
 ```bash
 mkdir -p publish/SqlVersionControl.app/Contents/{MacOS,Resources}
 cp -r publish/osx-arm64/* publish/SqlVersionControl.app/Contents/MacOS/

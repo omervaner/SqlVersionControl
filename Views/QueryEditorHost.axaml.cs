@@ -31,6 +31,10 @@ public partial class QueryEditorHost : UserControl
     // Intellisense cache: key = "connectionString|database"
     private readonly Dictionary<string, IntellisenseService> _intellisenseCache = new(StringComparer.OrdinalIgnoreCase);
 
+    // Panel collapse
+    private SettingsService? _settings;
+    private bool _oeCollapsed;
+
     private class CachedServerData
     {
         public List<string> Databases { get; set; } = [];
@@ -51,10 +55,11 @@ public partial class QueryEditorHost : UserControl
         InitializeComponent();
     }
 
-    public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService)
+    public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService, SettingsService settings)
     {
         _db = db;
         _sessionService = sessionService;
+        _settings = settings;
         _viewModel = new QueryEditorHostViewModel(db);
         DataContext = _viewModel;
 
@@ -75,6 +80,10 @@ public partial class QueryEditorHost : UserControl
         // Wire autocomplete toggle
         AutocompleteToggleButton.Click += OnAutocompleteToggleClicked;
         UpdateAutocompleteToggleVisual();
+
+        // Wire OE collapse button
+        OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
+        RestoreObjectExplorerState();
 
         // Restore session or create default tab
         RestoreSession();
@@ -109,6 +118,63 @@ public partial class QueryEditorHost : UserControl
     }
 
     public void ClearServerCaches() => _serverCache.Clear();
+
+    // ── Object Explorer Collapse ────────────────────────────────────
+
+    public void ToggleObjectExplorer()
+    {
+        var colDefs = MainGrid.ColumnDefinitions;
+        if (_oeCollapsed)
+        {
+            // Expand — restore saved width
+            var w = _settings?.Settings.ObjectExplorerWidth ?? 220;
+            colDefs[0].Width = new GridLength(w, GridUnitType.Pixel);
+            OeSplitter.IsEnabled = true;
+            ObjectExplorerPanel.IsVisible = true;
+            OeCollapseButton.Content = "\u25C0"; // ◀
+            _oeCollapsed = false;
+        }
+        else
+        {
+            // Save current width before collapsing
+            var currentWidth = colDefs[0].ActualWidth;
+            if (currentWidth > 30 && _settings != null)
+            {
+                _settings.Settings.ObjectExplorerWidth = currentWidth;
+            }
+            colDefs[0].Width = new GridLength(14, GridUnitType.Pixel);
+            OeSplitter.IsEnabled = false;
+            ObjectExplorerPanel.IsVisible = false;
+            OeCollapseButton.Content = "\u25B6"; // ▶
+            _oeCollapsed = true;
+        }
+
+        if (_settings != null)
+        {
+            _settings.Settings.ObjectExplorerCollapsed = _oeCollapsed;
+            _settings.Save();
+        }
+    }
+
+    private void RestoreObjectExplorerState()
+    {
+        if (_settings == null) return;
+        var s = _settings.Settings;
+
+        // Restore width
+        var w = s.ObjectExplorerWidth > 30 ? s.ObjectExplorerWidth : 220;
+        MainGrid.ColumnDefinitions[0].Width = new GridLength(w, GridUnitType.Pixel);
+
+        // Restore collapsed state
+        if (s.ObjectExplorerCollapsed)
+        {
+            MainGrid.ColumnDefinitions[0].Width = new GridLength(14, GridUnitType.Pixel);
+            OeSplitter.IsEnabled = false;
+            ObjectExplorerPanel.IsVisible = false;
+            OeCollapseButton.Content = "\u25B6"; // ▶
+            _oeCollapsed = true;
+        }
+    }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -161,7 +227,7 @@ public partial class QueryEditorHost : UserControl
         vm.QueryExecuted += (sql, db, rows) => _sessionService?.AddQueryToHistory(sql, db, rows);
 
         var tabView = new QueryTabView();
-        tabView.Initialize(vm);
+        tabView.Initialize(vm, _settings);
         tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
 
@@ -484,6 +550,12 @@ public partial class QueryEditorHost : UserControl
     {
         if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return null;
         return _tabs[_activeTabIndex].Editor;
+    }
+
+    public void ToggleActiveResultsPanel()
+    {
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            _tabs[_activeTabIndex].ToggleResultsPanel();
     }
 
     public void FocusActiveDatabasePicker()

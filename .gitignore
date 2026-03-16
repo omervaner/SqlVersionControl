@@ -52,6 +52,7 @@ bld/
 
 # Publish output
 publish/
+Releases/
 
 # JetBrains Rider
 .idea/

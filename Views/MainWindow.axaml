@@ -13,7 +13,7 @@
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="0">
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Title Bar: Menu + Color Stripe + Tab Row -->
         <Border Grid.Row="0" Background="{DynamicResource TitleBarBackground}">
             <Grid RowDefinitions="Auto,Auto,Auto">
@@ -82,8 +82,29 @@
             </Grid>
         </Border>
 
+        <!-- Update Notification Bar (hidden by default) -->
+        <Border Grid.Row="1" x:Name="UpdateBar" IsVisible="False"
+                Background="{DynamicResource ButtonToggleActive}" Padding="8,6">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" x:Name="UpdateText"
+                           Text="A new version is available"
+                           Foreground="White" FontSize="12"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1" x:Name="UpdateNowButton"
+                        Content="Update Now" Padding="12,4"
+                        Background="White" Foreground="{DynamicResource ButtonToggleActive}"
+                        FontWeight="Bold" FontSize="11"
+                        Cursor="Hand" Margin="8,0"/>
+                <Button Grid.Column="2" x:Name="UpdateLaterButton"
+                        Content="Later" Padding="8,4"
+                        Background="Transparent" Foreground="White"
+                        FontSize="11" Cursor="Hand"
+                        BorderThickness="1" BorderBrush="White"/>
+            </Grid>
+        </Border>
+
         <!-- Tab Content -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <!-- Query Editor Tab -->
             <views:QueryEditorHost IsVisible="{Binding #QueryEditorTab.IsChecked}" x:Name="QueryEditorHostControl"/>
 
@@ -181,8 +202,8 @@
                     </Border>
 
                     <!-- Resizable Splitter -->
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                                  Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" ResizeDirection="Columns"/>
+                    <GridSplitter Grid.Column="1" Width="3" HorizontalAlignment="Stretch"
+                                  Background="{DynamicResource BorderDefault}" ResizeDirection="Columns"/>
 
                     <!-- Right Panel: Recent Changes + Diff -->
                     <Grid Grid.Column="2" RowDefinitions="*,Auto,*">
@@ -211,8 +232,8 @@
                         </Grid>
 
                         <!-- Splitter -->
-                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                                      Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" ResizeDirection="Rows"/>
+                        <GridSplitter Grid.Row="1" Height="3" HorizontalAlignment="Stretch"
+                                      Background="{DynamicResource BorderDefault}" ResizeDirection="Rows"/>
 
                         <!-- Diff View -->
                         <Grid Grid.Row="2" RowDefinitions="Auto,*">
@@ -283,7 +304,7 @@
         </Grid>
 
         <!-- Reconnection Overlay (z-order: on top of everything) -->
-        <Panel Grid.Row="0" Grid.RowSpan="2" Background="{DynamicResource OverlayBackground}"
+        <Panel Grid.Row="0" Grid.RowSpan="3" Background="{DynamicResource OverlayBackground}"
                IsVisible="False" x:Name="ReconnectOverlay">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="15">
                 <TextBlock x:Name="ReconnectText" Text="Reconnecting..."
@@ -299,7 +320,7 @@
         </Panel>
 
         <!-- Status Bar -->
-        <Border Grid.Row="2" Background="{DynamicResource TitleBarBackground}"
+        <Border Grid.Row="3" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="8,4" Height="34">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">

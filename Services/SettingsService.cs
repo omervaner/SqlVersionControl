@@ -144,6 +144,12 @@ public class AppSettings
     public int MaxRecentConnections { get; set; } = 5;
     public string? DataFolderPath { get; set; }
     public bool AutocompleteEnabled { get; set; } = true;
+
+    // Panel collapse state
+    public bool ObjectExplorerCollapsed { get; set; }
+    public double ObjectExplorerWidth { get; set; } = 220;
+    public bool ResultsPanelCollapsed { get; set; }
+    public double ResultsPanelHeight { get; set; } = 200;
 }
 
 public class SavedConnection

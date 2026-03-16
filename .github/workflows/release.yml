@@ -1,16 +1,28 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            rid: osx-arm64
+            mainExe: SqlVersionControl
+            icon: AppIcon.icns
+            channel: osx
+          - os: windows-latest
+            rid: win-x64
+            mainExe: SqlVersionControl.exe
+            icon: Assets/AppIcon.ico
+            channel: win
+
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,75 +33,46 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Publish Windows x64
-        run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
 
-      - name: Upload Windows artifact
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: dotnet publish -c Release -r ${{ matrix.rid }} --self-contained -o publish/${{ matrix.rid }}
+
+      - name: Pack with Velopack
+        run: vpk pack --packId SqlVersionControl --packVersion ${{ steps.version.outputs.VERSION }} --packDir publish/${{ matrix.rid }} --mainExe ${{ matrix.mainExe }} --icon ${{ matrix.icon }} --outputDir Releases
+
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: publish/win-x64/SqlVersionControl.exe
+          name: releases-${{ matrix.channel }}
+          path: Releases/*
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Publish macOS ARM64
-        run: dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
-
-      - name: Create .app bundle
-        run: |
-          mkdir -p publish/SqlVersionControl.app/Contents/MacOS
-          mkdir -p publish/SqlVersionControl.app/Contents/Resources
-          cp -r publish/osx-arm64/* publish/SqlVersionControl.app/Contents/MacOS/
-          cp Info.plist publish/SqlVersionControl.app/Contents/
-          cp AppIcon.icns publish/SqlVersionControl.app/Contents/Resources/
-
-      - name: Ad-hoc code sign
-        run: codesign --force --deep --sign - publish/SqlVersionControl.app
-
-      - name: Create DMG
-        run: |
-          hdiutil create -srcfolder publish/SqlVersionControl.app -volname "SQL Version Control" -format UDZO publish/SqlVersionControl-macOS.dmg
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: publish/SqlVersionControl-macOS.dmg
-
-  release:
-    needs: [build-windows, build-macos]
+  publish:
+    needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Download Windows artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-build
-          path: artifacts/windows
+          path: all-releases
+          merge-multiple: true
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-build
-          path: artifacts/macos
+      - name: List release files
+        run: ls -lh all-releases/
 
-      - name: Rename artifacts with version
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          mv artifacts/windows/SqlVersionControl.exe "artifacts/SqlVersionControl-${TAG}-win-x64.exe"
-          mv artifacts/macos/SqlVersionControl-macOS.dmg "artifacts/SqlVersionControl-${TAG}-macOS.dmg"
-
-      - name: Upload to GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/SqlVersionControl-*
+          files: all-releases/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly SessionService _sessionService;
     private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
+    private UpdateService? _updateService;
 
     public SettingsService AppSettings => _settings;
 
@@ -54,7 +55,7 @@ public partial class MainWindow : Window
 
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService);
+        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings);
         if (qeHost != null)
             qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
 
@@ -80,6 +81,13 @@ public partial class MainWindow : Window
         VersionHistoryTab.Click += (_, _) => UpdateStatusBar();
         CompareTab.Click += (_, _) => UpdateStatusBar();
         PlanTab.Click += (_, _) => UpdateStatusBar();
+
+        // Wire update bar buttons
+        UpdateNowButton.Click += OnUpdateNowClicked;
+        UpdateLaterButton.Click += (_, _) => UpdateBar.IsVisible = false;
+
+        // Check for updates (non-blocking)
+        _ = CheckForUpdatesAsync();
 
         KeyDown += OnKeyDown;
         Opened += OnOpened;
@@ -123,7 +131,21 @@ public partial class MainWindow : Window
 
         // Help menu
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
-        MenuCheckUpdates.Click += (_, _) => OpenUrl("https://github.com/omervaner/SqlVersionControl/releases");
+        MenuCheckUpdates.Click += async (_, _) =>
+        {
+            _updateService ??= new UpdateService();
+
+            var hasUpdate = await _updateService.CheckForUpdateAsync();
+            if (hasUpdate)
+            {
+                UpdateText.Text = $"Version {_updateService.AvailableVersion} is available";
+                UpdateBar.IsVisible = true;
+            }
+            else
+            {
+                OpenUrl("https://github.com/omervaner/SqlVersionControl/releases");
+            }
+        };
     }
 
     private async Task OnMenuChangeDatabaseAsync()
@@ -342,6 +364,23 @@ public partial class MainWindow : Window
             case Key.D4:
                 PlanTab.IsChecked = true;
                 e.Handled = true;
+                break;
+
+            case Key.B:
+            {
+                var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                host?.ToggleObjectExplorer();
+                e.Handled = true;
+                break;
+            }
+
+            case Key.J:
+                if (QueryEditorTab.IsChecked == true)
+                {
+                    var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    host?.ToggleActiveResultsPanel();
+                    e.Handled = true;
+                }
                 break;
 
             case Key.F:
@@ -608,6 +647,46 @@ public partial class MainWindow : Window
             Process.Start("open", url);
         else
             Process.Start("xdg-open", url);
+    }
+
+    // ── Auto-Update ────────────────────────────────────────────────
+
+    private async Task CheckForUpdatesAsync()
+    {
+        _updateService = new UpdateService();
+        var hasUpdate = await _updateService.CheckForUpdateAsync();
+        if (!hasUpdate) return;
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            UpdateText.Text = $"Version {_updateService.AvailableVersion} is available";
+            UpdateBar.IsVisible = true;
+        });
+    }
+
+    private async void OnUpdateNowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_updateService == null) return;
+
+        UpdateNowButton.IsEnabled = false;
+        UpdateNowButton.Content = "Downloading...";
+
+        var success = await _updateService.DownloadUpdateAsync(progress =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                UpdateNowButton.Content = $"Downloading... {progress}%");
+        });
+
+        if (success)
+        {
+            UpdateNowButton.Content = "Restarting...";
+            _updateService.ApplyUpdateAndRestart();
+        }
+        else
+        {
+            UpdateNowButton.Content = "Update Failed";
+            UpdateNowButton.IsEnabled = true;
+        }
     }
 
     // ── Status Bar ──────────────────────────────────────────────────

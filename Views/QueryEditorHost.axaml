@@ -5,10 +5,10 @@
              x:Class="SqlVersionControl.Views.QueryEditorHost"
              x:DataType="vm:QueryEditorHostViewModel">
 
-    <Grid ColumnDefinitions="220,Auto,*">
+    <Grid x:Name="MainGrid" ColumnDefinitions="220,Auto,*">
 
         <!-- Object Explorer Panel (shared across all tabs) -->
-        <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+        <Border Grid.Column="0" x:Name="ObjectExplorerPanel" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,*">
                 <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
@@ -125,10 +125,25 @@
             </Grid>
         </Border>
 
-        <!-- Splitter -->
-        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                      Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                      ResizeDirection="Columns"/>
+        <!-- Splitter + Collapse Chevron -->
+        <Grid Grid.Column="1" Width="3">
+            <GridSplitter x:Name="OeSplitter" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource BorderDefault}"
+                          ResizeDirection="Columns"/>
+            <Button x:Name="OeCollapseButton"
+                    Content="&#x25C0;" FontSize="7"
+                    Width="12" Height="24"
+                    Padding="0" Margin="0"
+                    MinWidth="0" MinHeight="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    Foreground="{DynamicResource TextSecondary}"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    ToolTip.Tip="Toggle Object Explorer (Ctrl+B)"
+                    ZIndex="1"/>
+        </Grid>
 
         <!-- Right side: Query Tab Strip + Tab Content -->
         <Grid Grid.Column="2" RowDefinitions="Auto,*">

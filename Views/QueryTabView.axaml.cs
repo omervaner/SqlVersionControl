@@ -25,6 +25,8 @@ public partial class QueryTabView : UserControl
     private CompletionWindow? _completionWindow;
     private IntellisenseService? _intellisenseService;
     private Func<bool>? _isAutocompleteEnabled;
+    private SettingsService? _settings;
+    private bool _resultsCollapsed;
 
     // Row state colors — resolved from AppTheme resources at runtime
     private IBrush GetRowBrush(string key) =>
@@ -58,9 +60,10 @@ public partial class QueryTabView : UserControl
         _isAutocompleteEnabled = check;
     }
 
-    public void Initialize(QueryTabViewModel vm)
+    public void Initialize(QueryTabViewModel vm, SettingsService? settings = null)
     {
         _viewModel = vm;
+        _settings = settings;
         DataContext = vm;
 
         LoadSyntaxHighlighting();
@@ -96,6 +99,10 @@ public partial class QueryTabView : UserControl
 
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.KeyDown += OnResultsGridKeyDown;
+
+        // Wire results collapse button
+        ResultsCollapseButton.Click += (_, _) => ToggleResultsPanel();
+        RestoreResultsPanelState();
     }
 
     /// <summary>
@@ -866,6 +873,70 @@ public partial class QueryTabView : UserControl
     private void OnResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         RebuildResultTabs();
+
+        // Auto-expand results panel when new results arrive
+        if (_resultsCollapsed && _viewModel?.Results.Count > 0)
+        {
+            _resultsCollapsed = false;
+            var h = _settings?.Settings.ResultsPanelHeight ?? 200;
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(h, GridUnitType.Pixel);
+            ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.Content = "\u25BC"; // ▼
+            if (_settings != null)
+            {
+                _settings.Settings.ResultsPanelCollapsed = false;
+                _settings.Save();
+            }
+        }
+    }
+
+    // ── Results Panel Collapse ──────────────────────────────────────
+
+    public void ToggleResultsPanel()
+    {
+        var rowDefs = EditorResultsGrid.RowDefinitions;
+        if (_resultsCollapsed)
+        {
+            // Expand — restore saved height
+            var h = _settings?.Settings.ResultsPanelHeight ?? 200;
+            rowDefs[2].Height = new GridLength(h, GridUnitType.Pixel);
+            ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.Content = "\u25BC"; // ▼
+            _resultsCollapsed = false;
+        }
+        else
+        {
+            // Save current height before collapsing
+            var currentHeight = rowDefs[2].ActualHeight;
+            if (currentHeight > 30 && _settings != null)
+            {
+                _settings.Settings.ResultsPanelHeight = currentHeight;
+            }
+            rowDefs[2].Height = new GridLength(0, GridUnitType.Pixel);
+            ResultsSplitter.IsEnabled = false;
+            ResultsCollapseButton.Content = "\u25B2"; // ▲
+            _resultsCollapsed = true;
+        }
+
+        if (_settings != null)
+        {
+            _settings.Settings.ResultsPanelCollapsed = _resultsCollapsed;
+            _settings.Save();
+        }
+    }
+
+    private void RestoreResultsPanelState()
+    {
+        if (_settings == null) return;
+        var s = _settings.Settings;
+
+        if (s.ResultsPanelCollapsed)
+        {
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
+            ResultsSplitter.IsEnabled = false;
+            ResultsCollapseButton.Content = "\u25B2"; // ▲
+            _resultsCollapsed = true;
+        }
     }
 
     private void RebuildResultTabs()

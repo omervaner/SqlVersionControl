@@ -149,7 +149,6 @@ public class IntellisenseService
         // 2. After FROM/JOIN/INTO — suggest tables and views
         if (AfterFromJoinRegex.IsMatch(beforeWord))
         {
-            Console.WriteLine($"[Intellisense] Context: AFTER_FROM | word='{word}' | beforeWord=...'{Tail(beforeWord, 30)}'");
             return GetTableCompletions(word);
         }
 
@@ -161,7 +160,6 @@ public class IntellisenseService
             {
                 var fromTables = ParseFromTables(fullText, caretOffset);
                 var clause = clauseMatch.Groups[1].Value.Trim().ToUpperInvariant();
-                Console.WriteLine($"[Intellisense] Context: AFTER_{clause} | word='{word}' | fromTables=[{string.Join(", ", fromTables.Select(t => $"{t.schemaTable}({t.alias})"))}]");
                 if (fromTables.Count > 0)
                 {
                     var contextKeywords = clause switch
@@ -179,7 +177,6 @@ public class IntellisenseService
         }
 
         // 4. Default — keywords + table names
-        Console.WriteLine($"[Intellisense] Context: DEFAULT | word='{word}'");
         return GetDefaultCompletions(word);
     }
 

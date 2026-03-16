@@ -36,7 +36,7 @@
         </Border>
 
         <!-- Editor (top) + Results (bottom) -->
-        <Grid Grid.Row="1" RowDefinitions="*,Auto,*">
+        <Grid Grid.Row="1" x:Name="EditorResultsGrid" RowDefinitions="*,Auto,*">
             <!-- SQL Editor -->
             <Border Grid.Row="0" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                     BorderThickness="0,0,0,1">
@@ -51,10 +51,25 @@
                                VerticalScrollBarVisibility="Auto"/>
             </Border>
 
-            <!-- Splitter -->
-            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                          ResizeDirection="Rows"/>
+            <!-- Splitter + Collapse Chevron -->
+            <Grid Grid.Row="1" Height="3">
+                <GridSplitter x:Name="ResultsSplitter" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource BorderDefault}"
+                              ResizeDirection="Rows"/>
+                <Button x:Name="ResultsCollapseButton"
+                        Content="&#x25BC;" FontSize="7"
+                        Width="24" Height="12"
+                        Padding="0" Margin="0"
+                        MinWidth="0" MinHeight="0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        Foreground="{DynamicResource TextSecondary}"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        ToolTip.Tip="Toggle Results Panel (Ctrl+J)"
+                        ZIndex="1"/>
+            </Grid>
 
             <!-- Results Panel -->
             <Grid Grid.Row="2" RowDefinitions="Auto,*">
