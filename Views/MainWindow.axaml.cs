@@ -613,6 +613,7 @@ public partial class MainWindow : Window
     // ── Status Bar ──────────────────────────────────────────────────
 
     private QueryTabViewModel? _boundQueryTab;
+    private Avalonia.Threading.DispatcherTimer? _queryStatusTimer;
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -663,6 +664,7 @@ public partial class MainWindow : Window
         // Query status section — only visible on Query Editor tab
         QueryStatusSeparator.IsVisible = isQE;
         QueryStatusText.IsVisible = isQE;
+        if (!isQE) QueryFlashText.IsVisible = false;
 
         if (isQE)
             BindActiveQueryTab();
@@ -682,6 +684,7 @@ public partial class MainWindow : Window
         if (activeVm == null) return;
         _boundQueryTab = activeVm;
         _boundQueryTab.PropertyChanged += OnQueryTabPropertyChanged;
+        _boundQueryTab.QueryFlash += OnQueryFlash;
         QueryStatusText.Text = _boundQueryTab.QueryStatusText;
     }
 
@@ -690,9 +693,14 @@ public partial class MainWindow : Window
         if (_boundQueryTab != null)
         {
             _boundQueryTab.PropertyChanged -= OnQueryTabPropertyChanged;
+            _boundQueryTab.QueryFlash -= OnQueryFlash;
             _boundQueryTab = null;
         }
+        _queryStatusTimer?.Stop();
+        _queryStatusTimer = null;
         QueryStatusText.Text = "";
+        QueryFlashText.Text = "";
+        QueryFlashText.IsVisible = false;
     }
 
     private void OnQueryTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -700,6 +708,36 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(QueryTabViewModel.QueryStatusText) && _boundQueryTab != null)
             QueryStatusText.Text = _boundQueryTab.QueryStatusText;
     }
+
+    private void OnQueryFlash(string message, QueryStatusSeverity severity)
+    {
+        QueryFlashText.Text = message;
+        QueryFlashText.IsVisible = true;
+        QueryFlashText.Foreground = severity switch
+        {
+            QueryStatusSeverity.Success => GetBrush("ButtonPrimary"),
+            QueryStatusSeverity.Warning => GetBrush("WarningSeverityWarning"),
+            QueryStatusSeverity.Error => GetBrush("ButtonDanger"),
+            _ => GetBrush("TextSecondary"),
+        };
+
+        _queryStatusTimer?.Stop();
+        _queryStatusTimer = new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(3)
+        };
+        _queryStatusTimer.Tick += (_, _) =>
+        {
+            _queryStatusTimer?.Stop();
+            _queryStatusTimer = null;
+            QueryFlashText.Foreground = GetBrush("TextSecondary");
+        };
+        _queryStatusTimer.Start();
+    }
+
+    private static Avalonia.Media.IBrush GetBrush(string key) =>
+        Avalonia.Application.Current?.Resources.TryGetResource(key, null, out var r) == true
+        && r is Avalonia.Media.IBrush b ? b : Avalonia.Media.Brushes.Gray;
 
     // ── Quick-Switch Buttons ────────────────────────────────────────
 

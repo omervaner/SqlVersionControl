@@ -143,6 +143,7 @@ public class AppSettings
     public int FontSize { get; set; } = 12;
     public int MaxRecentConnections { get; set; } = 5;
     public string? DataFolderPath { get; set; }
+    public bool AutocompleteEnabled { get; set; } = true;
 }
 
 public class SavedConnection

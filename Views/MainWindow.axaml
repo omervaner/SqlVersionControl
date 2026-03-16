@@ -302,7 +302,7 @@
         <Border Grid.Row="2" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="8,4" Height="34">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <!-- Connection indicator -->
                 <Ellipse x:Name="ConnectionDot" Grid.Column="0"
                          Width="8" Height="8" VerticalAlignment="Center"
@@ -323,13 +323,18 @@
                            VerticalAlignment="Center"
                            x:Name="QueryStatusSeparator" IsVisible="False"/>
 
-                <!-- Query status (only on Query Editor tab) -->
+                <!-- Query timing (permanent, only on Query Editor tab) -->
                 <TextBlock x:Name="QueryStatusText" Grid.Column="4"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" IsVisible="False"/>
 
+                <!-- Query flash message (colored, fades after 3s) -->
+                <TextBlock x:Name="QueryFlashText" Grid.Column="5"
+                           Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
+
                 <!-- General status (right-aligned) -->
-                <TextBlock Grid.Column="6" Text="{Binding StatusMessage}"
+                <TextBlock Grid.Column="7" Text="{Binding StatusMessage}"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center"/>
             </Grid>

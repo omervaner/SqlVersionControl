@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -7,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
+using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Highlighting;
 using AvaloniaEdit.Highlighting.Xshd;
 using SqlVersionControl.Converters;
@@ -20,6 +22,9 @@ public partial class QueryTabView : UserControl
 {
     private QueryTabViewModel? _viewModel;
     private int _selectedTabIndex = -1;
+    private CompletionWindow? _completionWindow;
+    private IntellisenseService? _intellisenseService;
+    private Func<bool>? _isAutocompleteEnabled;
 
     // Row state colors — resolved from AppTheme resources at runtime
     private IBrush GetRowBrush(string key) =>
@@ -41,6 +46,16 @@ public partial class QueryTabView : UserControl
     {
         DatabaseCombo.IsDropDownOpen = true;
         DatabaseCombo.Focus();
+    }
+
+    public void SetIntellisenseService(IntellisenseService service)
+    {
+        _intellisenseService = service;
+    }
+
+    public void SetAutocompleteCheck(Func<bool> check)
+    {
+        _isAutocompleteEnabled = check;
     }
 
     public void Initialize(QueryTabViewModel vm)
@@ -125,6 +140,13 @@ public partial class QueryTabView : UserControl
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        if (ctrl && e.Key == Key.Space)
+        {
+            e.Handled = true;
+            ShowCompletionWindow();
+            return true;
+        }
 
         if (e.Key == Key.F5 || (ctrl && e.Key == Key.Enter))
         {
@@ -217,57 +239,114 @@ public partial class QueryTabView : UserControl
             if (_viewModel != null)
                 _viewModel.SqlText = SqlEditor.Text;
         };
+
+        SqlEditor.TextArea.TextEntering += OnTextEntering;
+        SqlEditor.TextArea.TextEntered += OnTextEntered;
+    }
+
+    // ── Intellisense / Autocomplete ─────────────────────────────────
+
+    private void OnTextEntering(object? sender, TextInputEventArgs e)
+    {
+        if (_completionWindow == null || string.IsNullOrEmpty(e.Text)) return;
+
+        var ch = e.Text[0];
+        if (!char.IsLetterOrDigit(ch) && ch != '_')
+        {
+            _completionWindow.CompletionList.RequestInsertion(e);
+            _completionWindow = null; // Clear immediately, don't wait for Closed event
+        }
+    }
+
+    private void OnTextEntered(object? sender, TextInputEventArgs e)
+    {
+        if (_intellisenseService == null || string.IsNullOrEmpty(e.Text)) return;
+        if (_isAutocompleteEnabled?.Invoke() == false) return;
+
+        var ch = e.Text[0];
+        if (!char.IsLetter(ch) && ch != '.') return;
+
+        ShowCompletionWindow(ch == '.');
+    }
+
+    private void ShowCompletionWindow(bool isDot = false)
+    {
+        if (_intellisenseService == null) return;
+
+        // Close any existing window and clear the reference
+        if (_completionWindow != null)
+        {
+            _completionWindow.Close();
+            _completionWindow = null;
+        }
+
+        var text = SqlEditor.Text;
+        var offset = SqlEditor.CaretOffset;
+
+        var completions = _intellisenseService.GetCompletions(text, offset);
+        if (completions.Count == 0) return;
+
+        _completionWindow = new CompletionWindow(SqlEditor.TextArea);
+
+        if (!isDot)
+        {
+            var wordStart = offset;
+            while (wordStart > 0 && (char.IsLetterOrDigit(text[wordStart - 1]) || text[wordStart - 1] == '_'))
+                wordStart--;
+            _completionWindow.StartOffset = wordStart;
+        }
+
+        _completionWindow.Closed += (_, _) =>
+        {
+            SqlEditor.TextChanged -= OnTextChangedWhileCompleting;
+            _completionWindow = null;
+        };
+
+        foreach (var item in completions)
+            _completionWindow.CompletionList.CompletionData.Add(item);
+
+        _completionWindow.Show();
+        SqlEditor.TextChanged += OnTextChangedWhileCompleting;
+    }
+
+    private void OnTextChangedWhileCompleting(object? sender, EventArgs e)
+    {
+        if (_completionWindow == null) return;
+
+        if (SqlEditor.CaretOffset <= _completionWindow.StartOffset)
+            _completionWindow.Close();
     }
 
     // ── Edit Mode ─────────────────────────────────────────────────────
 
     private void OnEditModeChanged()
     {
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        if (_viewModel == null) return;
+
+        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+            ? _selectedTabIndex : 0;
+
+        if (_viewModel.IsEditMode && _viewModel.EditableRows != null &&
+            resultIndex < _viewModel.Results.Count)
         {
-            if (_viewModel == null) return;
-
-            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-                ? _selectedTabIndex : 0;
-
-            if (_viewModel.IsEditMode && _viewModel.EditableRows != null &&
-                resultIndex < _viewModel.Results.Count)
-            {
-                // Enter edit mode: toggle columns writable + swap to EditableRows
-                SetColumnsReadOnly(false);
-                ResultsGrid.IsReadOnly = false;
-                ResultsGrid.CanUserSortColumns = false;
-                ResultsGrid.ItemsSource = _viewModel.EditableRows;
-                SetupEditContextMenu();
-            }
-            else
-            {
-                // Exit edit mode: toggle columns read-only + swap back to raw rows
-                SetColumnsReadOnly(true);
-                ResultsGrid.IsReadOnly = true;
-                ResultsGrid.CanUserSortColumns = true;
-                ResultsGrid.ContextMenu = null;
-
-                if (_viewModel.Results.Count > 0 && resultIndex < _viewModel.Results.Count)
-                {
-                    var result = _viewModel.Results[resultIndex];
-                    if (result.Error == null)
-                        ResultsGrid.ItemsSource = result.Rows;
-                }
-            }
-
-            UpdateEditModeButton();
-            UpdateEditBar();
-        });
-    }
-
-    private void SetColumnsReadOnly(bool readOnly)
-    {
-        foreach (var col in ResultsGrid.Columns)
-        {
-            if (col is DataGridTextColumn textCol)
-                textCol.IsReadOnly = readOnly;
+            // Enter edit mode: rebuild columns without converter + swap to EditableRows
+            var result = _viewModel.Results[resultIndex];
+            BuildColumns(result, isEditMode: true);
+            ResultsGrid.IsReadOnly = false;
+            ResultsGrid.CanUserSortColumns = false;
+            ResultsGrid.ItemsSource = _viewModel.EditableRows;
+            SetupEditContextMenu();
         }
+        else
+        {
+            // Exit edit mode: delegate to SelectResultTab (single source of truth)
+            ResultsGrid.CanUserSortColumns = true;
+            if (resultIndex >= 0 && resultIndex < (_viewModel.Results?.Count ?? 0))
+                SelectResultTab(resultIndex);
+        }
+
+        UpdateEditModeButton();
+        UpdateEditBar();
     }
 
     private async void OnResultsGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -296,6 +375,13 @@ public partial class QueryTabView : UserControl
     private async void OnResultsGridKeyDown(object? sender, KeyEventArgs e)
     {
         if (_viewModel is not { IsEditMode: true }) return;
+
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            _viewModel.CancelChangesCommand.Execute(null);
+            return;
+        }
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
@@ -359,8 +445,15 @@ public partial class QueryTabView : UserControl
     {
         if (_viewModel == null) return;
 
-        EditBar.IsVisible = _viewModel.IsEditMode;
-        if (_viewModel.IsEditMode)
+        var editing = _viewModel.IsEditMode;
+        PendingChangesText.IsVisible = editing;
+        AddRowButton.IsVisible = editing;
+        ShowSqlButton.IsVisible = editing;
+        ApplyButton.IsVisible = editing;
+        CancelButton.IsVisible = editing;
+        EditSeparator.IsVisible = editing;
+
+        if (editing)
         {
             var count = _viewModel.PendingChangeCount;
             PendingChangesText.Text = count == 0
@@ -542,33 +635,154 @@ public partial class QueryTabView : UserControl
         var result = _viewModel.Results[resultIndex];
         if (result.Error != null) return;
 
+        // Determine which rows to export
+        var selectedRows = GetSelectedRows();
+        var rowsToExport = selectedRows.Count > 0 ? selectedRows : result.Rows;
+        var isPartial = selectedRows.Count > 0;
+
+        var path = await ShowExcelSaveDialog();
+        if (path == null) return;
+
+        try
+        {
+            ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rowsToExport, path);
+            _viewModel.StatusText = isPartial
+                ? $"Exported {rowsToExport.Count:N0} of {result.RowCount:N0} rows to {Path.GetFileName(path)}"
+                : $"Exported {result.RowCount:N0} rows to {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusText = $"Export failed: {ex.Message}";
+        }
+    }
+
+    private List<object?[]> GetSelectedRows()
+    {
+        var list = new List<object?[]>();
+        foreach (var item in ResultsGrid.SelectedItems)
+        {
+            if (item is object?[] row) list.Add(row);
+        }
+        return list;
+    }
+
+    private async Task<string?> ShowExcelSaveDialog()
+    {
         var topLevel = TopLevel.GetTopLevel(this);
-        if (topLevel == null) return;
+        if (topLevel == null) return null;
 
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(
-            new Avalonia.Platform.Storage.FilePickerSaveOptions
+            new FilePickerSaveOptions
             {
                 Title = "Export to Excel",
                 SuggestedFileName = "results",
                 DefaultExtension = "xlsx",
                 FileTypeChoices =
                 [
-                    new Avalonia.Platform.Storage.FilePickerFileType("Excel Files") { Patterns = ["*.xlsx"] },
+                    new FilePickerFileType("Excel Files") { Patterns = ["*.xlsx"] },
                 ]
             });
 
-        if (file == null) return;
-        var path = file.TryGetLocalPath();
-        if (path == null) return;
+        return file?.TryGetLocalPath();
+    }
 
-        try
+    // ── Read-Only Context Menu ─────────────────────────────────────────
+
+    private void SetupReadOnlyContextMenu()
+    {
+        var menu = new ContextMenu();
+
+        var exportSelected = new MenuItem { Header = "Export Selected to Excel" };
+        exportSelected.Click += async (_, _) =>
         {
-            ExportService.ExportToExcel(result, path);
-            _viewModel.StatusText = $"Exported {result.RowCount:N0} rows to {Path.GetFileName(path)}";
+            var rows = GetSelectedRows();
+            if (rows.Count == 0 || _viewModel == null) return;
+
+            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+                ? _selectedTabIndex : 0;
+            var result = _viewModel.Results[resultIndex];
+
+            var path = await ShowExcelSaveDialog();
+            if (path == null) return;
+
+            try
+            {
+                ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rows, path);
+                _viewModel.StatusText = $"Exported {rows.Count:N0} of {result.RowCount:N0} rows to {Path.GetFileName(path)}";
+            }
+            catch (Exception ex)
+            {
+                _viewModel.StatusText = $"Export failed: {ex.Message}";
+            }
+        };
+
+        var copyInsert = new MenuItem { Header = "Copy as INSERT" };
+        copyInsert.Click += async (_, _) => await CopyAsInsertAsync();
+
+        var copyRows = new MenuItem { Header = "Copy Selected Rows" };
+        copyRows.Click += async (_, _) => await CopySelectedRowsAsync();
+
+        menu.Items.Add(exportSelected);
+        menu.Items.Add(copyInsert);
+        menu.Items.Add(copyRows);
+
+        menu.Opening += (_, _) =>
+        {
+            var hasSelection = ResultsGrid.SelectedItems.Count > 0;
+            var hasTable = _viewModel?.EditTableSchema != null && _viewModel?.EditTableName != null;
+
+            exportSelected.IsVisible = hasSelection;
+            copyInsert.IsVisible = hasSelection && hasTable;
+            copyRows.IsVisible = hasSelection;
+        };
+
+        ResultsGrid.ContextMenu = menu;
+    }
+
+    private async Task CopyAsInsertAsync()
+    {
+        if (_viewModel == null) return;
+        var rows = GetSelectedRows();
+        if (rows.Count == 0 || _viewModel.EditTableSchema == null || _viewModel.EditTableName == null) return;
+
+        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+            ? _selectedTabIndex : 0;
+        var result = _viewModel.Results[resultIndex];
+
+        var sql = ExportService.GenerateInsertStatements(
+            _viewModel.EditTableSchema, _viewModel.EditTableName,
+            result.ColumnNames, result.ColumnTypes, rows);
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(sql);
+            _viewModel.StatusText = $"Copied {rows.Count} INSERT statement{(rows.Count == 1 ? "" : "s")}";
         }
-        catch (Exception ex)
+    }
+
+    private async Task CopySelectedRowsAsync()
+    {
+        if (_viewModel == null) return;
+        var rows = GetSelectedRows();
+        if (rows.Count == 0) return;
+
+        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+            ? _selectedTabIndex : 0;
+        var result = _viewModel.Results[resultIndex];
+
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join("\t", result.ColumnNames));
+        foreach (var row in rows)
         {
-            _viewModel.StatusText = $"Export failed: {ex.Message}";
+            sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+        }
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(sb.ToString());
+            _viewModel.StatusText = $"Copied {rows.Count} row{(rows.Count == 1 ? "" : "s")}";
         }
     }
 
@@ -742,6 +956,7 @@ public partial class QueryTabView : UserControl
         ResultsGrid.ItemsSource = result.Rows;
         ResultsGrid.IsReadOnly = true;
         ResultsGrid.IsVisible = true;
+        SetupReadOnlyContextMenu();
         UpdateTabHighlight(index);
     }
 
@@ -750,20 +965,25 @@ public partial class QueryTabView : UserControl
 
     /// <summary>
     /// Single source of truth for building result grid columns.
-    /// Columns use TwoWay + NullDisplayConverter so they work for both read-only and edit mode.
+    /// Read-only mode: TwoWay + NullDisplayConverter (shows "NULL" for nulls).
+    /// Edit mode: TwoWay, no converter (raw values, empty = null).
     /// </summary>
-    private void BuildColumns(QueryResult result)
+    private void BuildColumns(QueryResult result, bool isEditMode = false)
     {
         ResultsGrid.Columns.Clear();
         ResultsGrid.AutoGenerateColumns = false;
 
         for (int i = 0; i < result.ColumnNames.Length; i++)
         {
+            var binding = new Binding($"[{i}]", BindingMode.TwoWay);
+            if (!isEditMode)
+                binding.Converter = _nullTextConverter;
+
             ResultsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
-                Binding = new Binding($"[{i}]", BindingMode.TwoWay) { Converter = _nullTextConverter },
-                IsReadOnly = true,
+                Binding = binding,
+                IsReadOnly = !isEditMode,
             });
         }
     }

@@ -134,11 +134,21 @@
         <Grid Grid.Column="2" RowDefinitions="Auto,*">
             <!-- Tab Strip -->
             <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,2">
-                <Grid ColumnDefinitions="*,Auto">
+                <Grid ColumnDefinitions="*,Auto,Auto">
                     <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
                     </ScrollViewer>
-                    <Button Grid.Column="1" x:Name="QueryHistoryButton"
+                    <Button Grid.Column="1" x:Name="AutocompleteToggleButton"
+                            Background="{DynamicResource ButtonToggleActive}"
+                            Foreground="White"
+                            Padding="6,3" FontSize="11" FontWeight="Bold"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource BorderDefault}"
+                            Cursor="Hand"
+                            Margin="2,0"
+                            ToolTip.Tip="Toggle Autocomplete"
+                            Content="AC"/>
+                    <Button Grid.Column="2" x:Name="QueryHistoryButton"
                             Background="Transparent"
                             Foreground="{DynamicResource TextSecondary}"
                             Padding="10,6" FontSize="14"

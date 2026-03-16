@@ -28,6 +28,9 @@ public partial class QueryEditorHost : UserControl
     private string? _primaryConnectionString;
     private SavedConnection? _primaryProfile;
 
+    // Intellisense cache: key = "connectionString|database"
+    private readonly Dictionary<string, IntellisenseService> _intellisenseCache = new(StringComparer.OrdinalIgnoreCase);
+
     private class CachedServerData
     {
         public List<string> Databases { get; set; } = [];
@@ -68,6 +71,10 @@ public partial class QueryEditorHost : UserControl
 
         // Wire history button
         QueryHistoryButton.Click += OnHistoryButtonClicked;
+
+        // Wire autocomplete toggle
+        AutocompleteToggleButton.Click += OnAutocompleteToggleClicked;
+        UpdateAutocompleteToggleVisual();
 
         // Restore session or create default tab
         RestoreSession();
@@ -146,6 +153,8 @@ public partial class QueryEditorHost : UserControl
         {
             if (e.PropertyName is nameof(QueryTabViewModel.HasUnsavedChanges) or nameof(QueryTabViewModel.TabTitle))
                 RebuildTabStrip();
+            if (e.PropertyName == nameof(QueryTabViewModel.SelectedDatabase))
+                OnTabDatabaseChanged(vm);
         };
 
         // Record query history on successful execution
@@ -153,6 +162,7 @@ public partial class QueryEditorHost : UserControl
 
         var tabView = new QueryTabView();
         tabView.Initialize(vm);
+        tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
 
         _tabs.Add(tabView);
@@ -253,7 +263,12 @@ public partial class QueryEditorHost : UserControl
         {
             var activeVm = _tabs[index].DataContext as QueryTabViewModel;
             if (activeVm != null)
+            {
                 UpdateObjectExplorerForTab(activeVm);
+                // Push cached intellisense service to the tab
+                if (activeVm.SelectedDatabase != null)
+                    OnTabDatabaseChanged(activeVm);
+            }
         }
 
         RebuildTabStrip();
@@ -379,6 +394,48 @@ public partial class QueryEditorHost : UserControl
         ToolTip.SetTip(addBtn, "New Query (Ctrl+N)");
         addBtn.Click += (_, _) => AddNewTab();
         TabStrip.Children.Add(addBtn);
+    }
+
+    // ── Intellisense Schema Cache ─────────────────────────────────────
+
+    private async void OnTabDatabaseChanged(QueryTabViewModel tabVm)
+    {
+        if (_db == null || string.IsNullOrEmpty(tabVm.SelectedDatabase)) return;
+
+        var connStr = tabVm.TabConnectionString ?? _primaryConnectionString;
+        if (connStr == null) return;
+
+        var cacheKey = $"{connStr}|{tabVm.SelectedDatabase}";
+
+        if (!_intellisenseCache.TryGetValue(cacheKey, out var service))
+        {
+            service = new IntellisenseService();
+            _intellisenseCache[cacheKey] = service;
+
+            try
+            {
+                var effectiveConn = tabVm.GetEffectiveConnectionString(tabVm.SelectedDatabase);
+                var tables = await _db.GetTablesAsync(effectiveConn, tabVm.SelectedDatabase);
+                var views = await _db.GetViewsAsync(effectiveConn, tabVm.SelectedDatabase);
+                var columns = await _db.GetAllColumnsAsync(effectiveConn, tabVm.SelectedDatabase);
+                service.SetSchema(tables, views, columns);
+            }
+            catch
+            {
+                // Schema loading failed — intellisense will show keywords only
+            }
+        }
+
+        var tabIndex = FindTabIndex(tabVm);
+        if (tabIndex >= 0 && tabIndex < _tabs.Count)
+            _tabs[tabIndex].SetIntellisenseService(service);
+    }
+
+    private int FindTabIndex(QueryTabViewModel vm)
+    {
+        for (int i = 0; i < _tabs.Count; i++)
+            if (_tabs[i].DataContext == vm) return i;
+        return -1;
     }
 
     // ── Public API (for MainWindow) ──────────────────────────────────
@@ -738,6 +795,40 @@ public partial class QueryEditorHost : UserControl
             _restoringSession = false;
         }
     }
+
+    // ── Autocomplete Toggle ────────────────────────────────────────
+
+    private void OnAutocompleteToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var settings = GetSettingsService();
+        if (settings == null) return;
+
+        settings.Settings.AutocompleteEnabled = !settings.Settings.AutocompleteEnabled;
+        settings.Save();
+        UpdateAutocompleteToggleVisual();
+    }
+
+    private void UpdateAutocompleteToggleVisual()
+    {
+        var enabled = GetSettingsService()?.Settings.AutocompleteEnabled ?? true;
+
+        if (enabled)
+        {
+            AutocompleteToggleButton.Background = FindBrush("ButtonToggleActive");
+            AutocompleteToggleButton.Foreground = Brushes.White;
+            AutocompleteToggleButton.BorderThickness = new Thickness(1);
+            AutocompleteToggleButton.BorderBrush = FindBrush("BorderDefault");
+        }
+        else
+        {
+            AutocompleteToggleButton.Background = FindBrush("ButtonSecondary");
+            AutocompleteToggleButton.Foreground = FindBrush("TextSecondary");
+            AutocompleteToggleButton.BorderThickness = new Thickness(0);
+        }
+    }
+
+    /// <summary>Whether autocomplete is currently enabled (checked by QueryTabView).</summary>
+    public bool IsAutocompleteEnabled => GetSettingsService()?.Settings.AutocompleteEnabled ?? true;
 
     // ── Query History ────────────────────────────────────────────────
 

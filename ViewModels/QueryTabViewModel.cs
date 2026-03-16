@@ -7,6 +7,8 @@ using SqlVersionControl.Services;
 
 namespace SqlVersionControl.ViewModels;
 
+public enum QueryStatusSeverity { None, Success, Warning, Error }
+
 public partial class QueryTabViewModel : ObservableObject
 {
     private readonly DatabaseService _db;
@@ -22,6 +24,9 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private string _statusText = "Ready";
     [ObservableProperty] private string _tabTitle = "Query 1";
     [ObservableProperty] private string _queryStatusText = "";
+
+    /// <summary>Fired with (message, severity) for transient status flash in the status bar.</summary>
+    public event Action<string, QueryStatusSeverity>? QueryFlash;
 
     // SqlText and SelectedSqlText are set by the View (AvaloniaEdit doesn't support two-way binding)
     public string SelectedSqlText { get; set; } = "";
@@ -116,7 +121,11 @@ public partial class QueryTabViewModel : ObservableObject
     private string? _editTableSchema;
     private string? _editTableName;
     private List<string>? _editPkColumns;
+
+    public string? EditTableSchema => _editTableSchema;
+    public string? EditTableName => _editTableName;
     private string? _lastExecutedSql;
+    private bool _suppressNextFlash;
 
     /// <summary>The editable row wrappers (set when entering edit mode).</summary>
     public ObservableCollection<EditableRow>? EditableRows { get; private set; }
@@ -149,7 +158,7 @@ public partial class QueryTabViewModel : ObservableObject
     public string TabConnectionColor =>
         TabConnectionProfile?.Color ?? "#88a1bb";
 
-    private string GetEffectiveConnectionString(string database)
+    public string GetEffectiveConnectionString(string database)
     {
         if (TabConnectionString != null)
             return DatabaseService.BuildConnectionString(TabConnectionString, database);
@@ -222,6 +231,15 @@ public partial class QueryTabViewModel : ObservableObject
                 : $"{Results.Count} result set(s), {totalRows:N0} total rows";
             QueryStatusText = $"{totalRows:N0} rows, {elapsed}";
 
+            if (!_suppressNextFlash)
+            {
+                var hasColumns = results.Any(r => r.Error == null && r.ColumnNames.Length > 0);
+                QueryFlash?.Invoke(
+                    hasColumns ? $"\u2713 {totalRows:N0} rows" : $"\u2713 {totalRows:N0} rows affected",
+                    QueryStatusSeverity.Success);
+            }
+            _suppressNextFlash = false;
+
             // Record in query history
             QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);
 
@@ -243,7 +261,8 @@ public partial class QueryTabViewModel : ObservableObject
         {
             sw.Stop();
             StatusText = "Query cancelled";
-            QueryStatusText = "Cancelled";
+            QueryStatusText = "";
+            QueryFlash?.Invoke("\u2298 Cancelled", QueryStatusSeverity.Warning);
             AutoEnterEditMode = false;
         }
         catch (Exception ex)
@@ -251,7 +270,12 @@ public partial class QueryTabViewModel : ObservableObject
             sw.Stop();
             Messages = $"Error: {ex.Message}";
             StatusText = "Error";
-            QueryStatusText = "Error";
+            QueryStatusText = "";
+            // Try to extract line number from SQL error (e.g. "Line 12")
+            var lineMatch = System.Text.RegularExpressions.Regex.Match(ex.Message, @"Line (\d+)");
+            QueryFlash?.Invoke(
+                lineMatch.Success ? $"\u2717 Error (Line {lineMatch.Groups[1].Value})" : "\u2717 Error",
+                QueryStatusSeverity.Error);
             AutoEnterEditMode = false;
         }
         finally
@@ -482,7 +506,11 @@ public partial class QueryTabViewModel : ObservableObject
             _editTableSchema == null || _editTableName == null) return;
 
         var pendingRows = EditableRows.Where(r => r.State != RowEditState.None).ToList();
-        if (pendingRows.Count == 0) return;
+        if (pendingRows.Count == 0)
+        {
+            ExitEditMode();
+            return;
+        }
 
         StatusText = "Applying changes...";
 
@@ -497,10 +525,14 @@ public partial class QueryTabViewModel : ObservableObject
         if (success)
         {
             StatusText = message;
-            // Re-run the query to get fresh data
+            QueryFlash?.Invoke($"\u2713 {pendingRows.Count} row{(pendingRows.Count == 1 ? "" : "s")} affected", QueryStatusSeverity.Success);
+            // Re-run the query to get fresh data (suppress its flash — DML flash is already showing)
             ExitEditMode();
             if (!string.IsNullOrEmpty(_lastExecutedSql))
+            {
+                _suppressNextFlash = true;
                 await RunQueryAsync();
+            }
         }
         else
         {

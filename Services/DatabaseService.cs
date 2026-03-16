@@ -965,4 +965,37 @@ public class DatabaseService
 
         return results;
     }
+
+    // ── Bulk column loader (for intellisense) ────────────────────────
+
+    public async Task<Dictionary<string, List<string>>> GetAllColumnsAsync(string database)
+        => await GetAllColumnsAsync(_connectionString, database);
+
+    public async Task<Dictionary<string, List<string>>> GetAllColumnsAsync(string connectionString, string database)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
+            FROM [{safeDb}].INFORMATION_SCHEMA.COLUMNS
+            ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var key = $"{reader.GetString(0)}.{reader.GetString(1)}";
+            if (!result.TryGetValue(key, out var cols))
+            {
+                cols = new List<string>();
+                result[key] = cols;
+            }
+            cols.Add(reader.GetString(2));
+        }
+        return result;
+    }
 }
