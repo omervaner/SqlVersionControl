@@ -16,11 +16,21 @@ public class DatabaseService
 
     public bool IsConnected => !string.IsNullOrEmpty(_connectionString);
 
+    // ── Static helper for per-tab connection strings ───────────────
+    public static string BuildConnectionString(string baseConnectionString, string database)
+    {
+        var builder = new SqlConnectionStringBuilder(baseConnectionString) { InitialCatalog = database };
+        return builder.ConnectionString;
+    }
+
     public async Task<bool> TestConnectionAsync()
+        => await TestConnectionAsync(_connectionString);
+
+    public async Task<bool> TestConnectionAsync(string connectionString)
     {
         try
         {
-            using var conn = new SqlConnection(_connectionString);
+            using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
             return true;
         }
@@ -31,9 +41,12 @@ public class DatabaseService
     }
 
     public async Task<List<string>> GetDatabasesAsync()
+        => await GetDatabasesAsync(_connectionString);
+
+    public async Task<List<string>> GetDatabasesAsync(string connectionString)
     {
         var databases = new List<string>();
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         using var cmd = new SqlCommand(
@@ -617,13 +630,7 @@ public class DatabaseService
     /// Used by Query Editor so it runs on a dedicated connection.
     /// </summary>
     public string GetConnectionStringForDatabase(string database)
-    {
-        var builder = new SqlConnectionStringBuilder(_connectionString)
-        {
-            InitialCatalog = database
-        };
-        return builder.ConnectionString;
-    }
+        => BuildConnectionString(_connectionString, database);
 
     /// <summary>
     /// Executes one or more SQL batches (split on GO) against the given database.
@@ -631,12 +638,22 @@ public class DatabaseService
     /// </summary>
     public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
         string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
+        => await ExecuteQueryCoreAsync(GetConnectionStringForDatabase(database), sql, ct, timeoutSeconds);
+
+    /// <summary>
+    /// Per-tab overload: executes SQL against a specific server's database.
+    /// connectionString = server-level conn string, database = target DB.
+    /// </summary>
+    public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
+        string connectionString, string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
+        => await ExecuteQueryCoreAsync(BuildConnectionString(connectionString, database), sql, ct, timeoutSeconds);
+
+    private async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryCoreAsync(
+        string connStr, string sql, CancellationToken ct, int timeoutSeconds)
     {
         var results = new List<QueryResult>();
         var messages = new List<string>();
         var sw = System.Diagnostics.Stopwatch.StartNew();
-
-        var connStr = GetConnectionStringForDatabase(database);
         using var conn = new SqlConnection(connStr);
 
         // Wire InfoMessage BEFORE OpenAsync so early PRINT messages are captured
@@ -763,12 +780,17 @@ public class DatabaseService
 
     // ── Object Explorer schema queries ──────────────────────────────
 
+    // ── Object Explorer schema queries (with per-tab overloads) ────
+
     public async Task<List<(string Schema, string Name)>> GetTablesAsync(string database)
+        => await GetTablesAsync(_connectionString, database);
+
+    public async Task<List<(string Schema, string Name)>> GetTablesAsync(string connectionString, string database)
     {
         var results = new List<(string, string)>();
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -787,11 +809,14 @@ public class DatabaseService
     }
 
     public async Task<List<(string Schema, string Name)>> GetViewsAsync(string database)
+        => await GetViewsAsync(_connectionString, database);
+
+    public async Task<List<(string Schema, string Name)>> GetViewsAsync(string connectionString, string database)
     {
         var results = new List<(string, string)>();
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -810,11 +835,14 @@ public class DatabaseService
     }
 
     public async Task<List<(string Schema, string Name, string Type)>> GetProcsAndFunctionsAsync(string database)
+        => await GetProcsAndFunctionsAsync(_connectionString, database);
+
+    public async Task<List<(string Schema, string Name, string Type)>> GetProcsAndFunctionsAsync(string connectionString, string database)
     {
         var results = new List<(string, string, string)>();
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -834,10 +862,13 @@ public class DatabaseService
     }
 
     public async Task<string?> GetObjectDefinitionAsync(string database, string schema, string objectName)
+        => await GetObjectDefinitionAsync(_connectionString, database, schema, objectName);
+
+    public async Task<string?> GetObjectDefinitionAsync(string connectionString, string database, string schema, string objectName)
     {
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -857,11 +888,15 @@ public class DatabaseService
 
     public async Task<List<(string Name, string TypeName)>> GetProcParametersAsync(
         string database, string schema, string procName)
+        => await GetProcParametersAsync(_connectionString, database, schema, procName);
+
+    public async Task<List<(string Name, string TypeName)>> GetProcParametersAsync(
+        string connectionString, string database, string schema, string procName)
     {
         var results = new List<(string, string)>();
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -885,11 +920,15 @@ public class DatabaseService
 
     public async Task<List<(string Name, string TypeName, int MaxLength, bool IsNullable, bool IsPrimaryKey)>>
         GetColumnsAsync(string database, string schema, string table)
+        => await GetColumnsAsync(_connectionString, database, schema, table);
+
+    public async Task<List<(string Name, string TypeName, int MaxLength, bool IsNullable, bool IsPrimaryKey)>>
+        GetColumnsAsync(string connectionString, string database, string schema, string table)
     {
         var results = new List<(string, string, int, bool, bool)>();
         var safeDb = database.Replace("]", "]]");
 
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"

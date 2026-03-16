@@ -23,6 +23,17 @@ public partial class QueryEditorHost : UserControl
     private bool _restoringSession;
     private Timer? _autosaveTimer;
 
+    // Per-server caching (v1.6.0)
+    private readonly Dictionary<string, CachedServerData> _serverCache = new();
+    private string? _primaryConnectionString;
+    private SavedConnection? _primaryProfile;
+
+    private class CachedServerData
+    {
+        public List<string> Databases { get; set; } = [];
+        public List<ObjectExplorerNode> OeRootNodes { get; set; } = [];
+    }
+
     /// <summary>Get the active query tab's ViewModel (for status bar binding).</summary>
     public QueryTabViewModel? ActiveTabViewModel =>
         _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count
@@ -71,6 +82,27 @@ public partial class QueryEditorHost : UserControl
             null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
+    /// <summary>
+    /// Called from MainWindow after Connection Dialog — sets the default connection for new tabs.
+    /// </summary>
+    public void SetDefaultConnection(ConnectionSettings settings, SavedConnection? profile)
+    {
+        _primaryConnectionString = settings.ConnectionString;
+        _primaryProfile = profile;
+
+        // Set on all existing tabs that don't have their own connection
+        foreach (var tab in _tabs)
+        {
+            if (tab.DataContext is QueryTabViewModel vm && vm.TabConnectionString == null)
+            {
+                vm.TabConnectionString = settings.ConnectionString;
+                vm.TabConnectionProfile = profile;
+            }
+        }
+    }
+
+    public void ClearServerCaches() => _serverCache.Clear();
+
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _autosaveTimer?.Dispose();
@@ -80,18 +112,26 @@ public partial class QueryEditorHost : UserControl
 
     // ── Tab Lifecycle ────────────────────────────────────────────────
 
-    public void AddNewTab()
+    public void AddNewTab(string? connectionString = null, SavedConnection? profile = null)
     {
         if (_db == null) return;
 
         _tabCounter++;
         var vm = new QueryTabViewModel(_db)
         {
-            TabTitle = $"Query {_tabCounter}"
+            TabTitle = $"Query {_tabCounter}",
+            TabConnectionString = connectionString ?? _primaryConnectionString,
+            TabConnectionProfile = profile ?? _primaryProfile
         };
 
-        // Inherit databases + selected DB from active tab
-        if (_cachedDatabases.Count > 0)
+        // Load databases from appropriate server
+        var effectiveConn = vm.TabConnectionString;
+        if (effectiveConn != null && effectiveConn != _primaryConnectionString)
+        {
+            // Different server — check cache or fetch
+            _ = LoadDatabasesForTabAsync(vm, effectiveConn);
+        }
+        else if (_cachedDatabases.Count > 0)
         {
             var selectedDb = _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count
                 ? _tabs[_activeTabIndex].DataContext is QueryTabViewModel activeVm
@@ -188,11 +228,33 @@ public partial class QueryEditorHost : UserControl
         if (index < 0 || index >= _tabs.Count) return;
 
         var changed = _activeTabIndex != index;
+
+        // Cache outgoing tab's OE tree before switching
+        if (changed && _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count && _viewModel != null)
+        {
+            var outgoingVm = _tabs[_activeTabIndex].DataContext as QueryTabViewModel;
+            var outgoingConn = outgoingVm?.TabConnectionString;
+            if (outgoingConn != null)
+            {
+                if (!_serverCache.ContainsKey(outgoingConn))
+                    _serverCache[outgoingConn] = new CachedServerData();
+                _serverCache[outgoingConn].OeRootNodes = _viewModel.ObjectExplorer.RootNodes.ToList();
+            }
+        }
+
         _activeTabIndex = index;
 
         // Show/hide tab views
         for (int i = 0; i < _tabs.Count; i++)
             _tabs[i].IsVisible = i == index;
+
+        // Update Object Explorer for the new active tab
+        if (changed && !_restoringSession)
+        {
+            var activeVm = _tabs[index].DataContext as QueryTabViewModel;
+            if (activeVm != null)
+                UpdateObjectExplorerForTab(activeVm);
+        }
 
         RebuildTabStrip();
         ActiveTabChanged?.Invoke();
@@ -200,6 +262,36 @@ public partial class QueryEditorHost : UserControl
         // Save session on tab switch
         if (changed && !_restoringSession)
             SaveSession();
+    }
+
+    private async void UpdateObjectExplorerForTab(QueryTabViewModel tabVm)
+    {
+        if (_viewModel == null) return;
+        var connStr = tabVm.TabConnectionString;
+        _viewModel.ObjectExplorer.SetActiveConnection(connStr);
+
+        // Check cache for this server's OE tree
+        if (connStr != null && _serverCache.TryGetValue(connStr, out var cached) && cached.OeRootNodes.Count > 0)
+        {
+            _viewModel.ObjectExplorer.RestoreNodes(cached.OeRootNodes);
+        }
+        else
+        {
+            // Load databases for this server (from cache or fresh)
+            try
+            {
+                var dbs = connStr != null && connStr != _primaryConnectionString
+                    ? (_serverCache.TryGetValue(connStr, out var c) && c.Databases.Count > 0
+                        ? c.Databases
+                        : await _db!.GetDatabasesAsync(connStr))
+                    : _cachedDatabases;
+                await _viewModel.ObjectExplorer.LoadDatabasesAsync(dbs);
+            }
+            catch
+            {
+                // Connection might not be reachable
+            }
+        }
     }
 
     private IBrush FindBrush(string key) =>
@@ -371,6 +463,30 @@ public partial class QueryEditorHost : UserControl
         }
     }
 
+    private async Task LoadDatabasesForTabAsync(QueryTabViewModel vm, string connectionString)
+    {
+        try
+        {
+            List<string> dbs;
+            if (_serverCache.TryGetValue(connectionString, out var cached) && cached.Databases.Count > 0)
+            {
+                dbs = cached.Databases;
+            }
+            else
+            {
+                dbs = await _db!.GetDatabasesAsync(connectionString);
+                if (!_serverCache.ContainsKey(connectionString))
+                    _serverCache[connectionString] = new CachedServerData();
+                _serverCache[connectionString].Databases = dbs;
+            }
+            vm.SetDatabases(dbs);
+        }
+        catch
+        {
+            // Server might not be reachable — tab will show empty DB list
+        }
+    }
+
     private SettingsService? GetSettingsService()
     {
         var mainWindow = TopLevel.GetTopLevel(this) as MainWindow;
@@ -518,7 +634,14 @@ public partial class QueryEditorHost : UserControl
                 SelectedDatabase = vm.SelectedDatabase,
                 SavedPath = vm.CurrentQueryPath,
                 QueryName = vm.CurrentQueryName,
-                CursorPosition = tabView.Editor.CaretOffset
+                CursorPosition = tabView.Editor.CaretOffset,
+                // Per-tab connection
+                ConnectionServer = vm.TabConnectionProfile?.Server,
+                ConnectionDatabase = vm.TabConnectionProfile?.Database,
+                ConnectionUsername = vm.TabConnectionProfile?.Username,
+                ConnectionUseWindowsAuth = vm.TabConnectionProfile?.UseWindowsAuth,
+                ConnectionProfileName = vm.TabConnectionProfile?.Name,
+                ConnectionProfileColor = vm.TabConnectionProfile?.Color,
             });
         }
 
@@ -559,6 +682,36 @@ public partial class QueryEditorHost : UserControl
                     vm.CurrentQueryName = tabState.QueryName;
                     if (tabState.QueryName != null)
                         vm.TabTitle = tabState.QueryName;
+                }
+
+                // Restore per-tab connection (v1.6.0)
+                if (tabState.ConnectionServer != null)
+                {
+                    var profile = new SavedConnection
+                    {
+                        Server = tabState.ConnectionServer,
+                        Database = tabState.ConnectionDatabase ?? "",
+                        Username = tabState.ConnectionUsername ?? "",
+                        UseWindowsAuth = tabState.ConnectionUseWindowsAuth ?? false,
+                        Name = tabState.ConnectionProfileName,
+                        Color = tabState.ConnectionProfileColor,
+                    };
+                    vm.TabConnectionProfile = profile;
+
+                    // Rebuild connection string
+                    var connSettings = new ConnectionSettings
+                    {
+                        Server = profile.Server,
+                        Database = profile.Database,
+                        UseWindowsAuth = profile.UseWindowsAuth,
+                        Username = profile.Username,
+                        Password = profile.UseWindowsAuth ? ""
+                            : PasswordStore.Get(profile.Server, profile.Database, profile.Username) ?? ""
+                    };
+                    vm.TabConnectionString = connSettings.ConnectionString;
+
+                    // Load databases for this server async
+                    _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
                 }
 
                 // Restore database selection (will be applied when databases load)
@@ -656,8 +809,9 @@ public partial class QueryEditorHost : UserControl
 
     private void OnInsertText(string sql, bool autoRun)
     {
-        // Always open context menu / Object Explorer actions in a new tab
-        AddNewTab();
+        // Inherit active tab's connection for OE context menu actions
+        var activeVm = ActiveTabViewModel;
+        AddNewTab(activeVm?.TabConnectionString, activeVm?.TabConnectionProfile);
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
             _tabs[_activeTabIndex].InsertText(sql, autoRun);
     }
@@ -678,7 +832,8 @@ public partial class QueryEditorHost : UserControl
 
     private void OnEditDataRequested(string sql)
     {
-        AddNewTab();
+        var activeVm = ActiveTabViewModel;
+        AddNewTab(activeVm?.TabConnectionString, activeVm?.TabConnectionProfile);
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
         {
             var tab = _tabs[_activeTabIndex];

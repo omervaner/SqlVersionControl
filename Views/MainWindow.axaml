@@ -302,7 +302,7 @@
         <Border Grid.Row="2" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="12,4" Height="26">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <!-- Connection indicator -->
                 <Ellipse x:Name="ConnectionDot" Grid.Column="0"
                          Width="8" Height="8" VerticalAlignment="Center"
@@ -312,19 +312,24 @@
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center"/>
 
+                <!-- Quick-switch buttons -->
+                <StackPanel x:Name="QuickSwitchPanel" Grid.Column="2"
+                            Orientation="Horizontal" Spacing="4" Margin="12,0"
+                            VerticalAlignment="Center"/>
+
                 <!-- Separator -->
-                <TextBlock Grid.Column="2" Text="|" Margin="12,0"
+                <TextBlock Grid.Column="3" Text="|" Margin="12,0"
                            Foreground="{DynamicResource TextDisabled}" FontSize="11"
                            VerticalAlignment="Center"
                            x:Name="QueryStatusSeparator" IsVisible="False"/>
 
                 <!-- Query status (only on Query Editor tab) -->
-                <TextBlock x:Name="QueryStatusText" Grid.Column="3"
+                <TextBlock x:Name="QueryStatusText" Grid.Column="4"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" IsVisible="False"/>
 
                 <!-- General status (right-aligned) -->
-                <TextBlock Grid.Column="5" Text="{Binding StatusMessage}"
+                <TextBlock Grid.Column="6" Text="{Binding StatusMessage}"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center"/>
             </Grid>

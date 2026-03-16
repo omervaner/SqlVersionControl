@@ -98,6 +98,14 @@ public class TabState
     public string? SavedPath { get; set; }
     public string? QueryName { get; set; }
     public int CursorPosition { get; set; }
+
+    // Per-tab connection (v1.6.0)
+    public string? ConnectionServer { get; set; }
+    public string? ConnectionDatabase { get; set; }
+    public string? ConnectionUsername { get; set; }
+    public bool? ConnectionUseWindowsAuth { get; set; }
+    public string? ConnectionProfileName { get; set; }
+    public string? ConnectionProfileColor { get; set; }
 }
 
 public class HistoryEntry

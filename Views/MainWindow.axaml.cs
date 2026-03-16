@@ -56,7 +56,7 @@ public partial class MainWindow : Window
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService);
         if (qeHost != null)
-            qeHost.ActiveTabChanged += () => { if (QueryEditorTab.IsChecked == true) BindActiveQueryTab(); };
+            qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
 
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
@@ -497,10 +497,14 @@ public partial class MainWindow : Window
         {
             _viewModel.OnConnected(dialog.Result, dialog.ResultConnection);
             _sleepDetector.Start();
+
+            // Set as default connection for new tabs
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
+
             UpdateStatusBar();
 
             // Load databases into Query Editor Host
-            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
             if (host != null) _ = host.ReloadDatabasesAsync();
         }
         else
@@ -545,10 +549,14 @@ public partial class MainWindow : Window
         {
             _viewModel.OnConnected(dialog.Result, dialog.ResultConnection);
             _sleepDetector.Start();
+
+            // Set as default connection for new tabs
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
+
             UpdateStatusBar();
 
             // Reload databases into Query Editor Host
-            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
             if (host != null) _ = host.ReloadDatabasesAsync();
         }
     }
@@ -576,6 +584,10 @@ public partial class MainWindow : Window
             {
                 ReconnectOverlay.IsVisible = false;
                 _viewModel.StatusMessage = "Reconnected after sleep";
+
+                // Clear per-server caches — tabs will re-validate on next query
+                var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                host?.ClearServerCaches();
                 return;
             }
 
@@ -608,33 +620,47 @@ public partial class MainWindow : Window
             or nameof(MainWindowViewModel.ConnectionColor))
         {
             UpdateStatusBar();
-            this.Title = _viewModel.IsConnected
-                ? $"SQL Version Control — {_viewModel.ConnectionDisplay}"
-                : "SQL Version Control";
         }
     }
 
     private void UpdateStatusBar()
     {
-        // Connection indicator — use profile color for dot + stripe, fallback #88a1bb
+        var isQE = QueryEditorTab.IsChecked == true;
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        var activeTabVm = host?.ActiveTabViewModel;
+
+        // Connection indicator — on QE tab, use active tab's connection if set
         if (_viewModel.IsConnected)
         {
-            var color = Avalonia.Media.Color.Parse(_viewModel.ConnectionColor);
+            var displayColor = isQE && activeTabVm?.TabConnectionProfile != null
+                ? activeTabVm.TabConnectionColor
+                : _viewModel.ConnectionColor;
+            var displayText = isQE && activeTabVm?.TabConnectionProfile != null
+                ? activeTabVm.TabConnectionDisplay
+                : _viewModel.ConnectionDisplay;
+
+            var color = Avalonia.Media.Color.Parse(displayColor);
             var brush = new Avalonia.Media.SolidColorBrush(color);
             ConnectionDot.Fill = brush;
-            ConnectionText.Text = _viewModel.ConnectionDisplay;
+            ConnectionText.Text = displayText;
             ConnectionStripe.Background = brush;
             ConnectionStripe.IsVisible = true;
+
+            // Update window title
+            this.Title = $"SQL Version Control — {displayText}";
         }
         else
         {
             ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
             ConnectionText.Text = "Disconnected";
             ConnectionStripe.IsVisible = false;
+            this.Title = "SQL Version Control";
         }
 
+        // Quick-switch buttons
+        RebuildQuickSwitchButtons();
+
         // Query status section — only visible on Query Editor tab
-        var isQE = QueryEditorTab.IsChecked == true;
         QueryStatusSeparator.IsVisible = isQE;
         QueryStatusText.IsVisible = isQE;
 
@@ -673,5 +699,93 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(QueryTabViewModel.QueryStatusText) && _boundQueryTab != null)
             QueryStatusText.Text = _boundQueryTab.QueryStatusText;
+    }
+
+    // ── Quick-Switch Buttons ────────────────────────────────────────
+
+    private void RebuildQuickSwitchButtons()
+    {
+        QuickSwitchPanel.Children.Clear();
+        var named = _settings.GetNamedConnections();
+        if (named.Count == 0) return;
+
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        var activeProfile = host?.ActiveTabViewModel?.TabConnectionProfile;
+
+        foreach (var conn in named)
+        {
+            var isActive = activeProfile != null &&
+                           activeProfile.Server == conn.Server &&
+                           activeProfile.Database == conn.Database &&
+                           activeProfile.Name == conn.Name;
+
+            var color = Avalonia.Media.Color.Parse(conn.Color ?? "#88a1bb");
+            var brush = new Avalonia.Media.SolidColorBrush(color);
+
+            var btn = new Button
+            {
+                Content = conn.Name,
+                FontSize = 10,
+                Padding = new Avalonia.Thickness(6, 1),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+                Background = isActive ? brush : Avalonia.Media.Brushes.Transparent,
+                Foreground = isActive ? Avalonia.Media.Brushes.White : brush,
+                BorderBrush = brush,
+                BorderThickness = new Avalonia.Thickness(1),
+                FontWeight = isActive ? Avalonia.Media.FontWeight.Bold : Avalonia.Media.FontWeight.Normal,
+                MinWidth = 0,
+                MinHeight = 0,
+            };
+
+            var savedConn = conn;
+            btn.Click += async (_, _) => await OnQuickSwitchClickedAsync(savedConn);
+            QuickSwitchPanel.Children.Add(btn);
+        }
+    }
+
+    private async Task OnQuickSwitchClickedAsync(SavedConnection conn)
+    {
+        // Build connection settings
+        var settings = new ConnectionSettings
+        {
+            Server = conn.Server,
+            Database = conn.Database,
+            UseWindowsAuth = conn.UseWindowsAuth,
+            Username = conn.Username,
+        };
+
+        // Look up stored password for SQL auth
+        if (!conn.UseWindowsAuth)
+        {
+            var password = PasswordStore.Get(conn.Server, conn.Database, conn.Username);
+            if (string.IsNullOrEmpty(password))
+            {
+                // No password — fall back to Connection Dialog
+                await ChangeConnectionAsync();
+                return;
+            }
+            settings.Password = password;
+        }
+
+        // Test connection
+        var connStr = settings.ConnectionString;
+        _viewModel.StatusMessage = $"Connecting to {conn.Name}...";
+
+        if (!await _viewModel.DatabaseService.TestConnectionAsync(connStr))
+        {
+            _viewModel.StatusMessage = $"Failed to connect to {conn.Name}";
+            return;
+        }
+
+        // Success — switch to Query Editor and open a new tab
+        QueryEditorTab.IsChecked = true;
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        if (host != null)
+        {
+            host.AddNewTab(connStr, conn);
+        }
+
+        _viewModel.StatusMessage = $"Connected to {conn.Name}";
+        UpdateStatusBar();
     }
 }

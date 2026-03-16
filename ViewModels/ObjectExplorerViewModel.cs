@@ -24,6 +24,13 @@ public partial class ObjectExplorerViewModel : ObservableObject
     /// <summary>Fired when "Edit Data" wants to run a SELECT and auto-enter edit mode.</summary>
     public event Action<string>? EditDataRequested;
 
+    private string? _activeConnectionString;
+
+    public void SetActiveConnection(string? connectionString)
+    {
+        _activeConnectionString = connectionString;
+    }
+
     public ObjectExplorerViewModel(DatabaseService db)
     {
         _db = db;
@@ -203,7 +210,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
         switch (folderNode.Name)
         {
             case "Tables":
-                var tables = await _db.GetTablesAsync(db);
+                var tables = _activeConnectionString != null
+                    ? await _db.GetTablesAsync(_activeConnectionString, db)
+                    : await _db.GetTablesAsync(db);
                 var tableNodes = tables.Select(t => WireNode(new ObjectExplorerNode
                 {
                     Name = t.Name, Schema = t.Schema, DatabaseName = db,
@@ -214,7 +223,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 break;
 
             case "Views":
-                var views = await _db.GetViewsAsync(db);
+                var views = _activeConnectionString != null
+                    ? await _db.GetViewsAsync(_activeConnectionString, db)
+                    : await _db.GetViewsAsync(db);
                 var viewNodes = views.Select(v => new ObjectExplorerNode
                 {
                     Name = v.Name, Schema = v.Schema, DatabaseName = db,
@@ -224,7 +235,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 break;
 
             case "Stored Procedures":
-                var procsAndFuncs = await _db.GetProcsAndFunctionsAsync(db);
+                var procsAndFuncs = _activeConnectionString != null
+                    ? await _db.GetProcsAndFunctionsAsync(_activeConnectionString, db)
+                    : await _db.GetProcsAndFunctionsAsync(db);
                 var procNodes = procsAndFuncs
                     .Where(x => x.Type == "SQL_STORED_PROCEDURE")
                     .Select(p => new ObjectExplorerNode
@@ -236,7 +249,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 break;
 
             case "Functions":
-                var funcs = await _db.GetProcsAndFunctionsAsync(db);
+                var funcs = _activeConnectionString != null
+                    ? await _db.GetProcsAndFunctionsAsync(_activeConnectionString, db)
+                    : await _db.GetProcsAndFunctionsAsync(db);
                 var funcNodes = funcs
                     .Where(x => x.Type != "SQL_STORED_PROCEDURE")
                     .Select(f => new ObjectExplorerNode
@@ -298,8 +313,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     private async Task LoadColumnsAsync(ObjectExplorerNode tableNode)
     {
-        var columns = await _db.GetColumnsAsync(
-            tableNode.DatabaseName, tableNode.Schema, tableNode.Name);
+        var columns = _activeConnectionString != null
+            ? await _db.GetColumnsAsync(_activeConnectionString, tableNode.DatabaseName, tableNode.Schema, tableNode.Name)
+            : await _db.GetColumnsAsync(tableNode.DatabaseName, tableNode.Schema, tableNode.Name);
 
         foreach (var (name, typeName, maxLength, isNullable, isPk) in columns)
         {
@@ -351,8 +367,10 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     public async Task ViewDefinitionAsync(ObjectExplorerNode node)
     {
-        var definition = await _db.GetObjectDefinitionAsync(
-            node.DatabaseName, string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema, node.Name);
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var definition = _activeConnectionString != null
+            ? await _db.GetObjectDefinitionAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+            : await _db.GetObjectDefinitionAsync(node.DatabaseName, schema, node.Name);
         if (definition != null)
             InsertTextRequested?.Invoke(definition, false);
     }
@@ -366,7 +384,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task GenerateExecAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var parameters = await _db.GetProcParametersAsync(node.DatabaseName, schema, node.Name);
+        var parameters = _activeConnectionString != null
+            ? await _db.GetProcParametersAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+            : await _db.GetProcParametersAsync(node.DatabaseName, schema, node.Name);
 
         var sql = $"EXEC [{schema}].[{node.Name}]";
         if (parameters.Count > 0)
@@ -397,5 +417,15 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"SELECT TOP 200 * FROM [{schema}].[{node.Name}]";
         EditDataRequested?.Invoke(sql);
+    }
+
+    /// <summary>
+    /// Restore OE tree from cached nodes (for fast tab-switch).
+    /// </summary>
+    public void RestoreNodes(List<ObjectExplorerNode> nodes)
+    {
+        RootNodes.Clear();
+        foreach (var node in nodes)
+            RootNodes.Add(node);
     }
 }

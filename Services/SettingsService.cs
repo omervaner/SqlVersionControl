@@ -87,6 +87,9 @@ public class SettingsService
 
     public List<string> GetRecentQueries() => Settings.RecentQueryPaths;
 
+    public List<SavedConnection> GetNamedConnections()
+        => Settings.RecentConnections.Where(c => !string.IsNullOrEmpty(c.Name)).ToList();
+
     public void SaveLastComparison(SavedConnection? source, SavedConnection? target)
     {
         Settings.LastSourceServer = source?.Server;

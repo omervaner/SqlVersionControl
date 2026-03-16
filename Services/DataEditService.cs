@@ -57,12 +57,23 @@ public class DataEditService
     /// Get primary key column names for a table.
     /// </summary>
     public async Task<List<string>> GetPrimaryKeyColumnsAsync(string database, string schema, string table)
+        => await GetPrimaryKeyColumnsCoreAsync(_db.GetConnectionStringForDatabase(database), schema, table);
+
+    /// <summary>
+    /// Per-tab overload: connectionString already includes the target database.
+    /// </summary>
+    public async Task<List<string>> GetPrimaryKeyColumnsFromConnAsync(string connectionString, string schema, string table)
+        => await GetPrimaryKeyColumnsCoreAsync(connectionString, schema, table);
+
+    private async Task<List<string>> GetPrimaryKeyColumnsCoreAsync(string connectionString, string schema, string table)
     {
         var pkColumns = new List<string>();
-        var safeDb = database.Replace("]", "]]");
-        var connStr = _db.GetConnectionStringForDatabase(database);
 
-        using var conn = new SqlConnection(connStr);
+        // Extract database name from connection string for sys catalog queries
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var safeDb = builder.InitialCatalog.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var sql = $@"
@@ -94,9 +105,23 @@ public class DataEditService
         string database, string schema, string table,
         string[] columnNames, List<string> pkColumns,
         List<EditableRow> rows)
+        => await ApplyChangesCoreAsync(_db.GetConnectionStringForDatabase(database), schema, table, columnNames, pkColumns, rows);
+
+    /// <summary>
+    /// Per-tab overload: connectionString already includes the target database.
+    /// </summary>
+    public async Task<(bool Success, string Message)> ApplyChangesFromConnAsync(
+        string connectionString, string schema, string table,
+        string[] columnNames, List<string> pkColumns,
+        List<EditableRow> rows)
+        => await ApplyChangesCoreAsync(connectionString, schema, table, columnNames, pkColumns, rows);
+
+    private async Task<(bool Success, string Message)> ApplyChangesCoreAsync(
+        string connectionString, string schema, string table,
+        string[] columnNames, List<string> pkColumns,
+        List<EditableRow> rows)
     {
-        var connStr = _db.GetConnectionStringForDatabase(database);
-        using var conn = new SqlConnection(connStr);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
         using var tx = conn.BeginTransaction();
 

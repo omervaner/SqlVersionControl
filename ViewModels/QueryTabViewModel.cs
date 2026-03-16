@@ -133,6 +133,29 @@ public partial class QueryTabViewModel : ObservableObject
     /// <summary>Fired after a successful query execution (sql, database, totalRows).</summary>
     public event Action<string, string?, int>? QueryExecuted;
 
+    // ── Per-Tab Connection (v1.6.0) ─────────────────────────────────
+
+    /// <summary>Full connection string for this tab's server (null = use global).</summary>
+    public string? TabConnectionString { get; set; }
+
+    /// <summary>The named profile for display (name, color, server info).</summary>
+    public SavedConnection? TabConnectionProfile { get; set; }
+
+    /// <summary>Display name for status bar.</summary>
+    public string TabConnectionDisplay =>
+        TabConnectionProfile?.DisplayName ?? "Disconnected";
+
+    /// <summary>Color hex for status bar/stripe.</summary>
+    public string TabConnectionColor =>
+        TabConnectionProfile?.Color ?? "#88a1bb";
+
+    private string GetEffectiveConnectionString(string database)
+    {
+        if (TabConnectionString != null)
+            return DatabaseService.BuildConnectionString(TabConnectionString, database);
+        return _db.GetConnectionStringForDatabase(database);
+    }
+
     public QueryTabViewModel(DatabaseService db)
     {
         _db = db;
@@ -177,8 +200,9 @@ public partial class QueryTabViewModel : ObservableObject
 
         try
         {
-            var (results, messages) = await _db.ExecuteQueryAsync(
-                SelectedDatabase, sql, _cts.Token);
+            var (results, messages) = TabConnectionString != null
+                ? await _db.ExecuteQueryAsync(TabConnectionString, SelectedDatabase!, sql, _cts.Token)
+                : await _db.ExecuteQueryAsync(SelectedDatabase!, sql, _cts.Token);
             sw.Stop();
 
             foreach (var r in results)
@@ -281,8 +305,11 @@ public partial class QueryTabViewModel : ObservableObject
         try
         {
             // Fetch PK columns
-            _editPkColumns = await _editService.GetPrimaryKeyColumnsAsync(
-                SelectedDatabase, _editTableSchema, _editTableName);
+            _editPkColumns = TabConnectionString != null
+                ? await _editService.GetPrimaryKeyColumnsFromConnAsync(
+                      GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName)
+                : await _editService.GetPrimaryKeyColumnsAsync(
+                      SelectedDatabase!, _editTableSchema, _editTableName);
 
             if (_editPkColumns.Count == 0)
             {
@@ -459,9 +486,13 @@ public partial class QueryTabViewModel : ObservableObject
 
         StatusText = "Applying changes...";
 
-        var (success, message) = await _editService.ApplyChangesAsync(
-            SelectedDatabase, _editTableSchema, _editTableName,
-            EditColumnNames, _editPkColumns, pendingRows);
+        var (success, message) = TabConnectionString != null
+            ? await _editService.ApplyChangesFromConnAsync(
+                  GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName,
+                  EditColumnNames, _editPkColumns, pendingRows)
+            : await _editService.ApplyChangesAsync(
+                  SelectedDatabase!, _editTableSchema, _editTableName,
+                  EditColumnNames, _editPkColumns, pendingRows);
 
         if (success)
         {

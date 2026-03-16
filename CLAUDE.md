@@ -1,8 +1,8 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.4.0 (March 2026)
-All v1.4.0 tasks complete: Menu bar (Task 4), multi-tab query editor (Task 4), version display (Task 4), Query Editor tab (Task 1), Object Explorer (Task 2), context menus + quick actions (Task 3), drag-and-drop (Task 5), editable result grid (Task 6), and saved queries (Task 7). Execution Plan tab shipped in v1.3.0. Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync from v1.2.0.
+## PROJECT STATUS: v1.6.0 (March 2026)
+v1.6.0: Per-tab connections + quick-switch buttons. Each query tab owns its connection string — Tab 1 on DEV, Tab 2 on PROD simultaneously. Named connections appear as colored buttons in the status bar; clicking one opens a new tab on that server. Object Explorer, status bar stripe, and window title update on tab switch. Session save/restore preserves per-tab connections. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
 ---
 
 ## Project Identity
