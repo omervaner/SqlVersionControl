@@ -19,22 +19,6 @@ public class SettingsService
         PasswordStore.Load();
     }
 
-    public void Load()
-    {
-        try
-        {
-            if (File.Exists(SettingsPath))
-            {
-                var json = File.ReadAllText(SettingsPath);
-                Settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
-            }
-        }
-        catch
-        {
-            Settings = new AppSettings();
-        }
-    }
-
     public void Save()
     {
         try
@@ -46,11 +30,55 @@ public class SettingsService
             }
 
             var json = JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(SettingsPath, json);
+
+            // Atomic write: write to temp file, back up existing, then rename
+            var tempPath = SettingsPath + ".tmp";
+            var backupPath = SettingsPath + ".bak";
+
+            File.WriteAllText(tempPath, json);
+
+            if (File.Exists(SettingsPath))
+                File.Copy(SettingsPath, backupPath, overwrite: true);
+
+            File.Move(tempPath, SettingsPath, overwrite: true);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to save settings: {ex.Message}");
+        }
+    }
+
+    public void Load()
+    {
+        try
+        {
+            if (File.Exists(SettingsPath))
+            {
+                var json = File.ReadAllText(SettingsPath);
+                Settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+            else if (File.Exists(SettingsPath + ".bak"))
+            {
+                // Main file missing/corrupted — restore from backup
+                var json = File.ReadAllText(SettingsPath + ".bak");
+                Settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+        }
+        catch
+        {
+            // Try backup if main file is corrupted
+            try
+            {
+                if (File.Exists(SettingsPath + ".bak"))
+                {
+                    var json = File.ReadAllText(SettingsPath + ".bak");
+                    Settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                    return;
+                }
+            }
+            catch { /* backup also bad — fall through */ }
+
+            Settings = new AppSettings();
         }
     }
 

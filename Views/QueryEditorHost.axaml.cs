@@ -126,56 +126,75 @@ public partial class QueryEditorHost : UserControl
 
     public void ToggleObjectExplorer()
     {
-        var colDefs = MainGrid.ColumnDefinitions;
-        if (_oeCollapsed)
+        try
         {
-            // Expand — restore saved width
-            var w = _settings?.Settings.ObjectExplorerWidth ?? 220;
-            colDefs[0].Width = new GridLength(w, GridUnitType.Pixel);
-            OeSplitter.IsEnabled = true;
-            ObjectExplorerPanel.IsVisible = true;
-            OeExpandButton.IsVisible = false;
-            _oeCollapsed = false;
-        }
-        else
-        {
-            // Save current width before collapsing
-            var currentWidth = colDefs[0].ActualWidth;
-            if (currentWidth > 30 && _settings != null)
+            var colDefs = MainGrid.ColumnDefinitions;
+            if (_oeCollapsed)
             {
-                _settings.Settings.ObjectExplorerWidth = currentWidth;
+                // Expand — restore saved width
+                var w = _settings?.Settings.ObjectExplorerWidth ?? 220;
+                if (w <= 0 || double.IsNaN(w) || double.IsInfinity(w)) w = 220;
+                colDefs[0].Width = new GridLength(w, GridUnitType.Pixel);
+                OeSplitter.IsEnabled = true;
+                ObjectExplorerPanel.IsVisible = true;
+                OeExpandButton.IsVisible = false;
+                _oeCollapsed = false;
             }
-            colDefs[0].Width = new GridLength(14, GridUnitType.Pixel);
-            OeSplitter.IsEnabled = false;
-            ObjectExplorerPanel.IsVisible = false;
-            OeExpandButton.IsVisible = true;
-            _oeCollapsed = true;
-        }
+            else
+            {
+                // Save current width before collapsing
+                var currentWidth = colDefs[0].ActualWidth;
+                if (currentWidth > 30 && !double.IsNaN(currentWidth) && !double.IsInfinity(currentWidth) && _settings != null)
+                {
+                    _settings.Settings.ObjectExplorerWidth = currentWidth;
+                }
+                colDefs[0].Width = new GridLength(14, GridUnitType.Pixel);
+                OeSplitter.IsEnabled = false;
+                ObjectExplorerPanel.IsVisible = false;
+                OeExpandButton.IsVisible = true;
+                _oeCollapsed = true;
+            }
 
-        if (_settings != null)
+            if (_settings != null)
+            {
+                _settings.Settings.ObjectExplorerCollapsed = _oeCollapsed;
+                _settings.Save();
+            }
+        }
+        catch (Exception ex)
         {
-            _settings.Settings.ObjectExplorerCollapsed = _oeCollapsed;
-            _settings.Save();
+            Console.WriteLine($"ToggleObjectExplorer failed: {ex.Message}");
         }
     }
 
     private void RestoreObjectExplorerState()
     {
-        if (_settings == null) return;
-        var s = _settings.Settings;
-
-        // Restore width
-        var w = s.ObjectExplorerWidth > 30 ? s.ObjectExplorerWidth : 220;
-        MainGrid.ColumnDefinitions[0].Width = new GridLength(w, GridUnitType.Pixel);
-
-        // Restore collapsed state
-        if (s.ObjectExplorerCollapsed)
+        try
         {
-            MainGrid.ColumnDefinitions[0].Width = new GridLength(14, GridUnitType.Pixel);
-            OeSplitter.IsEnabled = false;
-            ObjectExplorerPanel.IsVisible = false;
-            OeExpandButton.IsVisible = true;
-            _oeCollapsed = true;
+            if (_settings == null) return;
+            var s = _settings.Settings;
+
+            // Validate saved width
+            if (s.ObjectExplorerWidth <= 0 || double.IsNaN(s.ObjectExplorerWidth) || double.IsInfinity(s.ObjectExplorerWidth))
+                s.ObjectExplorerWidth = 220;
+
+            // Restore width
+            var w = s.ObjectExplorerWidth > 30 ? s.ObjectExplorerWidth : 220;
+            MainGrid.ColumnDefinitions[0].Width = new GridLength(w, GridUnitType.Pixel);
+
+            // Restore collapsed state
+            if (s.ObjectExplorerCollapsed)
+            {
+                MainGrid.ColumnDefinitions[0].Width = new GridLength(14, GridUnitType.Pixel);
+                OeSplitter.IsEnabled = false;
+                ObjectExplorerPanel.IsVisible = false;
+                OeExpandButton.IsVisible = true;
+                _oeCollapsed = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"RestoreObjectExplorerState failed: {ex.Message}");
         }
     }
 

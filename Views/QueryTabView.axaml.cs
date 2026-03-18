@@ -875,18 +875,26 @@ public partial class QueryTabView : UserControl
         RebuildResultTabs();
 
         // Auto-expand results panel when new results arrive
-        if (_resultsCollapsed && _viewModel?.Results.Count > 0)
+        try
         {
-            _resultsCollapsed = false;
-            var h = _settings?.Settings.ResultsPanelHeight ?? 200;
-            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(h, GridUnitType.Pixel);
-            ResultsSplitter.IsEnabled = true;
-            ResultsCollapseButton.Content = "\u25BC"; // ▼
-            if (_settings != null)
+            if (_resultsCollapsed && _viewModel?.Results.Count > 0)
             {
-                _settings.Settings.ResultsPanelCollapsed = false;
-                _settings.Save();
+                _resultsCollapsed = false;
+                var h = _settings?.Settings.ResultsPanelHeight ?? 200;
+                if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h)) h = 200;
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(h, GridUnitType.Pixel);
+                ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.Content = "\u25BC"; // ▼
+                if (_settings != null)
+                {
+                    _settings.Settings.ResultsPanelCollapsed = false;
+                    _settings.Save();
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Auto-expand results failed: {ex.Message}");
         }
     }
 
@@ -894,48 +902,67 @@ public partial class QueryTabView : UserControl
 
     public void ToggleResultsPanel()
     {
-        var rowDefs = EditorResultsGrid.RowDefinitions;
-        if (_resultsCollapsed)
+        try
         {
-            // Expand — restore saved height
-            var h = _settings?.Settings.ResultsPanelHeight ?? 200;
-            rowDefs[2].Height = new GridLength(h, GridUnitType.Pixel);
-            ResultsSplitter.IsEnabled = true;
-            ResultsCollapseButton.Content = "\u25BC"; // ▼
-            _resultsCollapsed = false;
-        }
-        else
-        {
-            // Save current height before collapsing
-            var currentHeight = rowDefs[2].ActualHeight;
-            if (currentHeight > 30 && _settings != null)
+            var rowDefs = EditorResultsGrid.RowDefinitions;
+            if (_resultsCollapsed)
             {
-                _settings.Settings.ResultsPanelHeight = currentHeight;
+                // Expand — restore saved height
+                var h = _settings?.Settings.ResultsPanelHeight ?? 200;
+                if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h)) h = 200;
+                rowDefs[2].Height = new GridLength(h, GridUnitType.Pixel);
+                ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.Content = "\u25BC"; // ▼
+                _resultsCollapsed = false;
             }
-            rowDefs[2].Height = new GridLength(0, GridUnitType.Pixel);
-            ResultsSplitter.IsEnabled = false;
-            ResultsCollapseButton.Content = "\u25B2"; // ▲
-            _resultsCollapsed = true;
-        }
+            else
+            {
+                // Save current height before collapsing
+                var currentHeight = rowDefs[2].ActualHeight;
+                if (currentHeight > 30 && !double.IsNaN(currentHeight) && !double.IsInfinity(currentHeight) && _settings != null)
+                {
+                    _settings.Settings.ResultsPanelHeight = currentHeight;
+                }
+                rowDefs[2].Height = new GridLength(0, GridUnitType.Pixel);
+                ResultsSplitter.IsEnabled = false;
+                ResultsCollapseButton.Content = "\u25B2"; // ▲
+                _resultsCollapsed = true;
+            }
 
-        if (_settings != null)
+            if (_settings != null)
+            {
+                _settings.Settings.ResultsPanelCollapsed = _resultsCollapsed;
+                _settings.Save();
+            }
+        }
+        catch (Exception ex)
         {
-            _settings.Settings.ResultsPanelCollapsed = _resultsCollapsed;
-            _settings.Save();
+            Console.WriteLine($"ToggleResultsPanel failed: {ex.Message}");
         }
     }
 
     private void RestoreResultsPanelState()
     {
-        if (_settings == null) return;
-        var s = _settings.Settings;
-
-        if (s.ResultsPanelCollapsed)
+        try
         {
-            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
-            ResultsSplitter.IsEnabled = false;
-            ResultsCollapseButton.Content = "\u25B2"; // ▲
-            _resultsCollapsed = true;
+            if (_settings == null) return;
+            var s = _settings.Settings;
+
+            // Validate saved height
+            if (s.ResultsPanelHeight <= 0 || double.IsNaN(s.ResultsPanelHeight) || double.IsInfinity(s.ResultsPanelHeight))
+                s.ResultsPanelHeight = 200;
+
+            if (s.ResultsPanelCollapsed)
+            {
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
+                ResultsSplitter.IsEnabled = false;
+                ResultsCollapseButton.Content = "\u25B2"; // ▲
+                _resultsCollapsed = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"RestoreResultsPanelState failed: {ex.Message}");
         }
     }
 
