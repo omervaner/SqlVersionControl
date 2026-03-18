@@ -143,6 +143,9 @@ public partial class MainWindow : Window
             }
             else
             {
+                // No update found — show releases page with context
+                UpdateText.Text = "You're on the latest version. Opening releases page...";
+                UpdateBar.IsVisible = true;
                 OpenUrl("https://github.com/omervaner/SqlVersionControl/releases");
             }
         };

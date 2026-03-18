@@ -10,6 +10,7 @@ public class UpdateService
 
     public string? AvailableVersion => _pendingUpdate?.TargetFullRelease?.Version?.ToString();
     public bool HasPendingUpdate => _pendingUpdate != null;
+    public bool IsInstalled => _updateManager.IsInstalled;
 
     public UpdateService()
     {
@@ -20,12 +21,11 @@ public class UpdateService
         _updateManager = new UpdateManager(source);
     }
 
-    /// <summary>Check GitHub Releases for a newer version. Returns false in dev mode.</summary>
+    /// <summary>Check GitHub Releases for a newer version. Works even if not Velopack-installed.</summary>
     public async Task<bool> CheckForUpdateAsync()
     {
         try
         {
-            if (!_updateManager.IsInstalled) return false;
             _pendingUpdate = await _updateManager.CheckForUpdatesAsync();
             return _pendingUpdate != null;
         }
