@@ -18,6 +18,7 @@
             <conv:StatusToColorConverter x:Key="StatusToColorConverter"/>
             <conv:NullDisplayConverter x:Key="NullDisplay"/>
             <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
+            <conv:ColumnStatusToColorConverter x:Key="ColumnStatusToColorConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 

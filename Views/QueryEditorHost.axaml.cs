@@ -67,6 +67,8 @@ public partial class QueryEditorHost : UserControl
         _viewModel.ObjectExplorer.InsertTextRequested += OnInsertText;
         _viewModel.ObjectExplorer.InsertAtCursorRequested += OnInsertAtCursor;
         _viewModel.ObjectExplorer.EditDataRequested += OnEditDataRequested;
+        _viewModel.ObjectExplorer.AlterSequenceRequested += OnAlterSequenceRequested;
+        _viewModel.ObjectExplorer.ResetSequenceRequested += OnResetSequenceRequested;
 
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);
@@ -81,8 +83,9 @@ public partial class QueryEditorHost : UserControl
         AutocompleteToggleButton.Click += OnAutocompleteToggleClicked;
         UpdateAutocompleteToggleVisual();
 
-        // Wire OE collapse button
+        // Wire OE collapse/expand buttons
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
+        OeExpandButton.Click += (_, _) => ToggleObjectExplorer();
         RestoreObjectExplorerState();
 
         // Restore session or create default tab
@@ -131,7 +134,7 @@ public partial class QueryEditorHost : UserControl
             colDefs[0].Width = new GridLength(w, GridUnitType.Pixel);
             OeSplitter.IsEnabled = true;
             ObjectExplorerPanel.IsVisible = true;
-            OeCollapseButton.Content = "\u25C0"; // ◀
+            OeExpandButton.IsVisible = false;
             _oeCollapsed = false;
         }
         else
@@ -145,7 +148,7 @@ public partial class QueryEditorHost : UserControl
             colDefs[0].Width = new GridLength(14, GridUnitType.Pixel);
             OeSplitter.IsEnabled = false;
             ObjectExplorerPanel.IsVisible = false;
-            OeCollapseButton.Content = "\u25B6"; // ▶
+            OeExpandButton.IsVisible = true;
             _oeCollapsed = true;
         }
 
@@ -171,7 +174,7 @@ public partial class QueryEditorHost : UserControl
             MainGrid.ColumnDefinitions[0].Width = new GridLength(14, GridUnitType.Pixel);
             OeSplitter.IsEnabled = false;
             ObjectExplorerPanel.IsVisible = false;
-            OeCollapseButton.Content = "\u25B6"; // ▶
+            OeExpandButton.IsVisible = true;
             _oeCollapsed = true;
         }
     }
@@ -1007,6 +1010,80 @@ public partial class QueryEditorHost : UserControl
         }
     }
 
+    private async void OnAlterSequenceRequested(ObjectExplorerNode node)
+    {
+        if (_db == null) return;
+        var parent = TopLevel.GetTopLevel(this) as Window;
+        if (parent == null) return;
+
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var currentValue = ParseCurrentValue(node.TypeInfo);
+
+        var dialog = new AlterSequenceDialog($"[{schema}].[{node.Name}]", currentValue);
+        await dialog.ShowDialog(parent);
+
+        if (dialog.NewValue == null) return;
+
+        var confirm = new ConfirmDialog($"Reset sequence {schema}.{node.Name} to {dialog.NewValue:N0}?");
+        await confirm.ShowDialog(parent);
+
+        if (!confirm.Confirmed) return;
+
+        try
+        {
+            var connStr = ActiveTabViewModel?.TabConnectionString ?? _primaryConnectionString;
+            if (connStr == null) return;
+            await _db.AlterSequenceRestartAsync(connStr, node.DatabaseName, schema, node.Name, dialog.NewValue.Value);
+
+            // Update the TypeInfo in-place so the tree reflects the new value
+            var dataType = node.TypeInfo.Split(',')[0].Trim();
+            node.TypeInfo = $"{dataType}, Current: {dialog.NewValue.Value}";
+        }
+        catch (Exception ex)
+        {
+            var errDialog = new ConfirmDialog($"Error: {ex.Message}");
+            await errDialog.ShowDialog(parent);
+        }
+    }
+
+    private async void OnResetSequenceRequested(ObjectExplorerNode node)
+    {
+        if (_db == null) return;
+        var parent = TopLevel.GetTopLevel(this) as Window;
+        if (parent == null) return;
+
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+
+        var confirm = new ConfirmDialog($"Reset sequence {schema}.{node.Name} to 0?");
+        await confirm.ShowDialog(parent);
+
+        if (!confirm.Confirmed) return;
+
+        try
+        {
+            var connStr = ActiveTabViewModel?.TabConnectionString ?? _primaryConnectionString;
+            if (connStr == null) return;
+            await _db.AlterSequenceRestartAsync(connStr, node.DatabaseName, schema, node.Name, 0);
+
+            var dataType = node.TypeInfo.Split(',')[0].Trim();
+            node.TypeInfo = $"{dataType}, Current: 0";
+        }
+        catch (Exception ex)
+        {
+            var errDialog = new ConfirmDialog($"Error: {ex.Message}");
+            await errDialog.ShowDialog(parent);
+        }
+    }
+
+    private static long ParseCurrentValue(string typeInfo)
+    {
+        // TypeInfo format: "BIGINT, Current: 45231"
+        var idx = typeInfo.IndexOf("Current:", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0 && long.TryParse(typeInfo[(idx + 8)..].Trim(), out var val))
+            return val;
+        return 0;
+    }
+
     // ── Drag-and-Drop ─────────────────────────────────────────────────
 
     private Point _dragStartPoint;
@@ -1090,6 +1167,14 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
                 break;
 
+            case ObjectExplorerNodeType.Sequence:
+                menu.Items.Add(CreateMenuItem("SELECT Current Value", () => explorer.SelectSequenceValue(node)));
+                menu.Items.Add(CreateMenuItem("Script as CREATE", () => explorer.ScriptSequenceCreate(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Alter Next Value...", () => explorer.RequestAlterSequence(node)));
+                menu.Items.Add(CreateMenuItem("Reset to 0", () => explorer.RequestResetSequence(node)));
+                break;
+
             case ObjectExplorerNodeType.Column:
                 menu.Items.Add(CreateMenuItem("SELECT DISTINCT", () => explorer.SelectDistinct(node)));
                 menu.Items.Add(CreateMenuItem("Insert Column Name", () => explorer.InsertColumnName(node)));
@@ -1153,6 +1238,10 @@ public partial class QueryEditorHost : UserControl
                 break;
             case ObjectExplorerNodeType.Column:
                 explorer.InsertColumnName(node);
+                e.Handled = true;
+                break;
+            case ObjectExplorerNodeType.Sequence:
+                explorer.SelectSequenceValue(node);
                 e.Handled = true;
                 break;
         }

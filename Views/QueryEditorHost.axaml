@@ -8,11 +8,24 @@
     <Grid x:Name="MainGrid" ColumnDefinitions="220,Auto,*">
 
         <!-- Object Explorer Panel (shared across all tabs) -->
-        <Border Grid.Column="0" x:Name="ObjectExplorerPanel" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" x:Name="ObjectExplorerPanel" Background="{DynamicResource SidebarBackground}"
+                BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,*">
-                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10">
-                    <TextBlock Text="Object Explorer" FontWeight="SemiBold"/>
+                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10,6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Object Explorer" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button x:Name="OeCollapseButton"
+                                Grid.Column="1"
+                                Content="&#x25C0;" FontSize="9"
+                                Width="20" Height="20"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Collapse Object Explorer (Ctrl+B)"/>
+                    </Grid>
                 </Border>
 
                 <!-- Search/Filter Bar -->
@@ -98,10 +111,10 @@
                                 <TextBlock Text="{Binding Name}" FontSize="12"
                                            IsVisible="{Binding IsColumn}"
                                            VerticalAlignment="Center"/>
-                                <!-- Column: type -->
+                                <!-- Column/Sequence: type info -->
                                 <TextBlock Text="{Binding TypeInfo}" FontSize="11"
                                            Foreground="{DynamicResource ColumnTypeForeground}"
-                                           IsVisible="{Binding IsColumn}"
+                                           IsVisible="{Binding HasTypeInfo}"
                                            VerticalAlignment="Center"/>
                                 <!-- Column: PK badge -->
                                 <TextBlock Text="PK" FontSize="11" FontWeight="Bold"
@@ -125,25 +138,26 @@
             </Grid>
         </Border>
 
-        <!-- Splitter + Collapse Chevron -->
-        <Grid Grid.Column="1" Width="3">
-            <GridSplitter x:Name="OeSplitter" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource BorderDefault}"
-                          ResizeDirection="Columns"/>
-            <Button x:Name="OeCollapseButton"
-                    Content="&#x25C0;" FontSize="7"
-                    Width="12" Height="24"
-                    Padding="0" Margin="0"
-                    MinWidth="0" MinHeight="0"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Background="Transparent"
-                    Foreground="{DynamicResource TextSecondary}"
-                    BorderThickness="0"
-                    Cursor="Hand"
-                    ToolTip.Tip="Toggle Object Explorer (Ctrl+B)"
-                    ZIndex="1"/>
-        </Grid>
+        <!-- Splitter (pure drag handle, no button) -->
+        <GridSplitter x:Name="OeSplitter" Grid.Column="1"
+                      HorizontalAlignment="Stretch"
+                      Background="{DynamicResource BorderDefault}"
+                      ResizeDirection="Columns"/>
+
+        <!-- Expand button (visible only when OE is collapsed) -->
+        <Button x:Name="OeExpandButton" Grid.Column="0"
+                Content="&#x25B6;" FontSize="9"
+                Width="14" Height="24"
+                Padding="0" MinWidth="0" MinHeight="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                Foreground="{DynamicResource TextSecondary}"
+                BorderThickness="0"
+                Cursor="Hand"
+                IsVisible="False"
+                ToolTip.Tip="Expand Object Explorer (Ctrl+B)"
+                ZIndex="1"/>
 
         <!-- Right side: Query Tab Strip + Tab Content -->
         <Grid Grid.Column="2" RowDefinitions="Auto,*">

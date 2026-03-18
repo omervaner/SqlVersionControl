@@ -11,7 +11,8 @@ public enum ObjectExplorerNodeType
     View,
     Proc,
     Function,
-    Column
+    Column,
+    Sequence
 }
 
 public partial class ObjectExplorerNode : ObservableObject
@@ -55,6 +56,7 @@ public partial class ObjectExplorerNode : ObservableObject
         ObjectExplorerNodeType.Folder => ChildCount > 0 ? $"{Name} ({ChildCount})" : Name,
         ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
             or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
+            or ObjectExplorerNodeType.Sequence
             => string.IsNullOrEmpty(Schema) || Schema == "dbo"
                 ? Name
                 : $"{Schema}.{Name}",
@@ -63,6 +65,7 @@ public partial class ObjectExplorerNode : ObservableObject
 
     // Computed helpers for template binding
     public bool IsColumn => NodeType == ObjectExplorerNodeType.Column;
+    public bool HasTypeInfo => !string.IsNullOrEmpty(TypeInfo);
     public bool ShowPK => IsColumn && IsPrimaryKey;
     public bool IsBold => NodeType is ObjectExplorerNodeType.Database or ObjectExplorerNodeType.Folder;
     public double DisplayFontSize => NodeType == ObjectExplorerNodeType.Database ? 13 : 12;
@@ -82,6 +85,7 @@ public partial class ObjectExplorerNode : ObservableObject
         ObjectExplorerNodeType.View => "#2980b9",
         ObjectExplorerNodeType.Proc => "#8e44ad",
         ObjectExplorerNodeType.Function => "#e67e22",
+        ObjectExplorerNodeType.Sequence => "#16a085",
         ObjectExplorerNodeType.Column when IsPrimaryKey => "#f1c40f",
         ObjectExplorerNodeType.Column => "#888888",
         ObjectExplorerNodeType.Folder => FolderIconColor,
@@ -97,6 +101,7 @@ public partial class ObjectExplorerNode : ObservableObject
         "Views" => "#2980b9",
         "Stored Procedures" => "#8e44ad",
         "Functions" => "#e67e22",
+        "Sequences" => "#16a085",
         _ => "#aaaaaa"
     };
 

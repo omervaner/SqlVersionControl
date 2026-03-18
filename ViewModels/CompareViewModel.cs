@@ -15,6 +15,9 @@ public partial class CompareViewModel : ViewModelBase
     private readonly SettingsService _settings;
     private List<CompareObject> _allObjects = new();
 
+    // Table structure comparison
+    private List<TableCompareResult> _tableCompareResults = new();
+
     // Store passwords temporarily for non-Windows auth (not persisted to disk)
     private readonly Dictionary<string, string> _passwords = new();
 
@@ -71,6 +74,21 @@ public partial class CompareViewModel : ViewModelBase
         OnPropertyChanged(nameof(ToggleTarget2ButtonText));
     }
 
+    partial void OnIsTableCompareModeChanged(bool value)
+    {
+        // Disable T2 in table mode
+        if (value && ShowTarget2)
+        {
+            ToggleTarget2();
+        }
+
+        // Reload with new mode
+        if (IsSourceConnected || IsTargetConnected)
+        {
+            _ = LoadObjectsAsync();
+        }
+    }
+
     private string _target2ConnectionString = "";
 
     // Objects and comparison
@@ -107,6 +125,13 @@ public partial class CompareViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _canDeploy2; // Can deploy from Target1 to Target2
+
+    // Table compare mode
+    [ObservableProperty]
+    private bool _isTableCompareMode;
+
+    [ObservableProperty]
+    private ObservableCollection<ColumnCompareResult> _tableCompareColumns = new();
 
     // Show only differences feature
     [ObservableProperty]
@@ -422,22 +447,50 @@ public partial class CompareViewModel : ViewModelBase
         // Remember selected object to restore after refresh
         var selectedFullName = SelectedObject?.FullName;
 
+        _allObjects.Clear();
+        _tableCompareResults.Clear();
+
+        if (IsTableCompareMode)
+        {
+            await LoadTableObjectsAsync();
+        }
+        else
+        {
+            await LoadCodeObjectsAsync();
+        }
+
+        FilterObjects();
+
+        // Re-select the same object (new instance) and reload definitions
+        if (!string.IsNullOrEmpty(selectedFullName))
+        {
+            var matchingObject = Objects.FirstOrDefault(o => o.FullName == selectedFullName);
+            if (matchingObject != null)
+            {
+                SelectedObject = matchingObject;
+                if (IsTableCompareMode)
+                    LoadTableColumns(matchingObject);
+                else
+                    await LoadDefinitionsAsync(matchingObject);
+            }
+            else
+            {
+                SelectedObject = null;
+            }
+        }
+    }
+
+    private async Task LoadCodeObjectsAsync()
+    {
         var sourceObjects = new Dictionary<string, string>();
         var targetObjects = new Dictionary<string, string>();
 
         if (IsSourceConnected)
-        {
             sourceObjects = await GetObjectsFromDatabaseAsync(_sourceConnectionString);
-        }
-
         if (IsTargetConnected)
-        {
             targetObjects = await GetObjectsFromDatabaseAsync(_targetConnectionString);
-        }
 
-        // Merge objects from both databases
         var allKeys = sourceObjects.Keys.Union(targetObjects.Keys).OrderBy(k => k);
-        _allObjects.Clear();
 
         foreach (var key in allKeys)
         {
@@ -458,23 +511,96 @@ public partial class CompareViewModel : ViewModelBase
                 Status = GetCompareStatus(existsInSource, existsInTarget)
             });
         }
+    }
 
-        FilterObjects();
+    private async Task LoadTableObjectsAsync()
+    {
+        var sourceColumns = new List<TableColumnInfo>();
+        var targetColumns = new List<TableColumnInfo>();
 
-        // Re-select the same object (new instance) and reload definitions
-        if (!string.IsNullOrEmpty(selectedFullName))
+        try
         {
-            var matchingObject = Objects.FirstOrDefault(o => o.FullName == selectedFullName);
-            if (matchingObject != null)
+            if (IsSourceConnected)
             {
-                SelectedObject = matchingObject;
-                await LoadDefinitionsAsync(matchingObject);
+                var sourceDb = SelectedSourceConnection!.Database;
+                sourceColumns = await new DatabaseService().GetTableStructureAsync(_sourceConnectionString, sourceDb);
             }
-            else
+            if (IsTargetConnected)
             {
-                SelectedObject = null;
+                var targetDb = SelectedTargetConnection!.Database;
+                targetColumns = await new DatabaseService().GetTableStructureAsync(_targetConnectionString, targetDb);
             }
         }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error loading tables: {ex.Message}";
+            return;
+        }
+
+        _tableCompareResults = TableCompareService.Compare(sourceColumns, targetColumns);
+
+        // Update summary counts immediately (no scan phase needed for tables)
+        SourceOnlyCount = 0;
+        TargetOnlyCount = 0;
+        ModifiedCount = 0;
+        IdenticalCount = 0;
+
+        foreach (var table in _tableCompareResults)
+        {
+            var status = TableStatusToString(table.Status);
+            var existsInSource = table.Status != TableCompareStatus.TargetOnly;
+            var existsInTarget = table.Status != TableCompareStatus.SourceOnly;
+
+            _allObjects.Add(new CompareObject
+            {
+                SchemaName = table.Schema,
+                ObjectName = table.TableName,
+                FullName = table.TableKey,
+                ExistsInSource = existsInSource,
+                ExistsInTarget = existsInTarget,
+                Status = status,
+                HasBeenCompared = true // statuses are final
+            });
+
+            switch (table.Status)
+            {
+                case TableCompareStatus.SourceOnly: SourceOnlyCount++; break;
+                case TableCompareStatus.TargetOnly: TargetOnlyCount++; break;
+                case TableCompareStatus.Different: ModifiedCount++; break;
+                case TableCompareStatus.Match: IdenticalCount++; break;
+            }
+        }
+
+        OnPropertyChanged(nameof(HasSummary));
+    }
+
+    private static string TableStatusToString(TableCompareStatus status) => status switch
+    {
+        TableCompareStatus.Match => "Identical",
+        TableCompareStatus.Different => "Modified",
+        TableCompareStatus.SourceOnly => "Source Only",
+        TableCompareStatus.TargetOnly => "Target Only",
+        _ => "?"
+    };
+
+    private void LoadTableColumns(CompareObject obj)
+    {
+        TableCompareColumns.Clear();
+        SourceCode = "";
+        TargetCode = "";
+        DiffModel = null;
+        CanDeploy = false;
+
+        var tableResult = _tableCompareResults.FirstOrDefault(t =>
+            string.Equals(t.TableKey, obj.FullName, StringComparison.OrdinalIgnoreCase));
+
+        if (tableResult == null) return;
+
+        foreach (var col in tableResult.Columns)
+            TableCompareColumns.Add(col);
+
+        // Can deploy if source has this table and target is connected
+        CanDeploy = IsTargetConnected && obj.ExistsInSource;
     }
 
     private async Task<Dictionary<string, string>> GetObjectsFromDatabaseAsync(string connectionString)
@@ -530,6 +656,13 @@ public partial class CompareViewModel : ViewModelBase
 
     partial void OnShowOnlyDifferencesChanged(bool value)
     {
+        // In table mode, statuses are already resolved — just filter, no scan needed
+        if (IsTableCompareMode)
+        {
+            FilterObjects();
+            return;
+        }
+
         if (value && IsSourceConnected && IsTargetConnected)
         {
             _ = ScanForDifferencesAsync();
@@ -656,6 +789,11 @@ public partial class CompareViewModel : ViewModelBase
     {
         if (value != null)
         {
+            if (IsTableCompareMode)
+            {
+                LoadTableColumns(value);
+                return;
+            }
             _ = LoadDefinitionsAsync(value);
         }
     }
@@ -742,7 +880,15 @@ public partial class CompareViewModel : ViewModelBase
     [RelayCommand]
     private async Task DeployAsync()
     {
-        if (SelectedObject == null || string.IsNullOrEmpty(SourceCode)) return;
+        if (SelectedObject == null) return;
+
+        if (IsTableCompareMode)
+        {
+            await DeployTableAsync(SelectedObject);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(SourceCode)) return;
 
         // Check if deploying to PROD (IP ends with .15)
         var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
@@ -815,6 +961,172 @@ public partial class CompareViewModel : ViewModelBase
         {
             StatusMessage = $"Deploy to Target 2 failed: {ex.Message}";
         }
+    }
+
+    private async Task DeployTableAsync(CompareObject obj, bool showStatus = true)
+    {
+        if (!obj.ExistsInSource) return;
+
+        var tableResult = _tableCompareResults.FirstOrDefault(t =>
+            string.Equals(t.TableKey, obj.FullName, StringComparison.OrdinalIgnoreCase));
+        if (tableResult == null) return;
+
+        // Confirmation for single-table deploy
+        if (showStatus)
+        {
+            var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
+            var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+
+            if (DeployRequested != null)
+            {
+                var message = $"⚠️ TABLE STRUCTURE CHANGE — {obj.FullName}\n\nThis can cause data loss if columns are narrowed or removed.";
+                var confirmed = await DeployRequested(message, targetDesc);
+                if (!confirmed) return;
+            }
+
+            StatusMessage = $"Deploying table {obj.FullName}...";
+        }
+
+        try
+        {
+            using var conn = new SqlConnection(_targetConnectionString);
+            await conn.OpenAsync();
+
+            List<string> scripts;
+
+            if (tableResult.Status == TableCompareStatus.SourceOnly)
+            {
+                scripts = [TableCompareService.GenerateCreateTableDdl(
+                    tableResult.Schema, tableResult.TableName, tableResult.Columns)];
+            }
+            else
+            {
+                scripts = TableCompareService.GenerateAlterStatements(
+                    tableResult.Schema, tableResult.TableName, tableResult.Columns);
+            }
+
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                foreach (var script in scripts)
+                {
+                    using var cmd = new SqlCommand(script, conn, transaction) { CommandTimeout = 30 };
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            if (showStatus)
+            {
+                StatusMessage = $"Deployed table {obj.FullName} ({scripts.Count} statement{(scripts.Count != 1 ? "s" : "")})";
+                await LoadObjectsAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (showStatus)
+                StatusMessage = $"Deploy failed: {ex.Message}";
+            else
+                throw; // Let batch deploy catch it
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeployColumnAsync(ColumnCompareResult col)
+    {
+        if (col == null || !col.IsDeployable || SelectedObject == null) return;
+
+        var tableResult = _tableCompareResults.FirstOrDefault(t =>
+            string.Equals(t.TableKey, SelectedObject.FullName, StringComparison.OrdinalIgnoreCase));
+        if (tableResult == null) return;
+
+        // Build scoped warning message
+        var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
+        var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+
+        if (DeployRequested != null)
+        {
+            string message;
+            if (col.Status == ColumnCompareStatus.SourceOnly)
+            {
+                message = $"Add column {col.ColumnName} to {SelectedObject.FullName}?\n{col.SourceType} {col.SourceNullable}";
+            }
+            else
+            {
+                var changes = new List<string>();
+                if (col.SourceType != col.TargetType)
+                    changes.Add($"{col.TargetType} → {col.SourceType}");
+                if (col.SourceNullable != col.TargetNullable)
+                    changes.Add($"{col.TargetNullable} → {col.SourceNullable}");
+                if (col.SourceDefault != col.TargetDefault)
+                    changes.Add($"Default: {(string.IsNullOrEmpty(col.TargetDefault) ? "(none)" : col.TargetDefault)} → {(string.IsNullOrEmpty(col.SourceDefault) ? "(none)" : col.SourceDefault)}");
+
+                message = $"Alter column {col.ColumnName} on {SelectedObject.FullName}?\n{string.Join(", ", changes)}.\nThis may cause data truncation.";
+            }
+
+            var confirmed = await DeployRequested(message, targetDesc);
+            if (!confirmed) return;
+        }
+
+        StatusMessage = $"Deploying column {col.ColumnName}...";
+
+        try
+        {
+            using var conn = new SqlConnection(_targetConnectionString);
+            await conn.OpenAsync();
+
+            var scripts = col.Status == ColumnCompareStatus.SourceOnly
+                ? TableCompareService.GenerateAlterStatements(tableResult.Schema, tableResult.TableName, [col])
+                : TableCompareService.GenerateAlterStatements(tableResult.Schema, tableResult.TableName, [col]);
+
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                foreach (var script in scripts)
+                {
+                    using var cmd = new SqlCommand(script, conn, transaction) { CommandTimeout = 30 };
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            // Update column status in-place (observable — UI updates automatically)
+            col.Status = ColumnCompareStatus.Match;
+
+            // Update parent table status if all columns now match
+            if (tableResult.Columns.All(c => c.Status == ColumnCompareStatus.Match))
+            {
+                tableResult.Status = TableCompareStatus.Match;
+                SelectedObject.Status = "Identical"; // setter notifies DisplayName + StatusIcon
+
+                // Update summary counts
+                ModifiedCount = _tableCompareResults.Count(t => t.Status == TableCompareStatus.Different);
+                IdenticalCount = _tableCompareResults.Count(t => t.Status == TableCompareStatus.Match);
+                OnPropertyChanged(nameof(HasSummary));
+            }
+
+            StatusMessage = $"Deployed column {col.ColumnName} on {SelectedObject.FullName}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Deploy failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleTableCompareMode()
+    {
+        IsTableCompareMode = !IsTableCompareMode;
     }
 
     [RelayCommand]
@@ -957,14 +1269,19 @@ public partial class CompareViewModel : ViewModelBase
 
         if (DeployRequested != null)
         {
+            var label = IsTableCompareMode ? "tables" : "objects";
             var objectNames = string.Join(", ", selectedObjects.Take(3).Select(o => o.ObjectName));
             if (selectedObjects.Count > 3) objectNames += $" (+{selectedObjects.Count - 3} more)";
 
-            var confirmed = await DeployRequested($"{selectedObjects.Count} objects: {objectNames}", targetDesc);
+            var message = IsTableCompareMode
+                ? $"⚠️ TABLE STRUCTURE CHANGE — {selectedObjects.Count} {label}: {objectNames}\n\nThis can cause data loss if columns are narrowed or removed."
+                : $"{selectedObjects.Count} {label}: {objectNames}";
+
+            var confirmed = await DeployRequested(message, targetDesc);
             if (!confirmed) return;
         }
 
-        StatusMessage = $"Deploying {selectedObjects.Count} objects...";
+        StatusMessage = $"Deploying {selectedObjects.Count} {(IsTableCompareMode ? "tables" : "objects")}...";
         var successCount = 0;
         var failCount = 0;
 
@@ -972,21 +1289,26 @@ public partial class CompareViewModel : ViewModelBase
         {
             try
             {
-                // Get definition if not cached
-                var sourceCode = obj.SourceDefinition;
-                if (string.IsNullOrEmpty(sourceCode))
+                if (IsTableCompareMode)
                 {
-                    sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                    await DeployTableAsync(obj, showStatus: false);
                 }
+                else
+                {
+                    // Get definition if not cached
+                    var sourceCode = obj.SourceDefinition;
+                    if (string.IsNullOrEmpty(sourceCode))
+                    {
+                        sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                    }
 
-                // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
-                var deployScript = ConvertToCreateOrAlter(sourceCode);
+                    var deployScript = ConvertToCreateOrAlter(sourceCode);
 
-                using var conn = new SqlConnection(_targetConnectionString);
-                await conn.OpenAsync();
-
-                using var cmd = new SqlCommand(deployScript, conn);
-                await cmd.ExecuteNonQueryAsync();
+                    using var conn = new SqlConnection(_targetConnectionString);
+                    await conn.OpenAsync();
+                    using var cmd = new SqlCommand(deployScript, conn);
+                    await cmd.ExecuteNonQueryAsync();
+                }
 
                 obj.IsSelected = false;
                 successCount++;
@@ -1000,9 +1322,9 @@ public partial class CompareViewModel : ViewModelBase
         UpdateSelectedCount();
 
         if (failCount == 0)
-            StatusMessage = $"Successfully deployed {successCount} objects to {targetDesc}";
+            StatusMessage = $"Successfully deployed {successCount} {(IsTableCompareMode ? "tables" : "objects")} to {targetDesc}";
         else
-            StatusMessage = $"Deployed {successCount} objects, {failCount} failed";
+            StatusMessage = $"Deployed {successCount}, {failCount} failed";
 
         // Refresh to update states
         await LoadObjectsAsync();
@@ -1083,7 +1405,20 @@ public class CompareObject : ObservableObject
     public string FullName { get; set; } = "";
     public bool ExistsInSource { get; set; }
     public bool ExistsInTarget { get; set; }
-    public string Status { get; set; } = "";
+
+    private string _status = "";
+    public string Status
+    {
+        get => _status;
+        set
+        {
+            if (SetProperty(ref _status, value))
+            {
+                OnPropertyChanged(nameof(DisplayName));
+                OnPropertyChanged(nameof(StatusIcon));
+            }
+        }
+    }
 
     // Cached definitions for comparison
     public string? SourceDefinition { get; set; }

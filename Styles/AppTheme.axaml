@@ -17,7 +17,7 @@
     <SolidColorBrush x:Key="StatusBarDisconnected" Color="#ad95b8"/>
 
     <!-- === PANELS === -->
-    <SolidColorBrush x:Key="SidebarBackground" Color="#252729"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#292c33"/>
     <SolidColorBrush x:Key="ToolbarBackground" Color="#252729"/>
     <SolidColorBrush x:Key="PanelHeaderBackground" Color="#1d1f21"/>
 

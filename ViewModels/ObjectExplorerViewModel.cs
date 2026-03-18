@@ -24,6 +24,15 @@ public partial class ObjectExplorerViewModel : ObservableObject
     /// <summary>Fired when "Edit Data" wants to run a SELECT and auto-enter edit mode.</summary>
     public event Action<string>? EditDataRequested;
 
+    /// <summary>Fired when a sequence context menu wants to show the Alter dialog.</summary>
+    public event Action<ObjectExplorerNode>? AlterSequenceRequested;
+
+    /// <summary>Fired when "Reset to 0" wants confirmation and execution.</summary>
+    public event Action<ObjectExplorerNode>? ResetSequenceRequested;
+
+    public void RequestAlterSequence(ObjectExplorerNode node) => AlterSequenceRequested?.Invoke(node);
+    public void RequestResetSequence(ObjectExplorerNode node) => ResetSequenceRequested?.Invoke(node);
+
     private string? _activeConnectionString;
 
     public void SetActiveConnection(string? connectionString)
@@ -72,6 +81,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             case ObjectExplorerNodeType.View:
             case ObjectExplorerNodeType.Proc:
             case ObjectExplorerNodeType.Function:
+            case ObjectExplorerNodeType.Sequence:
                 // Leaf objects: match against name
                 var matches = node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
                 node.IsVisibleInFilter = matches;
@@ -187,6 +197,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ("Views", ObjectExplorerNodeType.Folder),
             ("Stored Procedures", ObjectExplorerNodeType.Folder),
             ("Functions", ObjectExplorerNodeType.Folder),
+            ("Sequences", ObjectExplorerNodeType.Folder),
         };
 
         foreach (var (name, type) in folders)
@@ -260,6 +271,19 @@ public partial class ObjectExplorerViewModel : ObservableObject
                         NodeType = ObjectExplorerNodeType.Function
                     });
                 await AddChildrenInBatchesAsync(folderNode, funcNodes);
+                break;
+
+            case "Sequences":
+                var sequences = _activeConnectionString != null
+                    ? await _db.GetSequencesAsync(_activeConnectionString, db)
+                    : await _db.GetSequencesAsync(db);
+                var seqNodes = sequences.Select(seq => new ObjectExplorerNode
+                {
+                    Name = seq.Name, Schema = seq.Schema, DatabaseName = db,
+                    NodeType = ObjectExplorerNodeType.Sequence,
+                    TypeInfo = $"{seq.DataType}, Current: {seq.CurrentValue}"
+                });
+                await AddChildrenInBatchesAsync(folderNode, seqNodes);
                 break;
         }
 
@@ -336,18 +360,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
     }
 
     private static string FormatColumnType(string typeName, int maxLength)
-    {
-        var upper = typeName.ToUpperInvariant();
-
-        // Types that use max_length
-        if (upper is "NVARCHAR" or "NCHAR")
-            return maxLength == -1 ? $"{typeName}(MAX)" : $"{typeName}({maxLength / 2})";
-        if (upper is "VARCHAR" or "CHAR" or "VARBINARY" or "BINARY")
-            return maxLength == -1 ? $"{typeName}(MAX)" : $"{typeName}({maxLength})";
-
-        // Types that don't need length
-        return typeName;
-    }
+        => SqlTypeFormatter.Format(typeName, maxLength);
 
     // ── Context Menu Actions ────────────────────────────────────────
 
@@ -410,6 +423,21 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public void InsertColumnName(ObjectExplorerNode node)
     {
         InsertAtCursorRequested?.Invoke($"[{node.Name}]");
+    }
+
+    public void SelectSequenceValue(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var sql = $"SELECT current_value FROM [{node.DatabaseName}].sys.sequences WHERE name = '{node.Name}' AND schema_id = SCHEMA_ID('{schema}')";
+        InsertTextRequested?.Invoke(sql, true);
+    }
+
+    public void ScriptSequenceCreate(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var dataType = node.TypeInfo.Split(',')[0].Trim();
+        var sql = $"CREATE SEQUENCE [{schema}].[{node.Name}] AS {dataType}";
+        InsertTextRequested?.Invoke(sql, false);
     }
 
     public void EditData(ObjectExplorerNode node)
