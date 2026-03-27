@@ -69,6 +69,7 @@ public partial class QueryEditorHost : UserControl
         _viewModel.ObjectExplorer.EditDataRequested += OnEditDataRequested;
         _viewModel.ObjectExplorer.AlterSequenceRequested += OnAlterSequenceRequested;
         _viewModel.ObjectExplorer.ResetSequenceRequested += OnResetSequenceRequested;
+        _viewModel.ObjectExplorer.StartJobRequested += OnStartJobRequested;
 
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);
@@ -1103,6 +1104,51 @@ public partial class QueryEditorHost : UserControl
         return 0;
     }
 
+    // ── SQL Agent Jobs ─────────────────────────────────────────────────
+
+    private async void OnStartJobRequested(ObjectExplorerNode node)
+    {
+        if (_db == null) return;
+        var parent = TopLevel.GetTopLevel(this) as Window;
+        if (parent == null) return;
+
+        var confirm = new ConfirmDialog($"Start job '{node.Name}'?");
+        await confirm.ShowDialog(parent);
+
+        if (!confirm.Confirmed) return;
+
+        try
+        {
+            var connStr = ActiveTabViewModel?.TabConnectionString ?? _primaryConnectionString;
+            if (connStr == null) return;
+            await _db.StartJobAsync(connStr, node.Name);
+
+            node.TypeInfo = "Enabled, Last: Running";
+        }
+        catch (Exception ex)
+        {
+            var errDialog = new ConfirmDialog($"Error: {ex.Message}");
+            await errDialog.ShowDialog(parent);
+        }
+    }
+
+    private void RefreshParentJobsFolder(ObjectExplorerNode jobNode)
+    {
+        if (_viewModel == null) return;
+        // Find the parent "Jobs" folder and refresh it
+        foreach (var db in _viewModel.ObjectExplorer.RootNodes)
+        {
+            foreach (var folder in db.Children)
+            {
+                if (folder.Name == "Jobs" && folder.Children.Contains(jobNode))
+                {
+                    _viewModel.ObjectExplorer.RefreshNode(folder);
+                    return;
+                }
+            }
+        }
+    }
+
     // ── Drag-and-Drop ─────────────────────────────────────────────────
 
     private Point _dragStartPoint;
@@ -1192,6 +1238,14 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("Alter Next Value...", () => explorer.RequestAlterSequence(node)));
                 menu.Items.Add(CreateMenuItem("Reset to 0", () => explorer.RequestResetSequence(node)));
+                break;
+
+            case ObjectExplorerNodeType.Job:
+                menu.Items.Add(CreateMenuItem("View Job Steps", () => _ = explorer.ViewJobStepsAsync(node)));
+                menu.Items.Add(CreateMenuItem("View History", () => _ = explorer.ViewJobHistoryAsync(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Start Job", () => explorer.RequestStartJob(node)));
+                menu.Items.Add(CreateMenuItem("Refresh", () => RefreshParentJobsFolder(node)));
                 break;
 
             case ObjectExplorerNodeType.Column:

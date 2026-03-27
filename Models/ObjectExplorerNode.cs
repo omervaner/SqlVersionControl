@@ -12,7 +12,8 @@ public enum ObjectExplorerNodeType
     Proc,
     Function,
     Column,
-    Sequence
+    Sequence,
+    Job
 }
 
 public partial class ObjectExplorerNode : ObservableObject
@@ -21,7 +22,7 @@ public partial class ObjectExplorerNode : ObservableObject
     public string Schema { get; set; } = "";
     public string DatabaseName { get; set; } = "";
     public ObjectExplorerNodeType NodeType { get; set; }
-    public string TypeInfo { get; set; } = ""; // e.g. "NVARCHAR(30)" for columns
+    [ObservableProperty] private string _typeInfo = ""; // e.g. "NVARCHAR(30)" for columns
     public bool IsPrimaryKey { get; set; }
     public bool IsNullable { get; set; }
     public string ParentTableName { get; set; } = ""; // For columns: the parent table name
@@ -33,6 +34,11 @@ public partial class ObjectExplorerNode : ObservableObject
     [ObservableProperty] private bool _isLoading;
 
     partial void OnChildCountChanged(int value) => OnPropertyChanged(nameof(DisplayName));
+    partial void OnTypeInfoChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(HasTypeInfo));
+    }
 
     /// <summary>Fired when a node is expanded and needs lazy loading.</summary>
     public event Action<ObjectExplorerNode>? ExpandRequested;
@@ -60,6 +66,8 @@ public partial class ObjectExplorerNode : ObservableObject
             => string.IsNullOrEmpty(Schema) || Schema == "dbo"
                 ? Name
                 : $"{Schema}.{Name}",
+        ObjectExplorerNodeType.Job
+            => string.IsNullOrEmpty(TypeInfo) ? Name : $"{Name} ({TypeInfo})",
         _ => Name
     };
 
@@ -86,6 +94,7 @@ public partial class ObjectExplorerNode : ObservableObject
         ObjectExplorerNodeType.Proc => "#8e44ad",
         ObjectExplorerNodeType.Function => "#e67e22",
         ObjectExplorerNodeType.Sequence => "#16a085",
+        ObjectExplorerNodeType.Job => "#e74c3c",
         ObjectExplorerNodeType.Column when IsPrimaryKey => "#f1c40f",
         ObjectExplorerNodeType.Column => "#888888",
         ObjectExplorerNodeType.Folder => FolderIconColor,
@@ -102,6 +111,7 @@ public partial class ObjectExplorerNode : ObservableObject
         "Stored Procedures" => "#8e44ad",
         "Functions" => "#e67e22",
         "Sequences" => "#16a085",
+        "Jobs" => "#e74c3c",
         _ => "#aaaaaa"
     };
 

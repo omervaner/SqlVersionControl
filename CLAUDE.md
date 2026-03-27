@@ -1,8 +1,8 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.6.0 (March 2026)
-v1.6.0: Per-tab connections + quick-switch buttons. Each query tab owns its connection string — Tab 1 on DEV, Tab 2 on PROD simultaneously. Named connections appear as colored buttons in the status bar; clicking one opens a new tab on that server. Object Explorer, status bar stripe, and window title update on tab switch. Session save/restore preserves per-tab connections. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
+## PROJECT STATUS: v1.7.0 (March 2026)
+v1.7.0: Collapsible panels (OE + results grid with Ctrl+B/Ctrl+J), OE color fix (sidebar matches editor), Sequences in Object Explorer, Table Structure Compare in Compare Databases (column-level diffs, CREATE TABLE / ALTER TABLE DDL generation), SQL Agent Jobs in Object Explorer (msdb queries, job status/history/steps, Start Job with confirmation), Copy as INSERT crash diagnostic (try-catch to capture intermittent crash). v1.6.0: Per-tab connections + quick-switch buttons. Each query tab owns its connection string — Tab 1 on DEV, Tab 2 on PROD simultaneously. Named connections appear as colored buttons in the status bar; clicking one opens a new tab on that server. Object Explorer, status bar stripe, and window title update on tab switch. Session save/restore preserves per-tab connections. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
 ---
 
 ## Project Identity
@@ -26,7 +26,8 @@ Write and run SQL queries against any database on the connected server:
 - **Results grid**: DataGrid with auto-generated columns, read-only, one tab per result set
 - **Messages tab**: execution time, row counts, PRINT output, errors with line numbers
 - **InfoMessage wired before OpenAsync** so early PRINT messages are captured
-- **Object Explorer context menus** (right-click): Table → SELECT TOP 100, SELECT COUNT(*), Script as CREATE; View → SELECT TOP 100, View Definition; Proc → View Definition, Generate EXEC with param placeholders; Function → View Definition; Column → SELECT DISTINCT, Insert Column Name
+- **Object Explorer context menus** (right-click): Table → SELECT TOP 100, SELECT COUNT(*), Script as CREATE; View → SELECT TOP 100, View Definition; Proc → View Definition, Generate EXEC with param placeholders; Function → View Definition; Column → SELECT DISTINCT, Insert Column Name; Job → View Job Steps, View History, Start Job (with confirmation), Refresh
+- **SQL Agent Jobs** in Object Explorer: Jobs folder under each server, lazy-loaded from `msdb.dbo.sysjobs` + `sysjobhistory` + `sysjobactivity`. Shows job name, enabled/disabled status, last run outcome (Success/Failed/Running). Context menu for viewing steps, history, and starting jobs.
 - **Double-click quick actions**: Table → SELECT TOP 100 (auto-run); Proc → View Definition; Column → Insert column name at cursor
 - **Drag-and-drop** from Object Explorer into editor: Table/View → `[schema].[name]` at drop position; Function → `[schema].[name]()`; Column → `[name]`; Proc → opens full definition
 - **Editable result grid** (TOAD-style): For simple single-table SELECTs with a PK, "Edit" button appears on result tab header. Toggle enters edit mode — DataGrid becomes writable. Row-based change tracking: snapshot on row enter, compare on row leave, Escape reverts. Yellow=modified, green=new, red=deleted. "Mark for Delete" via right-click. "Add Row" for inserts. "Show SQL" previews parameterized DML. "Apply" executes in a single transaction with row-count verification. "Edit Data" context menu on tables auto-runs SELECT TOP 200 and enters edit mode.
@@ -81,7 +82,7 @@ Generate and visualize SQL Server estimated execution plans with human-readable 
 
 ## Tech Stack
 - **Framework**: Avalonia UI 11.x (.NET 9)
-- **Models**: ConnectionSettings, ObjectVersion, QueryResult, EditableRow (IEditableObject + INotifyPropertyChanged, row-based change tracking)
+- **Models**: ConnectionSettings, ObjectVersion, QueryResult, EditableRow (IEditableObject + INotifyPropertyChanged, row-based change tracking), TableColumnInfo, TableCompareResult, QueryFileInfo
 - **Pattern**: MVVM with CommunityToolkit.Mvvm (`[ObservableProperty]`, `[RelayCommand]`)
 - **SQL**: Microsoft.Data.SqlClient
 - **Diff Engine**: DiffPlex for side-by-side comparison
@@ -144,6 +145,11 @@ CheatTeam/
 | `DataEditService.cs` | Editable grid: simple SELECT parsing, PK fetching, DML generation, transactional apply |
 | `QueryFileService.cs` | Saved queries: save/load/list/delete .sql files with metadata headers |
 | `UpdateService.cs` | Velopack auto-update: check GitHub Releases, download, apply & restart |
+| `TableCompareService.cs` | Table structure comparison: column-level diffs, CREATE TABLE / ALTER TABLE DDL generation |
+| `SqlTypeFormatter.cs` | SQL type formatting helper (NVARCHAR(50), DECIMAL(18,2), etc.) |
+| `IntellisenseService.cs` | Schema-aware autocomplete: context detection + suggestion generation |
+| `SqlCompletionData.cs` | AvaloniaEdit ICompletionData implementation for SQL suggestions |
+| `SessionService.cs` | Session save/restore for query tabs, per-tab connections |
 | `AppVersion.cs` | Static version string helper (reads from assembly) |
 
 ---

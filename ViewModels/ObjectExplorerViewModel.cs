@@ -30,8 +30,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
     /// <summary>Fired when "Reset to 0" wants confirmation and execution.</summary>
     public event Action<ObjectExplorerNode>? ResetSequenceRequested;
 
+    /// <summary>Fired when "Start Job" wants confirmation and execution.</summary>
+    public event Action<ObjectExplorerNode>? StartJobRequested;
+
     public void RequestAlterSequence(ObjectExplorerNode node) => AlterSequenceRequested?.Invoke(node);
     public void RequestResetSequence(ObjectExplorerNode node) => ResetSequenceRequested?.Invoke(node);
+    public void RequestStartJob(ObjectExplorerNode node) => StartJobRequested?.Invoke(node);
 
     private string? _activeConnectionString;
 
@@ -82,6 +86,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             case ObjectExplorerNodeType.Proc:
             case ObjectExplorerNodeType.Function:
             case ObjectExplorerNodeType.Sequence:
+            case ObjectExplorerNodeType.Job:
                 // Leaf objects: match against name
                 var matches = node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
                 node.IsVisibleInFilter = matches;
@@ -198,6 +203,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ("Stored Procedures", ObjectExplorerNodeType.Folder),
             ("Functions", ObjectExplorerNodeType.Folder),
             ("Sequences", ObjectExplorerNodeType.Folder),
+            ("Jobs", ObjectExplorerNodeType.Folder),
         };
 
         foreach (var (name, type) in folders)
@@ -284,6 +290,33 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     TypeInfo = $"{seq.DataType}, Current: {seq.CurrentValue}"
                 });
                 await AddChildrenInBatchesAsync(folderNode, seqNodes);
+                break;
+
+            case "Jobs":
+                try
+                {
+                    var jobs = _activeConnectionString != null
+                        ? await _db.GetJobsAsync(_activeConnectionString)
+                        : await _db.GetJobsAsync();
+                    var jobNodes = jobs.Select(j => new ObjectExplorerNode
+                    {
+                        Name = j.Name, DatabaseName = db,
+                        NodeType = ObjectExplorerNodeType.Job,
+                        TypeInfo = j.Enabled
+                            ? $"Enabled, Last: {j.LastOutcome}"
+                            : "Disabled"
+                    });
+                    await AddChildrenInBatchesAsync(folderNode, jobNodes);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Jobs load error: {ex}");
+                    folderNode.Children.Add(new ObjectExplorerNode
+                    {
+                        Name = $"(Error: {ex.Message})",
+                        NodeType = ObjectExplorerNodeType.Folder
+                    });
+                }
                 break;
         }
 
@@ -438,6 +471,52 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var dataType = node.TypeInfo.Split(',')[0].Trim();
         var sql = $"CREATE SEQUENCE [{schema}].[{node.Name}] AS {dataType}";
         InsertTextRequested?.Invoke(sql, false);
+    }
+
+    public async Task ViewJobStepsAsync(ObjectExplorerNode node)
+    {
+        var steps = _activeConnectionString != null
+            ? await _db.GetJobStepsAsync(_activeConnectionString, node.Name)
+            : await _db.GetJobStepsAsync(node.Name);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"-- Job Steps: {node.Name}");
+        sb.AppendLine($"-- {steps.Count} step(s)");
+        sb.AppendLine();
+
+        foreach (var (stepId, stepName, subsystem, command) in steps)
+        {
+            sb.AppendLine($"-- Step {stepId}: {stepName} [{subsystem}]");
+            sb.AppendLine(command);
+            sb.AppendLine();
+        }
+
+        InsertTextRequested?.Invoke(sb.ToString(), false);
+    }
+
+    public async Task ViewJobHistoryAsync(ObjectExplorerNode node)
+    {
+        var history = _activeConnectionString != null
+            ? await _db.GetJobHistoryAsync(_activeConnectionString, node.Name)
+            : await _db.GetJobHistoryAsync(node.Name);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"-- Job History: {node.Name} (last {history.Count} runs)");
+        sb.AppendLine();
+
+        foreach (var (runStatus, runDate, durationSeconds, message) in history)
+        {
+            var status = runStatus switch { 0 => "Failed", 1 => "Success", 2 => "Retry", 3 => "Cancelled", _ => "Unknown" };
+            var duration = TimeSpan.FromSeconds(durationSeconds);
+            sb.AppendLine($"-- {runDate:yyyy-MM-dd HH:mm:ss}  {status}  Duration: {duration:hh\\:mm\\:ss}");
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                sb.AppendLine($"--   {message}");
+            }
+            sb.AppendLine();
+        }
+
+        InsertTextRequested?.Invoke(sb.ToString(), false);
     }
 
     public void EditData(ObjectExplorerNode node)

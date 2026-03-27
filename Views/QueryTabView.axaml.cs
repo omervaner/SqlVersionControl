@@ -748,48 +748,66 @@ public partial class QueryTabView : UserControl
 
     private async Task CopyAsInsertAsync()
     {
-        if (_viewModel == null) return;
-        var rows = GetSelectedRows();
-        if (rows.Count == 0 || _viewModel.EditTableSchema == null || _viewModel.EditTableName == null) return;
-
-        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-            ? _selectedTabIndex : 0;
-        var result = _viewModel.Results[resultIndex];
-
-        var sql = ExportService.GenerateInsertStatements(
-            _viewModel.EditTableSchema, _viewModel.EditTableName,
-            result.ColumnNames, result.ColumnTypes, rows);
-
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-        if (clipboard != null)
+        try
         {
-            await clipboard.SetTextAsync(sql);
-            _viewModel.StatusText = $"Copied {rows.Count} INSERT statement{(rows.Count == 1 ? "" : "s")}";
+            if (_viewModel == null) return;
+            var rows = GetSelectedRows();
+            if (rows.Count == 0 || _viewModel.EditTableSchema == null || _viewModel.EditTableName == null) return;
+
+            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+                ? _selectedTabIndex : 0;
+            var result = _viewModel.Results[resultIndex];
+
+            var sql = ExportService.GenerateInsertStatements(
+                _viewModel.EditTableSchema, _viewModel.EditTableName,
+                result.ColumnNames, result.ColumnTypes, rows);
+
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(sql);
+                _viewModel.StatusText = $"Copied {rows.Count} INSERT statement{(rows.Count == 1 ? "" : "s")}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"CopyAsInsert crash: {ex}");
+            if (_viewModel != null)
+                _viewModel.StatusText = $"Copy as INSERT failed: {ex.GetType().Name}: {ex.Message}";
         }
     }
 
     private async Task CopySelectedRowsAsync()
     {
-        if (_viewModel == null) return;
-        var rows = GetSelectedRows();
-        if (rows.Count == 0) return;
-
-        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-            ? _selectedTabIndex : 0;
-        var result = _viewModel.Results[resultIndex];
-
-        var sb = new StringBuilder();
-        sb.AppendLine(string.Join("\t", result.ColumnNames));
-        foreach (var row in rows)
+        try
         {
-            sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+            if (_viewModel == null) return;
+            var rows = GetSelectedRows();
+            if (rows.Count == 0) return;
+
+            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+                ? _selectedTabIndex : 0;
+            var result = _viewModel.Results[resultIndex];
+
+            var sb = new StringBuilder();
+            sb.AppendLine(string.Join("\t", result.ColumnNames));
+            foreach (var row in rows)
+            {
+                sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+            }
+
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(sb.ToString());
+                _viewModel.StatusText = $"Copied {rows.Count} row{(rows.Count == 1 ? "" : "s")}";
+            }
         }
-
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-        if (clipboard != null)
+        catch (Exception ex)
         {
-            await clipboard.SetTextAsync(sb.ToString());
-            _viewModel.StatusText = $"Copied {rows.Count} row{(rows.Count == 1 ? "" : "s")}";
+            Console.WriteLine($"CopySelectedRows crash: {ex}");
+            if (_viewModel != null)
+                _viewModel.StatusText = $"Copy rows failed: {ex.GetType().Name}: {ex.Message}";
         }
     }
 
