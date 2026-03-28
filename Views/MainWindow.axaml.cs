@@ -29,10 +29,12 @@ public partial class MainWindow : Window
         _sessionService = new SessionService();
         _queryFileService = new QueryFileService();
         _viewModel = new MainWindowViewModel();
+        _viewModel.AppSettings = _settings;
         DataContext = _viewModel;
 
-        // Apply saved theme and font size
+        // Apply saved theme, font size, and grid row height
         ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
+        ThemeManager.ApplyGridRowHeight(_settings.Settings.GridRowHeight);
 
         // Restore window position/size
         RestoreWindowPosition();
@@ -59,6 +61,13 @@ public partial class MainWindow : Window
         if (qeHost != null)
             qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
 
+        // Enable window dragging from title bar area (empty space not consumed by menus/buttons)
+        TitleBarBorder.PointerPressed += (s, e) =>
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                BeginMoveDrag(e);
+        };
+
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
 
@@ -74,6 +83,15 @@ public partial class MainWindow : Window
         // Sleep/wake detection
         _sleepDetector = new SleepDetector();
         _sleepDetector.WokeFromSleep += OnWokeFromSleep;
+
+        // Re-apply code-behind colors on theme change
+        ThemeManager.ThemeChanged += () =>
+        {
+            UpdateStatusBar();
+            MainDiffView.ApplyTheme();
+            this.FindControl<CompareView>("CompareViewControl")?.RefreshTheme();
+            this.FindControl<QueryEditorHost>("QueryEditorHostControl")?.RefreshTheme();
+        };
 
         // Status bar: track tab switches and connection changes
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -572,6 +590,8 @@ public partial class MainWindow : Window
         MainDiffView.ApplyTheme();
         var compareView = this.FindControl<CompareView>("CompareViewControl");
         compareView?.RefreshTheme();
+        var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        qeHost?.RefreshTheme();
     }
 
     private async Task ShowDependenciesAsync()
@@ -734,7 +754,10 @@ public partial class MainWindow : Window
         }
         else
         {
-            ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
+            if (Avalonia.Application.Current?.Resources.TryGetResource("DisconnectedDot", null, out var dotBrush) == true && dotBrush is Avalonia.Media.IBrush disconnectedBrush)
+                ConnectionDot.Fill = disconnectedBrush;
+            else
+                ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
             ConnectionText.Text = "Disconnected";
             ConnectionStripe.IsVisible = false;
             this.Title = "SQL Version Control";

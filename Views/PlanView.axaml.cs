@@ -11,8 +11,12 @@ public partial class PlanView : UserControl
     private PlanViewModel? _viewModel;
     private readonly List<(int NodeId, Border Border)> _costBarBorders = new();
 
-    private static readonly IBrush HighlightBrush =
-        new SolidColorBrush(Color.FromArgb(80, 74, 158, 255)); // SelectionActive tint
+    private static IBrush GetHighlightBrush()
+    {
+        if (Application.Current?.Resources.TryGetResource("SelectionActive", null, out var brush) == true && brush is IBrush b)
+            return b;
+        return new SolidColorBrush(Color.FromArgb(80, 74, 158, 255));
+    }
 
     public PlanView()
     {
@@ -26,7 +30,9 @@ public partial class PlanView : UserControl
         _viewModel.PlanChanged += RebuildCostBar;
         _viewModel.HighlightChanged += OnHighlightChanged;
 
-        SqlTextBlock.SelectionBrush = HighlightBrush;
+        SqlTextBlock.SelectionBrush = GetHighlightBrush();
+
+        ThemeManager.ThemeChanged += () => SqlTextBlock.SelectionBrush = GetHighlightBrush();
     }
 
     public PlanViewModel? ViewModel => _viewModel;

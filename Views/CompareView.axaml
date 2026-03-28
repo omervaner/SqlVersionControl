@@ -103,7 +103,7 @@
                     </Border>
 
                     <!-- Progress Bar (when scanning) -->
-                    <Border Grid.Row="1" Padding="10,5" Background="#805c3a00"
+                    <Border Grid.Row="1" Padding="10,5" Background="{DynamicResource ScanProgressBackground}"
                             IsVisible="{Binding IsScanning}">
                         <StackPanel Spacing="5">
                             <TextBlock Text="{Binding ScanProgressText}" FontSize="10" Foreground="{DynamicResource WarningSeverityWarning}"/>
@@ -112,7 +112,7 @@
                     </Border>
 
                     <!-- Summary Stats -->
-                    <Border Grid.Row="2" Padding="10,8" Background="#402980b9"
+                    <Border Grid.Row="2" Padding="10,8" Background="{DynamicResource SummaryStatsBackground}"
                             IsVisible="{Binding HasSummary}">
                         <StackPanel Spacing="3">
                             <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}">Summary:</TextBlock>

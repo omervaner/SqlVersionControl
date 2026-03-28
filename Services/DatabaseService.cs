@@ -429,9 +429,10 @@ public class DatabaseService
     }
 
     /// <summary>
-    /// Syncs from VMAuditDb.dbo.DDL_Log to ObjectVersions table
+    /// Syncs from DDL audit log to ObjectVersions table.
+    /// ddlSource should be "DatabaseName.dbo.TableName" (fully qualified).
     /// </summary>
-    public async Task<int> SyncFromDdlLogAsync(string? filterDatabase = null)
+    public async Task<int> SyncFromDdlLogAsync(string? filterDatabase = null, string? ddlSource = null)
     {
         if (string.IsNullOrEmpty(_connectionString))
             throw new InvalidOperationException("Connection not set");
@@ -446,10 +447,11 @@ public class DatabaseService
 
         // Read new entries from DDL_Log (cross-database query)
         // Only include human changes (from SSMS), exclude automated/job changes
-        var readLogSql = @"
+        var ddlTable = ddlSource ?? "VMAuditDb.dbo.DDL_Log";
+        var readLogSql = $@"
             SELECT Id, DatabaseName, EventType, ObjectType, SchemaName, ObjectName,
                    CommandText, HostName, LoginName, IpAddress, ProgramName, CreatedOn
-            FROM VMAuditDb.dbo.DDL_Log
+            FROM {ddlTable}
             WHERE Id > @lastId
               AND (@filterDb IS NULL OR DatabaseName = @filterDb)
               -- Only stored procedures, functions, views (the stuff we care about)

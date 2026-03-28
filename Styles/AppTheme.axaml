@@ -20,6 +20,7 @@
     <SolidColorBrush x:Key="SidebarBackground" Color="#292c33"/>
     <SolidColorBrush x:Key="ToolbarBackground" Color="#252729"/>
     <SolidColorBrush x:Key="PanelHeaderBackground" Color="#1d1f21"/>
+    <SolidColorBrush x:Key="GridHeaderBackground" Color="#1d1f21"/>
 
     <!-- === CONTENT AREAS === -->
     <SolidColorBrush x:Key="EditorBackground" Color="#292c33"/>
@@ -29,7 +30,8 @@
     <!-- === BORDERS / SEPARATORS === -->
     <SolidColorBrush x:Key="BorderDefault" Color="#3a3d44"/>
     <SolidColorBrush x:Key="SplitterBackground" Color="#3a3d44"/>
-    <SolidColorBrush x:Key="IndentGuide" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="IndentGuide" Color="#3a3d44" Opacity="0.3"/>
+    <SolidColorBrush x:Key="GridVerticalLine" Color="#3a3d44" Opacity="0.2"/>
 
     <!-- === TEXT === -->
     <SolidColorBrush x:Key="TextPrimary" Color="#c5c8c6"/>
@@ -100,7 +102,18 @@
     <SolidColorBrush x:Key="ColumnPKForeground" Color="#e9c880"/>
     <SolidColorBrush x:Key="ExpandArrowForeground" Color="#aaaaaa"/>
 
+    <!-- === GRID === -->
+    <x:Double x:Key="GridRowHeight">22</x:Double>
+
     <!-- === OVERLAY === -->
     <SolidColorBrush x:Key="OverlayBackground" Color="#CC292c33"/>
+
+    <!-- === MISC UI === -->
+    <SolidColorBrush x:Key="ErrorBannerBackground" Color="#33e74c3c"/>
+    <SolidColorBrush x:Key="CostBadgeBackground" Color="#33ffffff"/>
+    <SolidColorBrush x:Key="ConnectionStripeColor" Color="#88a1bb"/>
+    <SolidColorBrush x:Key="DisconnectedDot" Color="#e74c3c"/>
+    <SolidColorBrush x:Key="ScanProgressBackground" Color="#805c3a00"/>
+    <SolidColorBrush x:Key="SummaryStatsBackground" Color="#402980b9"/>
 
 </ResourceDictionary>

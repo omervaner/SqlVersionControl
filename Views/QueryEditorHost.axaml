@@ -11,7 +11,7 @@
         <Border Grid.Column="0" x:Name="ObjectExplorerPanel" Background="{DynamicResource SidebarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,*">
-                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Padding="10,6">
+                <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="10,0" Height="28">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="Object Explorer" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Button x:Name="OeCollapseButton"
@@ -29,20 +29,21 @@
                 </Border>
 
                 <!-- Search/Filter Bar -->
-                <Border Grid.Row="1" Padding="6,4">
+                <Border Grid.Row="1" Padding="6,2">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0"
                                  x:Name="FilterBox"
-                                 Watermark="Filter objects..."
+                                 Watermark="Filter..."
                                  Text="{Binding ObjectExplorer.FilterText}"
-                                 FontSize="12"
-                                 Padding="6,4"/>
+                                 FontSize="11"
+                                 Height="24"
+                                 Padding="6,2"/>
                         <Button Grid.Column="1"
                                 Content="&#xd7;"
                                 Command="{Binding ObjectExplorer.ClearFilterCommand}"
                                 Background="Transparent"
                                 Foreground="{DynamicResource TextSecondary}"
-                                FontSize="14"
+                                FontSize="12"
                                 Padding="4,2"
                                 MinWidth="0" MinHeight="0"
                                 Margin="2,0,0,0"
@@ -52,7 +53,7 @@
                 </Border>
 
                 <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
-                          Padding="4"
+                          Padding="20,4,4,4"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>
                         <!-- Compact spacing + two-way expand binding + filter visibility -->
@@ -63,10 +64,9 @@
                             <Setter Property="MinHeight" Value="0"/>
                         </Style>
 
-                        <!-- Separator line (1px bottom border) -->
+                        <!-- No separator on every item by default -->
                         <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
-                            <Setter Property="BorderBrush" Value="{DynamicResource TreeItemSeparator}"/>
-                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="BorderThickness" Value="0"/>
                         </Style>
 
                         <!-- Hover highlight -->
@@ -74,11 +74,11 @@
                             <Setter Property="Background" Value="{DynamicResource TreeHover}"/>
                         </Style>
 
-                        <!-- Selection highlight with left accent -->
+                        <!-- Selection highlight with 2px left accent -->
                         <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
                             <Setter Property="Background" Value="{DynamicResource TreeSelected}"/>
                             <Setter Property="BorderBrush" Value="{DynamicResource TreeSelectedAccent}"/>
-                            <Setter Property="BorderThickness" Value="3,0,0,1"/>
+                            <Setter Property="BorderThickness" Value="2,0,0,0"/>
                         </Style>
 
                         <!-- Brighter expand/collapse arrow -->
@@ -86,7 +86,7 @@
                             <Setter Property="Foreground" Value="{DynamicResource ExpandArrowForeground}"/>
                         </Style>
 
-                        <!-- Indent guides: left border on nested items -->
+                        <!-- Indent guides: faint left border on nested items -->
                         <Style Selector="TreeViewItem TreeViewItem">
                             <Setter Property="BorderBrush" Value="{DynamicResource IndentGuide}"/>
                             <Setter Property="BorderThickness" Value="1,0,0,0"/>
@@ -94,7 +94,12 @@
                     </TreeView.Styles>
                     <TreeView.ItemTemplate>
                         <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="models:ObjectExplorerNode">
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                            <StackPanel>
+                                <!-- Separator line above category folder headers -->
+                                <Border Height="1" Background="{DynamicResource TreeItemSeparator}"
+                                        Opacity="0.2" Margin="0,1,0,0"
+                                        IsVisible="{Binding IsCategoryFolder}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
                                 <!-- Icon dot (all nodes) -->
                                 <TextBlock Text="{Binding Icon}" FontSize="10"
                                            Foreground="{Binding IconColor}"
@@ -132,6 +137,7 @@
                                            IsVisible="{Binding IsLoading}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
+                            </StackPanel>
                         </TreeDataTemplate>
                     </TreeView.ItemTemplate>
                 </TreeView>
@@ -159,31 +165,63 @@
                 ToolTip.Tip="Expand Object Explorer (Ctrl+B)"
                 ZIndex="1"/>
 
-        <!-- Right side: Query Tab Strip + Tab Content -->
+        <!-- Right side: Query Tab Strip (merged with toolbar) + Tab Content -->
         <Grid Grid.Column="2" RowDefinitions="Auto,*">
-            <!-- Tab Strip -->
-            <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,2">
-                <Grid ColumnDefinitions="*,Auto,Auto">
+            <!-- Tab Strip + Toolbar (merged into one 28px row) -->
+            <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,0" Height="28">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <!-- Query tabs (left) -->
                     <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
                     </ScrollViewer>
-                    <Button Grid.Column="1" x:Name="AutocompleteToggleButton"
-                            Background="{DynamicResource ButtonToggleActive}"
-                            Foreground="White"
-                            Padding="6,3" FontSize="11" FontWeight="Bold"
-                            BorderThickness="1"
-                            BorderBrush="{DynamicResource BorderDefault}"
-                            Cursor="Hand"
-                            Margin="2,0"
-                            ToolTip.Tip="Toggle Autocomplete"
-                            Content="AC"/>
-                    <Button Grid.Column="2" x:Name="QueryHistoryButton"
+
+                    <!-- Toolbar controls (right-aligned) -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <TextBlock Text="Database:" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox x:Name="ToolbarDatabaseCombo"
+                                  MinWidth="120" Height="24" FontSize="11"
+                                  Margin="0,2" Padding="6,0"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource BorderDefault}"
+                                  VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Grid.Column="3" x:Name="ToolbarRunButton" Content="Run"
+                            Classes="btn-primary"
+                            Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                            Margin="4,2,0,2"
+                            VerticalContentAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Execute query (F5)"/>
+                    <Button Grid.Column="4" x:Name="ToolbarStopButton" Content="Stop"
+                            Classes="btn-danger"
+                            Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                            Margin="2,2,0,2"
+                            VerticalContentAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Cancel execution"/>
+
+                    <!-- Separator -->
+                    <Border Grid.Column="5" Width="1" Height="16" Background="{DynamicResource BorderDefault}"
+                            Margin="6,0" VerticalAlignment="Center"/>
+
+                    <Button Grid.Column="6" x:Name="AutocompleteToggleButton"
                             Background="Transparent"
                             Foreground="{DynamicResource TextSecondary}"
-                            Padding="10,6" FontSize="14"
-                            Cursor="Hand"
-                            ToolTip.Tip="Query History">
-                        <TextBlock Text="&#x1f552;" FontSize="14"/>
+                            Padding="4,2" BorderThickness="0"
+                            Cursor="Hand" MinWidth="0" MinHeight="0"
+                            ToolTip.Tip="Toggle autocomplete">
+                        <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
+                                  Data="M11 0L4 8h4l-1 6 7-8h-4z"/>
+                    </Button>
+                    <Button Grid.Column="7" x:Name="QueryHistoryButton"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextSecondary}"
+                            Padding="4,2" BorderThickness="0"
+                            Cursor="Hand" MinWidth="0" MinHeight="0"
+                            ToolTip.Tip="Query history">
+                        <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
+                                  Data="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 8 2zm-.5 2v4.5l3.5 2 .5-.87-3-1.76V4z"/>
                     </Button>
                 </Grid>
             </Border>

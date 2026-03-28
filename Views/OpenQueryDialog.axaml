@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterOwner"
         CanResize="True">
 
-    <Grid RowDefinitions="Auto,*,Auto" Margin="15">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="24">
         <!-- Search -->
         <TextBox x:Name="SearchBox" Grid.Row="0" Watermark="Search saved queries..."
                  Margin="0,0,0,10"/>

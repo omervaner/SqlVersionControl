@@ -213,6 +213,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 Name = name,
                 DatabaseName = dbNode.DatabaseName,
                 NodeType = type,
+                IsCategoryFolder = true,
                 Children = [ObjectExplorerNode.CreateDummy()]
             }));
         }

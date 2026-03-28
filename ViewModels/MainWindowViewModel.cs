@@ -97,6 +97,17 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     public DatabaseService DatabaseService => _db;
+    public SettingsService? AppSettings { get; set; }
+
+    private string? GetDdlSource()
+    {
+        var s = AppSettings?.Settings;
+        if (s == null || !s.IsDdlAuditConfigured) return null;
+        var db = s.DdlAuditDatabase!;
+        var table = s.DdlAuditTable!;
+        // If server is specified and different from current, we can't cross-server query — just use db.table
+        return $"{db}.{(table.Contains('.') ? table : $"dbo.{table}")}";
+    }
 
     // Event for rollback confirmation (View subscribes to this)
     public event Func<ObjectVersion, Task<bool>>? RollbackRequested;
@@ -132,7 +143,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _autoSyncing = true;
         try
         {
-            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase);
+            var ddlSource = GetDdlSource();
+            if (ddlSource == null) return;
+            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase, ddlSource);
             if (synced <= 0) return;
 
             // Reload recent changes without resetting user's current selection
@@ -177,20 +190,32 @@ public partial class MainWindowViewModel : ViewModelBase
             // Run DDL sync and database list fetch in parallel — they're independent
             StatusMessage = "Loading...";
             var savedDb = SelectedDatabase;
-            var syncTask = _db.SyncFromDdlLogAsync(SelectedDatabase);
-            var dbsTask = _db.GetDatabasesAsync();
+            var ddlSource = GetDdlSource();
+            var synced = 0;
 
-            await Task.WhenAll(syncTask, dbsTask);
+            if (ddlSource != null)
+            {
+                var syncTask = _db.SyncFromDdlLogAsync(SelectedDatabase, ddlSource);
+                var dbsTask = _db.GetDatabasesAsync();
+                await Task.WhenAll(syncTask, dbsTask);
+                synced = syncTask.Result;
 
-            var synced = syncTask.Result;
+                var dbs = dbsTask.Result;
+                Databases.Clear();
+                foreach (var db in dbs) Databases.Add(db);
+            }
+            else
+            {
+                var dbs = await _db.GetDatabasesAsync();
+                Databases.Clear();
+                foreach (var db in dbs) Databases.Add(db);
+                StatusMessage = "Version tracking: not configured (Settings → Version History)";
+            }
+
             if (synced > 0)
                 StatusMessage = $"Synced {synced} new changes from DDL log";
 
-            // Update database list (save/restore selection since Clear() nulls the ComboBox binding)
-            var dbs = dbsTask.Result;
-            Databases.Clear();
-            foreach (var db in dbs)
-                Databases.Add(db);
+            // Restore database selection
             if (savedDb != null && Databases.Contains(savedDb))
                 SelectedDatabase = savedDb;
             if (SelectedDatabase == null && Databases.Contains("AAD"))
@@ -208,10 +233,16 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task SyncAsync()
     {
+        var ddlSource = GetDdlSource();
+        if (ddlSource == null)
+        {
+            StatusMessage = "Version tracking: not configured (Settings → Version History)";
+            return;
+        }
         StatusMessage = "Syncing from DDL log...";
         try
         {
-            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase);
+            var synced = await _db.SyncFromDdlLogAsync(SelectedDatabase, ddlSource);
             StatusMessage = synced > 0
                 ? $"Synced {synced} new changes"
                 : "No new changes to sync";

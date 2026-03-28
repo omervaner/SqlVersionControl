@@ -30,6 +30,8 @@ public partial class DiffView : UserControl
         InitializeComponent();
         ApplyTheme();
 
+        ThemeManager.ThemeChanged += ApplyTheme;
+
         PropertyChanged += (s, e) =>
         {
             if (e.Property == DiffModelProperty)

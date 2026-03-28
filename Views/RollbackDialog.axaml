@@ -6,20 +6,18 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Header -->
-        <Border Grid.Row="0" Background="{DynamicResource ButtonDanger}" Padding="20,15">
-            <StackPanel>
-                <TextBlock Text="⚠ Rollback Confirmation" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource ButtonForeground}"/>
-                <TextBlock Name="WarningText" Foreground="{DynamicResource TextPrimary}" FontSize="12" Margin="0,5,0,0"/>
-            </StackPanel>
-        </Border>
+    <Grid RowDefinitions="Auto,*,Auto" Margin="24">
+        <!-- Title -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Rollback Confirmation" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextBright}"/>
+            <TextBlock Name="WarningText" Foreground="{DynamicResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+        </StackPanel>
 
         <!-- Preview -->
-        <Grid Grid.Row="1" RowDefinitions="Auto,*">
+        <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,16,0,0">
             <TextBlock Grid.Row="0" Text="This ALTER statement will be executed:"
-                       FontWeight="SemiBold" Margin="15,10,15,5"/>
-            <Border Grid.Row="1" Background="{DynamicResource EditorBackground}" Margin="15,0,15,10">
+                       FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <Border Grid.Row="1" Background="{DynamicResource EditorBackground}" CornerRadius="2">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                     <TextBlock Name="PreviewText"
                                FontFamily="Consolas,Menlo,Monaco,monospace"
@@ -31,8 +29,8 @@
         </Grid>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="15">
-            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="20,8" Margin="0,0,10,0"/>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
+            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="20,8"/>
             <Button Name="ConfirmButton" Content="Execute Rollback"
                     Classes="btn-danger" Padding="20,8"/>
         </StackPanel>

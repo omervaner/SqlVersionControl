@@ -26,7 +26,7 @@ public partial class QueryTabView : UserControl
     private IntellisenseService? _intellisenseService;
     private Func<bool>? _isAutocompleteEnabled;
     private SettingsService? _settings;
-    private bool _resultsCollapsed;
+    private bool _resultsCollapsed = true; // Start collapsed — expand on first query result
 
     // Row state colors — resolved from AppTheme resources at runtime
     private IBrush GetRowBrush(string key) =>
@@ -46,8 +46,7 @@ public partial class QueryTabView : UserControl
 
     public void FocusDatabasePicker()
     {
-        DatabaseCombo.IsDropDownOpen = true;
-        DatabaseCombo.Focus();
+        // Database combo is now in QueryEditorHost toolbar — this is a no-op
     }
 
     public void SetIntellisenseService(IntellisenseService service)
@@ -68,6 +67,10 @@ public partial class QueryTabView : UserControl
 
         LoadSyntaxHighlighting();
         ConfigureEditor();
+        ApplyGridRowHeight();
+        ApplyEditorFontSize();
+
+        ThemeManager.ThemeChanged += RefreshTheme;
 
         // Enable drag-and-drop on editor
         DragDrop.SetAllowDrop(SqlEditor, true);
@@ -100,9 +103,14 @@ public partial class QueryTabView : UserControl
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.KeyDown += OnResultsGridKeyDown;
 
-        // Wire results collapse button
+        // Wire results collapse button + double-click results tab bar to toggle
         ResultsCollapseButton.Click += (_, _) => ToggleResultsPanel();
-        RestoreResultsPanelState();
+        ResultsTabBar.DoubleTapped += (_, _) => ToggleResultsPanel();
+
+        // Start with results panel collapsed — editor gets full height
+        EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
+        ResultsSplitter.IsEnabled = false;
+        ResultsCollapseButton.Content = "\u25B2"; // ▲
     }
 
     /// <summary>
@@ -169,6 +177,42 @@ public partial class QueryTabView : UserControl
         return false;
     }
 
+    public void RefreshTheme()
+    {
+        LoadSyntaxHighlighting();
+
+        // Clear cached null brush so GetNullForeground() re-reads from resources
+        _nullForeground = null!;
+
+        // Update grid row height and editor font size from settings
+        ApplyGridRowHeight();
+        ApplyEditorFontSize();
+
+        // Force DataGrid to re-render rows (re-fires LoadingRow with new theme colors)
+        var source = ResultsGrid.ItemsSource;
+        if (source != null)
+        {
+            ResultsGrid.ItemsSource = null;
+            ResultsGrid.ItemsSource = source;
+        }
+
+        // Refresh result tab headers and highlight with new theme colors
+        RebuildResultTabs();
+        UpdateTabHighlight(_selectedTabIndex);
+    }
+
+    private void ApplyGridRowHeight()
+    {
+        var height = _settings?.Settings.GridRowHeight ?? 22;
+        ResultsGrid.RowHeight = height;
+    }
+
+    private void ApplyEditorFontSize()
+    {
+        var size = _settings?.Settings.FontSize ?? 12;
+        SqlEditor.FontSize = size;
+    }
+
     private void LoadSyntaxHighlighting()
     {
         IHighlightingDefinition? definition = null;
@@ -208,25 +252,25 @@ public partial class QueryTabView : UserControl
             switch (color.Name)
             {
                 case "Keyword":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Keyword);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetKeywordColor());
                     break;
                 case "String":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.String);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetStringColor());
                     break;
                 case "Comment":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Comment);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetCommentColor());
                     break;
                 case "Number":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Number);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetNumberColor());
                     break;
                 case "Variable":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Variable);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetVariableColor());
                     break;
                 case "SystemFunction":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.SystemFunction);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetSystemFunctionColor());
                     break;
                 case "Identifier":
-                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.Dark.Identifier);
+                    color.Foreground = new AvaloniaEdit.Highlighting.SimpleHighlightingBrush(ThemeManager.GetIdentifierColor());
                     break;
             }
         }
@@ -546,7 +590,7 @@ public partial class QueryTabView : UserControl
                 if (values[i] == null)
                 {
                     tb.FontStyle = FontStyle.Italic;
-                    tb.Foreground = _nullForeground;
+                    tb.Foreground = GetNullForeground();
                 }
                 else
                 {
@@ -892,15 +936,21 @@ public partial class QueryTabView : UserControl
     {
         RebuildResultTabs();
 
-        // Auto-expand results panel when new results arrive
+        // Auto-expand results panel when new results arrive (70% editor / 30% results)
         try
         {
             if (_resultsCollapsed && _viewModel?.Results.Count > 0)
             {
                 _resultsCollapsed = false;
-                var h = _settings?.Settings.ResultsPanelHeight ?? 200;
-                if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h)) h = 200;
-                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(h, GridUnitType.Pixel);
+                // Use saved height, or calculate 30% of available space
+                var h = _settings?.Settings.ResultsPanelHeight ?? 0;
+                if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h))
+                {
+                    var totalHeight = EditorResultsGrid.Bounds.Height;
+                    h = totalHeight > 100 ? totalHeight * 0.3 : 200;
+                }
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(7, GridUnitType.Star);
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(3, GridUnitType.Star);
                 ResultsSplitter.IsEnabled = true;
                 ResultsCollapseButton.Content = "\u25BC"; // ▼
                 if (_settings != null)
@@ -1014,11 +1064,14 @@ public partial class QueryTabView : UserControl
             var btn = new Button
             {
                 Content = label,
-                Padding = new Thickness(10, 5),
-                Margin = new Thickness(2, 3),
-                Foreground = GetRowBrush("TextBright"),
-                Background = GetRowBrush("ButtonSecondary"),
+                Padding = new Thickness(10, 4),
+                Margin = new Thickness(0),
+                FontSize = 11,
+                Foreground = GetRowBrush("TextSecondary"),
+                Background = Brushes.Transparent,
                 Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                BorderBrush = Brushes.Transparent,
                 Tag = idx
             };
             btn.Click += (_, _) => SelectResultTab(idx);
@@ -1029,11 +1082,14 @@ public partial class QueryTabView : UserControl
         var msgBtn = new Button
         {
             Content = "Messages",
-            Padding = new Thickness(10, 5),
-            Margin = new Thickness(2, 3),
-            Foreground = GetRowBrush("ButtonForeground"),
-            Background = GetRowBrush("ButtonSecondary"),
+            Padding = new Thickness(10, 4),
+            Margin = new Thickness(0),
+            FontSize = 11,
+            Foreground = GetRowBrush("TextSecondary"),
+            Background = Brushes.Transparent,
             Cursor = new Cursor(StandardCursorType.Hand),
+            BorderThickness = new Thickness(0, 0, 0, 2),
+            BorderBrush = Brushes.Transparent,
             Tag = -1
         };
         msgBtn.Click += (_, _) => SelectMessagesTab();
@@ -1077,7 +1133,19 @@ public partial class QueryTabView : UserControl
     }
 
     private static readonly NullDisplayConverter _nullTextConverter = new();
-    private static readonly IBrush _nullForeground = new SolidColorBrush(Color.FromRgb(102, 102, 102));
+    private static IBrush? _nullForeground;
+
+    private static IBrush GetNullForeground()
+    {
+        if (_nullForeground == null || _nullForeground is SolidColorBrush)
+        {
+            if (Application.Current?.Resources.TryGetResource("TextNull", null, out var brush) == true && brush is IBrush b)
+                _nullForeground = b;
+            else
+                _nullForeground = new SolidColorBrush(Color.FromRgb(102, 102, 102));
+        }
+        return _nullForeground;
+    }
 
     /// <summary>
     /// Single source of truth for building result grid columns.
@@ -1115,8 +1183,9 @@ public partial class QueryTabView : UserControl
 
     private void UpdateTabHighlight(int selectedIndex)
     {
-        var activeBrush = GetRowBrush("AccentBlue");
-        var normalBrush = GetRowBrush("ButtonSecondary");
+        var accentBrush = GetRowBrush("ButtonToggleActive");
+        var activeFg = GetRowBrush("TextBright");
+        var normalFg = GetRowBrush("TextSecondary");
 
         for (int i = 0; i < ResultTabHeaders.Children.Count; i++)
         {
@@ -1127,7 +1196,9 @@ public partial class QueryTabView : UserControl
                     ? selectedIndex == -1
                     : (int)(btn.Tag ?? -1) == selectedIndex;
 
-                btn.Background = isSelected ? activeBrush : normalBrush;
+                btn.BorderBrush = isSelected ? accentBrush : Brushes.Transparent;
+                btn.Foreground = isSelected ? activeFg : normalFg;
+                btn.Background = Brushes.Transparent;
             }
         }
     }

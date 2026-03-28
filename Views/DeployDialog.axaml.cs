@@ -25,7 +25,7 @@ public partial class DeployDialog : Window
         if (isProd)
         {
             // Make it scary for PROD
-            HeaderBorder.Background = FindBrush("ButtonDanger");
+            TitleText.Foreground = FindBrush("ButtonDanger");
             TitleText.Text = "PRODUCTION Deployment";
             WarningText.Text = "You are about to deploy to PRODUCTION!";
             ProdWarning.Text = "This will modify the PRODUCTION environment. Please ensure you have tested this change in lower environments first.";

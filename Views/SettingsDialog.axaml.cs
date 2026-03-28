@@ -47,6 +47,7 @@ public partial class SettingsDialog : Window
         CancelButton.Click += (s, e) => CancelAndRevert();
         SaveButton.Click += (s, e) => SaveAndClose();
         BrowseFolderButton.Click += async (s, e) => await BrowseForFolderAsync();
+        BrowseGitFolderButton.Click += async (s, e) => await BrowseForGitFolderAsync();
     }
 
     private void PreviewTheme()
@@ -82,6 +83,9 @@ public partial class SettingsDialog : Window
         else
             LightThemeRadio.IsChecked = true;
 
+        // Grid row height
+        GridRowHeightUpDown.Value = s.GridRowHeight;
+
         // Font size
         foreach (var obj in FontSizeCombo.Items)
         {
@@ -102,6 +106,13 @@ public partial class SettingsDialog : Window
         DataFolderTextBox.Text = folder;
         FolderHintText.Text = $"Default: {SettingsService.DefaultDataFolder}";
 
+        // DDL Audit Source
+        DdlAuditDatabaseTextBox.Text = s.DdlAuditDatabase ?? "";
+        DdlAuditTableTextBox.Text = s.DdlAuditTable ?? "";
+
+        // Git Integration
+        GitExportPathTextBox.Text = s.GitExportPath ?? "";
+
         // Version
         VersionLabel.Text = AppVersion.DisplayString;
     }
@@ -112,6 +123,9 @@ public partial class SettingsDialog : Window
 
         // Theme
         s.UseDarkTheme = DarkThemeRadio.IsChecked == true;
+
+        // Grid row height
+        s.GridRowHeight = (int)(GridRowHeightUpDown.Value ?? 22);
 
         // Font size
         if (FontSizeCombo.SelectedItem is ComboBoxItem item && item.Tag != null)
@@ -127,7 +141,21 @@ public partial class SettingsDialog : Window
         var folder = DataFolderTextBox.Text;
         s.DataFolderPath = folder == SettingsService.DefaultDataFolder ? null : folder;
 
+        // DDL Audit Source (empty string → null)
+        var ddlDb = DdlAuditDatabaseTextBox.Text?.Trim();
+        var ddlTable = DdlAuditTableTextBox.Text?.Trim();
+        s.DdlAuditDatabase = string.IsNullOrEmpty(ddlDb) ? null : ddlDb;
+        s.DdlAuditTable = string.IsNullOrEmpty(ddlTable) ? null : ddlTable;
+
+        // Git Integration (empty string → null)
+        var gitPath = GitExportPathTextBox.Text?.Trim();
+        s.GitExportPath = string.IsNullOrEmpty(gitPath) ? null : gitPath;
+
         _settings.Save();
+
+        // Apply grid row height and notify all views to refresh
+        ThemeManager.ApplyGridRowHeight(s.GridRowHeight);
+        ThemeManager.NotifyThemeChanged();
 
         // Compare with original values to see if theme/font changed
         SettingsChanged = _originalDarkTheme != s.UseDarkTheme || _originalFontSize != s.FontSize;
@@ -145,6 +173,20 @@ public partial class SettingsDialog : Window
         if (folders.Count > 0)
         {
             DataFolderTextBox.Text = folders[0].Path.LocalPath;
+        }
+    }
+
+    private async Task BrowseForGitFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select Git Export Folder",
+            AllowMultiple = false
+        });
+
+        if (folders.Count > 0)
+        {
+            GitExportPathTextBox.Text = folders[0].Path.LocalPath;
         }
     }
 }

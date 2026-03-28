@@ -55,6 +55,13 @@ public partial class QueryEditorHost : UserControl
         InitializeComponent();
     }
 
+    public void RefreshTheme()
+    {
+        foreach (var tab in _tabs)
+            tab.RefreshTheme();
+        RebuildTabStrip();
+    }
+
     public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService, SettingsService settings)
     {
         _db = db;
@@ -77,6 +84,9 @@ public partial class QueryEditorHost : UserControl
         ObjectExplorerTree.AddHandler(InputElement.PointerMovedEvent, OnTreePointerMoved, handledEventsToo: true);
         ObjectExplorerTree.AddHandler(InputElement.PointerPressedEvent, OnTreePointerPressed, handledEventsToo: true);
 
+        // Refresh query tab strip on theme change
+        ThemeManager.ThemeChanged += RefreshTheme;
+
         // Wire history button
         QueryHistoryButton.Click += OnHistoryButtonClicked;
 
@@ -88,6 +98,26 @@ public partial class QueryEditorHost : UserControl
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
         OeExpandButton.Click += (_, _) => ToggleObjectExplorer();
         RestoreObjectExplorerState();
+
+        // Wire merged toolbar buttons (Run/Stop → active tab VM)
+        ToolbarRunButton.Click += (_, _) =>
+        {
+            var vm = ActiveTabViewModel;
+            if (vm?.RunQueryCommand.CanExecute(null) == true)
+                _ = vm.RunQueryCommand.ExecuteAsync(null);
+        };
+        ToolbarStopButton.Click += (_, _) =>
+        {
+            var vm = ActiveTabViewModel;
+            if (vm?.StopQueryCommand.CanExecute(null) == true)
+                vm.StopQueryCommand.Execute(null);
+        };
+        ToolbarDatabaseCombo.SelectionChanged += (_, _) =>
+        {
+            var vm = ActiveTabViewModel;
+            if (vm != null && ToolbarDatabaseCombo.SelectedItem is string db && db != vm.SelectedDatabase)
+                vm.SelectedDatabase = db;
+        };
 
         // Restore session or create default tab
         RestoreSession();
@@ -361,11 +391,51 @@ public partial class QueryEditorHost : UserControl
         }
 
         RebuildTabStrip();
+        SyncToolbarWithActiveTab();
         ActiveTabChanged?.Invoke();
 
         // Save session on tab switch
         if (changed && !_restoringSession)
             SaveSession();
+    }
+
+    /// <summary>Sync toolbar Database combo, Run/Stop enabled state with active tab.</summary>
+    private void SyncToolbarWithActiveTab()
+    {
+        var vm = ActiveTabViewModel;
+        if (vm == null) return;
+
+        // Sync database list and selection
+        ToolbarDatabaseCombo.ItemsSource = vm.Databases;
+        ToolbarDatabaseCombo.SelectedItem = vm.SelectedDatabase;
+
+        // Sync Run/Stop enabled state
+        ToolbarRunButton.IsEnabled = !vm.IsRunning;
+        ToolbarStopButton.IsEnabled = vm.IsRunning;
+
+        // Listen for changes on this VM
+        vm.PropertyChanged -= OnActiveTabPropertyChanged;
+        vm.PropertyChanged += OnActiveTabPropertyChanged;
+    }
+
+    private void OnActiveTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender != ActiveTabViewModel) return;
+        var vm = (QueryTabViewModel)sender;
+        if (e.PropertyName == nameof(QueryTabViewModel.IsRunning))
+        {
+            ToolbarRunButton.IsEnabled = !vm.IsRunning;
+            ToolbarStopButton.IsEnabled = vm.IsRunning;
+        }
+        else if (e.PropertyName == nameof(QueryTabViewModel.SelectedDatabase))
+        {
+            if (ToolbarDatabaseCombo.SelectedItem as string != vm.SelectedDatabase)
+                ToolbarDatabaseCombo.SelectedItem = vm.SelectedDatabase;
+        }
+        else if (e.PropertyName == nameof(QueryTabViewModel.Databases))
+        {
+            ToolbarDatabaseCombo.ItemsSource = vm.Databases;
+        }
     }
 
     private async void UpdateObjectExplorerForTab(QueryTabViewModel tabVm)
@@ -428,6 +498,7 @@ public partial class QueryEditorHost : UserControl
             headerPanel.Children.Add(new TextBlock
             {
                 Text = title,
+                FontSize = 12,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             });
 
@@ -438,7 +509,7 @@ public partial class QueryEditorHost : UserControl
                 Padding = new Thickness(2, 0),
                 Background = Brushes.Transparent,
                 Foreground = closeFg,
-                FontSize = 14,
+                FontSize = 12,
                 Cursor = new Cursor(StandardCursorType.Hand),
                 MinWidth = 0,
                 MinHeight = 0,
@@ -452,7 +523,7 @@ public partial class QueryEditorHost : UserControl
                 Content = headerPanel,
                 Background = isActive ? activeBg : normalBg,
                 Foreground = isActive ? activeFg : normalFg,
-                Padding = new Thickness(12, 6),
+                Padding = new Thickness(10, 4),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 BorderThickness = new Thickness(0)
             };
@@ -474,8 +545,8 @@ public partial class QueryEditorHost : UserControl
             Content = "+",
             Background = Brushes.Transparent,
             Foreground = FindBrush("TextSecondary"),
-            Padding = new Thickness(10, 6),
-            FontSize = 16,
+            Padding = new Thickness(8, 4),
+            FontSize = 14,
             FontWeight = FontWeight.Bold,
             Cursor = new Cursor(StandardCursorType.Hand),
             BorderThickness = new Thickness(0)
@@ -907,19 +978,14 @@ public partial class QueryEditorHost : UserControl
     {
         var enabled = GetSettingsService()?.Settings.AutocompleteEnabled ?? true;
 
-        if (enabled)
-        {
-            AutocompleteToggleButton.Background = FindBrush("ButtonToggleActive");
-            AutocompleteToggleButton.Foreground = Brushes.White;
-            AutocompleteToggleButton.BorderThickness = new Thickness(1);
-            AutocompleteToggleButton.BorderBrush = FindBrush("BorderDefault");
-        }
-        else
-        {
-            AutocompleteToggleButton.Background = FindBrush("ButtonSecondary");
-            AutocompleteToggleButton.Foreground = FindBrush("TextSecondary");
-            AutocompleteToggleButton.BorderThickness = new Thickness(0);
-        }
+        // Active: accent foreground on transparent bg; Inactive: muted foreground
+        var iconBrush = enabled ? FindBrush("ButtonToggleActive") : FindBrush("TextDisabled");
+        AutocompleteToggleButton.Background = Avalonia.Media.Brushes.Transparent;
+        AutocompleteToggleButton.Foreground = iconBrush;
+        AutocompleteToggleButton.BorderThickness = new Thickness(0);
+        // Update the PathIcon foreground inside the button
+        if (AutocompleteToggleButton.Content is Avalonia.Controls.PathIcon pathIcon)
+            pathIcon.Foreground = iconBrush;
     }
 
     /// <summary>Whether autocomplete is currently enabled (checked by QueryTabView).</summary>

@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="20">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="24">
         <StackPanel Grid.Row="0" Spacing="5">
             <TextBlock Text="Query Name:" FontWeight="SemiBold"/>
             <TextBox x:Name="NameBox" Watermark="Enter query name..."/>

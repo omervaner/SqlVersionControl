@@ -11,15 +11,16 @@
         Width="1200" Height="700"
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaTitleBarHeightHint="0">
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="28">
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Title Bar: Menu + Color Stripe + Tab Row -->
-        <Border Grid.Row="0" Background="{DynamicResource TitleBarBackground}">
+        <Border Grid.Row="0" x:Name="TitleBarBorder" Background="{DynamicResource TitleBarBackground}">
             <Grid RowDefinitions="Auto,Auto,Auto">
                 <!-- Menu Bar -->
                 <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
-                      Margin="80,4,0,0">
+                      Margin="80,0,0,0">
                     <MenuItem Header="_File">
                         <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
                         <Separator/>
@@ -57,7 +58,7 @@
 
                 <!-- Connection Color Stripe -->
                 <Border Grid.Row="1" x:Name="ConnectionStripe" Height="3"
-                        Background="#88a1bb" IsVisible="False"/>
+                        Background="{DynamicResource ConnectionStripeColor}" IsVisible="False"/>
 
                 <!-- App Tab Row -->
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
@@ -73,10 +74,10 @@
                     </StackPanel>
                     <Button x:Name="SettingsButton" Grid.Column="1"
                             Background="Transparent" Foreground="{DynamicResource TextSecondary}"
-                            Padding="15,10" Margin="0,0,10,0"
+                            Padding="10,4" Margin="0,0,10,0"
                             ToolTip.Tip="Settings"
                             Cursor="Hand">
-                        <TextBlock Text="&#x2699;" FontSize="18"/>
+                        <TextBlock Text="&#x2699;" FontSize="16"/>
                     </Button>
                 </Grid>
             </Grid>
@@ -322,12 +323,12 @@
         <!-- Status Bar -->
         <Border Grid.Row="3" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
-                Padding="8,4" Height="34">
+                Padding="8,2" Height="24">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <!-- Connection indicator -->
                 <Ellipse x:Name="ConnectionDot" Grid.Column="0"
                          Width="8" Height="8" VerticalAlignment="Center"
-                         Fill="#e74c3c"/>
+                         Fill="{DynamicResource DisconnectedDot}"/>
                 <TextBlock x:Name="ConnectionText" Grid.Column="1"
                            Text="Disconnected" Margin="6,0,0,0"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
@@ -366,14 +367,14 @@
         <Style Selector="RadioButton.TabButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
-            <Setter Property="Padding" Value="20,12"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="16,6"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{TemplateBinding Background}"
                             Padding="{TemplateBinding Padding}"
-                            BorderThickness="0,0,0,3"
+                            BorderThickness="0,0,0,2"
                             BorderBrush="Transparent"
                             x:Name="PART_Border">
                         <ContentPresenter Content="{TemplateBinding Content}"/>

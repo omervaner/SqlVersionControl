@@ -21,7 +21,7 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private int _selectedResultIndex;
     [ObservableProperty] private string _messages = "";
     [ObservableProperty] private bool _isRunning;
-    [ObservableProperty] private string _statusText = "Ready";
+    [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private string _tabTitle = "Query 1";
     [ObservableProperty] private string _queryStatusText = "";
 
@@ -379,7 +379,7 @@ public partial class QueryTabViewModel : ObservableObject
         EditColumnNames = null;
         _editPkColumns = null;
         PendingChangeCount = 0;
-        StatusText = "Ready";
+        StatusText = "";
         EditModeChanged?.Invoke();
     }
 

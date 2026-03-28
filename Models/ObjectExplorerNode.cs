@@ -76,6 +76,8 @@ public partial class ObjectExplorerNode : ObservableObject
     public bool HasTypeInfo => !string.IsNullOrEmpty(TypeInfo);
     public bool ShowPK => IsColumn && IsPrimaryKey;
     public bool IsBold => NodeType is ObjectExplorerNodeType.Database or ObjectExplorerNodeType.Folder;
+    /// <summary>True for top-level category folders (Tables, Views, etc.) — used for separator lines between groups.</summary>
+    public bool IsCategoryFolder { get; set; }
     public double DisplayFontSize => NodeType == ObjectExplorerNodeType.Database ? 13 : 12;
     public string NullabilityText => IsNullable ? "NULL" : "NOT NULL";
 

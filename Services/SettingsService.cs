@@ -172,6 +172,18 @@ public class AppSettings
     public int MaxRecentConnections { get; set; } = 5;
     public string? DataFolderPath { get; set; }
     public bool AutocompleteEnabled { get; set; } = true;
+    public int GridRowHeight { get; set; } = 22;
+
+    // DDL Audit Source (Version History)
+    public string? DdlAuditServer { get; set; }
+    public string? DdlAuditDatabase { get; set; }
+    public string? DdlAuditTable { get; set; }
+
+    // Git Integration
+    public string? GitExportPath { get; set; }
+
+    public bool IsDdlAuditConfigured =>
+        !string.IsNullOrWhiteSpace(DdlAuditDatabase) && !string.IsNullOrWhiteSpace(DdlAuditTable);
 
     // Panel collapse state
     public bool ObjectExplorerCollapsed { get; set; }

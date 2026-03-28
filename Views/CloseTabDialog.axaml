@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="*,Auto" Margin="20">
+    <Grid RowDefinitions="*,Auto" Margin="24">
         <TextBlock x:Name="MessageText" Grid.Row="0"
                    TextWrapping="Wrap" VerticalAlignment="Center" FontSize="14"/>
 

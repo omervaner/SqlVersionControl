@@ -5,46 +5,15 @@
              x:Class="SqlVersionControl.Views.QueryTabView"
              x:DataType="vm:QueryTabViewModel">
 
-    <Grid RowDefinitions="Auto,*">
-        <!-- Per-tab Toolbar -->
-        <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="10,6">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Database:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="DatabaseCombo"
-                              ItemsSource="{Binding Databases}"
-                              SelectedItem="{Binding SelectedDatabase}"
-                              MinWidth="150"/>
-                </StackPanel>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="RunButton" Content="Run (F5)"
-                            Classes="btn-primary"
-                            Command="{Binding RunQueryCommand}"
-                            IsEnabled="{Binding !IsRunning}"
-                            ToolTip.Tip="Execute query (F5 or Ctrl+Enter)"/>
-                    <Button Content="Stop"
-                            Classes="btn-danger"
-                            Command="{Binding StopQueryCommand}"
-                            IsEnabled="{Binding IsRunning}"
-                            ToolTip.Tip="Cancel running query"/>
-                </StackPanel>
-
-                <TextBlock Grid.Column="3" Text="{Binding StatusText}"
-                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="15,0,0,0"/>
-            </Grid>
-        </Border>
-
-        <!-- Editor (top) + Results (bottom) -->
-        <Grid Grid.Row="1" x:Name="EditorResultsGrid" RowDefinitions="*,Auto,*">
+    <!-- Editor (top) + Results (bottom) — toolbar merged into tab strip in QueryEditorHost -->
+    <Grid x:Name="EditorResultsGrid" RowDefinitions="*,Auto,*">
             <!-- SQL Editor -->
-            <Border Grid.Row="0" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="0,0,0,1">
+            <Border Grid.Row="0">
                 <ae:TextEditor x:Name="SqlEditor"
                                Focusable="True"
                                IsReadOnly="False"
                                FontFamily="Consolas, Menlo, Monaco, monospace"
-                               FontSize="13"
+                               FontSize="12"
                                ShowLineNumbers="True"
                                WordWrap="False"
                                HorizontalScrollBarVisibility="Auto"
@@ -73,8 +42,8 @@
             <!-- Results Panel -->
             <Grid Grid.Row="2" RowDefinitions="Auto,*">
                 <!-- Result Tabs Header + Edit Mode Toggle + Edit Buttons -->
-                <Border Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
-                        Padding="5,0" IsVisible="{Binding Results.Count}">
+                <Border Grid.Row="0" x:Name="ResultsTabBar" Background="{DynamicResource PanelHeaderBackground}"
+                        Padding="5,0" Height="28" IsVisible="{Binding Results.Count}">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel x:Name="ResultTabHeaders" Grid.Column="0" Orientation="Horizontal" Spacing="2"/>
 
@@ -82,34 +51,38 @@
                             <!-- Edit mode buttons (visible only in edit mode) -->
                             <TextBlock x:Name="PendingChangesText" Text="No changes"
                                        Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
-                                       FontSize="12" Margin="4,0" IsVisible="False"/>
+                                       FontSize="11" Margin="4,0" IsVisible="False"/>
 
                             <Button Content="+ Row" x:Name="AddRowButton"
                                     Classes="btn-secondary"
                                     Command="{Binding AddNewRowCommand}"
-                                    Padding="8,4" Margin="2,3"
-                                    FontSize="12" IsVisible="False"
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    IsVisible="False"
                                     ToolTip.Tip="Add a new empty row"/>
 
                             <Button Content="Show SQL" x:Name="ShowSqlButton"
                                     Classes="btn-secondary"
-                                    Padding="8,4" Margin="2,3"
-                                    FontSize="12" IsVisible="False"
-                                    ToolTip.Tip="Preview the DML statements"/>
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    IsVisible="False"
+                                    ToolTip.Tip="Preview DML statements"/>
 
-                            <Button Content="Apply"  x:Name="ApplyButton"
+                            <Button Content="Apply" x:Name="ApplyButton"
                                     Classes="btn-primary"
                                     Command="{Binding ApplyChangesCommand}"
-                                    Padding="10,4" Margin="2,3"
-                                    FontSize="12" IsVisible="False"
-                                    ToolTip.Tip="Execute all pending changes in a transaction"/>
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    IsVisible="False"
+                                    ToolTip.Tip="Execute pending changes"/>
 
                             <Button Content="Cancel" x:Name="CancelButton"
                                     Classes="btn-danger"
                                     Command="{Binding CancelChangesCommand}"
-                                    Padding="10,4" Margin="2,3"
-                                    FontSize="12" IsVisible="False"
-                                    ToolTip.Tip="Discard all pending changes"/>
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    IsVisible="False"
+                                    ToolTip.Tip="Discard pending changes"/>
 
                             <!-- Separator between edit buttons and Export/Edit -->
                             <Border x:Name="EditSeparator" Width="1" Height="20"
@@ -120,18 +93,18 @@
                             <Button x:Name="ExportButton"
                                     Content="Export"
                                     Classes="btn-secondary"
-                                    Padding="10,5" Margin="2,3"
-                                    FontSize="12"
-                                    ToolTip.Tip="Export results to Excel (.xlsx)"/>
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    ToolTip.Tip="Export results to CSV"/>
                             <!-- Edit Mode Toggle -->
                             <Button x:Name="EditModeButton"
                                     Content="Edit"
                                     Classes="btn-secondary"
                                     Command="{Binding ToggleEditModeCommand}"
                                     IsVisible="{Binding CanEditMode}"
-                                    Padding="10,5" Margin="2,3"
-                                    FontSize="12"
-                                    ToolTip.Tip="Toggle inline editing (requires primary key)"/>
+                                    Padding="8,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    ToolTip.Tip="Edit result rows"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -165,7 +138,6 @@
                                 <Setter Property="MinHeight" Value="0"/>
                             </Style>
                         </DataGrid.Styles>
-                        <DataGrid.RowHeight>26</DataGrid.RowHeight>
                     </DataGrid>
 
                     <!-- Messages Panel -->
@@ -186,5 +158,4 @@
                 </Panel>
             </Grid>
         </Grid>
-    </Grid>
 </UserControl>

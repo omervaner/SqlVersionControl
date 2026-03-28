@@ -59,7 +59,7 @@
                            TextWrapping="Wrap" MaxWidth="300" TextAlignment="Center"/>
                 <!-- Error display -->
                 <Border IsVisible="{Binding PlanError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                        Background="#33e74c3c" CornerRadius="5" Padding="15" Margin="0,10,0,0">
+                        Background="{DynamicResource ErrorBannerBackground}" CornerRadius="5" Padding="15" Margin="0,10,0,0">
                     <TextBlock Text="{Binding PlanError}" Foreground="{DynamicResource WarningSeverityCritical}" TextWrapping="Wrap"/>
                 </Border>
             </StackPanel>
@@ -131,7 +131,7 @@
                                                    FontSize="11" VerticalAlignment="Center"
                                                    IsVisible="{Binding ObjectInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                         <!-- Cost percentage -->
-                                        <Border Background="#33ffffff" CornerRadius="3" Padding="5,1">
+                                        <Border Background="{DynamicResource CostBadgeBackground}" CornerRadius="3" Padding="5,1">
                                             <TextBlock Text="{Binding CostPercent, StringFormat='{}{0}%'}"
                                                        FontSize="11" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>

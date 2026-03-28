@@ -1,4 +1,7 @@
+using System.Collections;
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 
@@ -8,6 +11,13 @@ public static class ThemeManager
 {
     public static bool IsDarkTheme { get; private set; } = true;
     public static int FontSize { get; private set; } = 12;
+
+    /// <summary>Fired after ApplyTheme completes. Views should subscribe to re-apply code-behind colors.</summary>
+    public static event Action? ThemeChanged;
+
+    private static readonly Uri DarkThemeUri = new("avares://SqlVersionControl/Styles/AppTheme.axaml");
+    private static readonly Uri LightThemeUri = new("avares://SqlVersionControl/Styles/AppThemeLight.axaml");
+    private static IResourceProvider? _currentThemeDict;
 
     // Dark theme colors — must match Styles/AppTheme.axaml (Ghostty Default Dark)
     public static class Dark
@@ -38,33 +48,33 @@ public static class ThemeManager
         public static readonly Color Identifier = Color.FromRgb(149, 189, 183);    // #95bdb7
     }
 
-    // Light theme colors
+    // Light theme colors — warm cream palette, NOT inverted dark
     public static class Light
     {
-        public static readonly Color DiffBackground = Color.FromRgb(255, 255, 255);
-        public static readonly Color LineNumberBackground = Color.FromRgb(240, 240, 240);
-        public static readonly Color LineNumberForeground = Color.FromRgb(120, 120, 120);
-        public static readonly Color DefaultForeground = Color.FromRgb(30, 30, 30);
+        public static readonly Color DiffBackground = Color.FromRgb(245, 240, 232);     // EditorBackground #f5f0e8
+        public static readonly Color LineNumberBackground = Color.FromRgb(232, 226, 216); // PanelHeaderBackground #e8e2d8
+        public static readonly Color LineNumberForeground = Color.FromRgb(138, 132, 122); // TextSecondary #8a847a
+        public static readonly Color DefaultForeground = Color.FromRgb(58, 54, 50);      // TextPrimary #3a3632
 
         // Diff line backgrounds
-        public static readonly Color DeletedBackground = Color.FromRgb(255, 220, 220);
-        public static readonly Color InsertedBackground = Color.FromRgb(220, 255, 220);
-        public static readonly Color ModifiedBackground = Color.FromRgb(255, 255, 200);
-        public static readonly Color ImaginaryBackground = Color.FromRgb(245, 245, 245);
+        public static readonly Color DeletedBackground = Color.FromRgb(245, 213, 213);   // #f5d5d5
+        public static readonly Color InsertedBackground = Color.FromRgb(213, 240, 213);  // #d5f0d5
+        public static readonly Color ModifiedBackground = Color.FromRgb(245, 240, 208);  // #f5f0d0
+        public static readonly Color ImaginaryBackground = Color.FromRgb(239, 233, 222); // #efe9de
 
         // Diff text foregrounds
-        public static readonly Color DeletedForeground = Color.FromRgb(180, 50, 50);
-        public static readonly Color InsertedForeground = Color.FromRgb(50, 150, 50);
-        public static readonly Color ImaginaryForeground = Color.FromRgb(100, 100, 100);
+        public static readonly Color DeletedForeground = Color.FromRgb(168, 82, 80);     // #a85250
+        public static readonly Color InsertedForeground = Color.FromRgb(90, 112, 40);    // #5a7028
+        public static readonly Color ImaginaryForeground = Color.FromRgb(138, 132, 122); // TextSecondary #8a847a
 
-        // Syntax highlighting
-        public static readonly Color Keyword = Color.FromRgb(0, 0, 255);
-        public static readonly Color String = Color.FromRgb(163, 21, 21);
-        public static readonly Color Comment = Color.FromRgb(0, 128, 0);
-        public static readonly Color Number = Color.FromRgb(9, 134, 88);
-        public static readonly Color Variable = Color.FromRgb(0, 100, 148);
-        public static readonly Color SystemFunction = Color.FromRgb(116, 83, 31);
-        public static readonly Color Identifier = Color.FromRgb(38, 127, 153);
+        // Syntax highlighting — warm light palette
+        public static readonly Color Keyword = Color.FromRgb(44, 95, 138);        // #2c5f8a
+        public static readonly Color String = Color.FromRgb(90, 112, 40);         // #5a7028
+        public static readonly Color Comment = Color.FromRgb(154, 148, 136);      // #9a9488
+        public static readonly Color Number = Color.FromRgb(152, 106, 29);        // #986a1d
+        public static readonly Color Variable = Color.FromRgb(123, 90, 138);      // #7b5a8a
+        public static readonly Color SystemFunction = Color.FromRgb(138, 109, 26); // #8a6d1a
+        public static readonly Color Identifier = Color.FromRgb(42, 122, 112);    // #2a7a70
     }
 
     public static void ApplyTheme(bool useDarkTheme, int fontSize = 12)
@@ -72,13 +82,38 @@ public static class ThemeManager
         IsDarkTheme = useDarkTheme;
         FontSize = fontSize;
 
+        if (Application.Current == null) return;
+
         // Update application theme variant
-        if (Application.Current != null)
+        Application.Current.RequestedThemeVariant = useDarkTheme
+            ? ThemeVariant.Dark
+            : ThemeVariant.Light;
+
+        // Swap resource dictionaries: clear all merged dicts and add the correct theme
+        var resources = Application.Current.Resources;
+        resources.MergedDictionaries.Clear();
+
+        var baseUri = new Uri("avares://SqlVersionControl/");
+        var targetSource = useDarkTheme
+            ? new Uri("/Styles/AppTheme.axaml", UriKind.Relative)
+            : new Uri("/Styles/AppThemeLight.axaml", UriKind.Relative);
+        var themeInclude = new Avalonia.Markup.Xaml.Styling.ResourceInclude(baseUri)
         {
-            Application.Current.RequestedThemeVariant = useDarkTheme
-                ? ThemeVariant.Dark
-                : ThemeVariant.Light;
-        }
+            Source = targetSource
+        };
+        resources.MergedDictionaries.Add(themeInclude);
+
+        // Notify all subscribers to re-apply code-behind colors
+        ThemeChanged?.Invoke();
+    }
+
+    /// <summary>Manually fire ThemeChanged (e.g. after settings save).</summary>
+    public static void NotifyThemeChanged() => ThemeChanged?.Invoke();
+
+    public static void ApplyGridRowHeight(int height)
+    {
+        if (Application.Current != null)
+            Application.Current.Resources["GridRowHeight"] = (double)height;
     }
 
     // Helper methods to get current theme colors

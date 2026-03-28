@@ -31,15 +31,18 @@
         <Style Selector="DataGrid">
             <Setter Property="Background" Value="{DynamicResource EditorBackground}"/>
             <Setter Property="RowBackground" Value="{DynamicResource EditorBackground}"/>
-            <!-- AlternatingRowBackground not available in Avalonia DataGrid -->
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
             <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderDefault}"/>
-            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource GridVerticalLine}"/>
+            <Setter Property="GridLinesVisibility" Value="All"/>
+            <Setter Property="RowHeight" Value="{DynamicResource GridRowHeight}"/>
         </Style>
         <Style Selector="DataGridColumnHeader">
-            <Setter Property="Background" Value="{DynamicResource PanelHeaderBackground}"/>
+            <Setter Property="Background" Value="{DynamicResource GridHeaderBackground}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
         </Style>
         <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
             <Setter Property="Fill" Value="{DynamicResource HoverBackground}"/>
@@ -47,6 +50,58 @@
         <Style Selector="DataGridRowHeader">
             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="FontSize" Value="11"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+            <Setter Property="Padding" Value="4,0,8,0"/>
+            <Setter Property="Opacity" Value="0.8"/>
+        </Style>
+        <!-- Global 2px corner radius on ALL buttons -->
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="2"/>
+        </Style>
+
+        <!-- Global tooltip delay: 600ms -->
+        <Style Selector="ToolTip">
+            <Setter Property="ShowDelay" Value="600"/>
+        </Style>
+
+        <!-- Overlay auto-hide scrollbars: thin, semi-transparent, fade in/out -->
+        <Style Selector="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.3"/>
+                    <DoubleTransition Property="Width" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="ScrollBar:pointerover">
+            <Setter Property="Opacity" Value="0.7"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="MinWidth" Value="8"/>
+        </Style>
+        <Style Selector="ScrollViewer:pointerover ScrollBar">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="ScrollViewer:pointerover ScrollBar:pointerover">
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="ScrollBar /template/ Rectangle#TrackRect">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="ScrollBar:horizontal">
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="MinHeight" Value="6"/>
+        </Style>
+        <Style Selector="ScrollBar:horizontal:pointerover">
+            <Setter Property="Height" Value="8"/>
+            <Setter Property="MinHeight" Value="8"/>
+        </Style>
+        <!-- Hide scrollbar arrow/repeat buttons -->
+        <Style Selector="ScrollBar /template/ RepeatButton">
+            <Setter Property="IsVisible" Value="False"/>
         </Style>
 
         <!-- Global button style classes -->
