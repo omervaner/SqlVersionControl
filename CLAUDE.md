@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.3 (March 30, 2026)
+## PROJECT STATUS: v2.4.4 (March 30, 2026)
+
+v2.4.4: Live elapsed timer on status bar during query execution, connection dialog scrollable, password fix.
 
 v2.4.3: Connection dialog scrollable, password preserved on mode switch, command palette uppercase/lowercase fix.
 

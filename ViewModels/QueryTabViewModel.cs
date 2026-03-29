@@ -14,6 +14,8 @@ public partial class QueryTabViewModel : ObservableObject
     private readonly DatabaseService _db;
     private readonly DataEditService _editService;
     private CancellationTokenSource? _cts;
+    private Stopwatch? _runStopwatch;
+    private Timer? _elapsedTimer;
 
     [ObservableProperty] private ObservableCollection<string> _databases = [];
     [ObservableProperty] private string? _selectedDatabase;
@@ -190,6 +192,26 @@ public partial class QueryTabViewModel : ObservableObject
             SelectedDatabase = Databases[0];
     }
 
+    private void StartElapsedTimer()
+    {
+        _runStopwatch = Stopwatch.StartNew();
+        _elapsedTimer = new Timer(_ =>
+        {
+            if (_runStopwatch == null) return;
+            var elapsed = _runStopwatch.Elapsed;
+            QueryStatusText = elapsed.TotalSeconds < 60
+                ? $"Running... {elapsed.TotalSeconds:F1}s"
+                : $"Running... {elapsed:mm\\:ss}";
+        }, null, 500, 500);
+    }
+
+    private void StopElapsedTimer()
+    {
+        _elapsedTimer?.Dispose();
+        _elapsedTimer = null;
+        _runStopwatch = null;
+    }
+
     [RelayCommand]
     private async Task RunQueryAsync()
     {
@@ -229,6 +251,7 @@ public partial class QueryTabViewModel : ObservableObject
         Messages = "";
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
+        StartElapsedTimer();
         var sw = Stopwatch.StartNew();
 
         try
@@ -307,6 +330,7 @@ public partial class QueryTabViewModel : ObservableObject
         }
         finally
         {
+            StopElapsedTimer();
             IsRunning = false;
             _cts?.Dispose();
             _cts = null;
@@ -370,6 +394,7 @@ public partial class QueryTabViewModel : ObservableObject
         Messages = "";
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
+        StartElapsedTimer();
         var sw = Stopwatch.StartNew();
 
         try
@@ -423,6 +448,7 @@ public partial class QueryTabViewModel : ObservableObject
         }
         finally
         {
+            StopElapsedTimer();
             IsRunning = false;
             IsTracing = false;
             _cts?.Dispose();
