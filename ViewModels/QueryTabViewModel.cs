@@ -193,7 +193,23 @@ public partial class QueryTabViewModel : ObservableObject
     [RelayCommand]
     private async Task RunQueryAsync()
     {
-        if (IsRunning || string.IsNullOrEmpty(SelectedDatabase)) return;
+        if (IsRunning) return;
+
+        if (string.IsNullOrEmpty(TabConnectionString))
+        {
+            Messages = "Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.";
+            StatusText = "× Not connected";
+            QueryStatusText = "Not connected";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(SelectedDatabase))
+        {
+            Messages = "Error: No database selected.\nSelect a database from the dropdown above.";
+            StatusText = "× No database";
+            QueryStatusText = "No database";
+            return;
+        }
 
         var sql = !string.IsNullOrWhiteSpace(SelectedSqlText)
             ? SelectedSqlText
@@ -308,7 +324,23 @@ public partial class QueryTabViewModel : ObservableObject
     [RelayCommand]
     private async Task RunWithTraceAsync()
     {
-        if (IsRunning || string.IsNullOrEmpty(SelectedDatabase)) return;
+        if (IsRunning) return;
+
+        if (string.IsNullOrEmpty(TabConnectionString))
+        {
+            Messages = "Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.";
+            StatusText = "× Not connected";
+            QueryStatusText = "Not connected";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(SelectedDatabase))
+        {
+            Messages = "Error: No database selected.\nSelect a database from the dropdown above.";
+            StatusText = "× No database";
+            QueryStatusText = "No database";
+            return;
+        }
 
         var sql = !string.IsNullOrWhiteSpace(SelectedSqlText)
             ? SelectedSqlText

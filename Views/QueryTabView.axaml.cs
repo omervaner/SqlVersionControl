@@ -97,7 +97,11 @@ public partial class QueryTabView : UserControl
                 UpdateEditBar();
             if (e.PropertyName == nameof(QueryTabViewModel.IsEditMode))
                 UpdateEditModeButton();
+            if (e.PropertyName is nameof(QueryTabViewModel.TabConnectionString)
+                or nameof(QueryTabViewModel.SelectedDatabase))
+                UpdateEmptyStateText();
         };
+        UpdateEmptyStateText();
 
         // Show SQL preview button + Export
         ShowSqlButton.Click += OnShowSqlClicked;
@@ -255,6 +259,18 @@ public partial class QueryTabView : UserControl
     {
         var height = _settings?.Settings.GridRowHeight ?? 22;
         ResultsGrid.RowHeight = height;
+    }
+
+    private void UpdateEmptyStateText()
+    {
+        if (_viewModel == null) return;
+
+        if (string.IsNullOrEmpty(_viewModel.TabConnectionString))
+            EmptyState.Text = "Not connected — use File → Manage Connections to connect";
+        else if (string.IsNullOrEmpty(_viewModel.SelectedDatabase))
+            EmptyState.Text = "Select a database from the dropdown above";
+        else
+            EmptyState.Text = "Run a query to see results here";
     }
 
     private void ApplyEditorFontSize()

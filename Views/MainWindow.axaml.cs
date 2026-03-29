@@ -845,7 +845,8 @@ public partial class MainWindow : Window
         }
         else
         {
-            Close();
+            // User chose "Continue Offline" or closed the dialog — let them use the app disconnected
+            UpdateStatusBar();
         }
     }
 

@@ -28,7 +28,14 @@ public partial class ConnectionDialog : Window
             {
                 vm.ConnectCommand.Execute(null);
             }
+            if (e.Key == Key.Escape)
+            {
+                Close(); // Result stays null = offline
+            }
         };
+
+        // Continue Offline — close dialog without connecting
+        SkipButton.Click += (_, _) => Close();
     }
 
     public ConnectionDialog(DatabaseService db, SettingsService? settings = null,

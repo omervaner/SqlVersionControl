@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.1 (March 30, 2026)
+## PROJECT STATUS: v2.4.2 (March 30, 2026)
+
+v2.4.2: Offline UX — Continue Offline on connection dialog, contextual error messages on F5, dynamic empty state.
 
 v2.4.1: Command Palette (Cmd+E) — VS Code-style fuzzy command search.
 
