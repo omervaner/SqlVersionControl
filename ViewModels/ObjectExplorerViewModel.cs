@@ -428,6 +428,114 @@ public partial class ObjectExplorerViewModel : ObservableObject
         _ = ViewDefinitionAsync(node);
     }
 
+    /// <summary>Script as ALTER — fetch definition and replace CREATE with ALTER.</summary>
+    public async Task ScriptAsAlterAsync(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var definition = _activeConnectionString != null
+            ? await _db.GetObjectDefinitionAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+            : await _db.GetObjectDefinitionAsync(node.DatabaseName, schema, node.Name);
+        if (definition == null) return;
+
+        // Replace CREATE with ALTER (skip if already ALTER)
+        var altered = System.Text.RegularExpressions.Regex.Replace(
+            definition,
+            @"\bCREATE\s+(OR\s+ALTER\s+)?(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b",
+            "ALTER $2",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        InsertTextRequested?.Invoke(altered, false);
+    }
+
+    /// <summary>Script as DROP with IF EXISTS safety.</summary>
+    public void ScriptAsDrop(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var objectType = node.NodeType switch
+        {
+            ObjectExplorerNodeType.Table => "TABLE",
+            ObjectExplorerNodeType.View => "VIEW",
+            ObjectExplorerNodeType.Proc => "PROCEDURE",
+            ObjectExplorerNodeType.Function => "FUNCTION",
+            _ => "OBJECT"
+        };
+        var sql = $"DROP {objectType} IF EXISTS [{schema}].[{node.Name}]";
+        InsertTextRequested?.Invoke(sql, false);
+    }
+
+    /// <summary>Generate INSERT template with all columns and placeholder values.</summary>
+    public async Task ScriptAsInsertAsync(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var columns = _activeConnectionString != null
+            ? await _db.GetColumnsAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+            : await _db.GetColumnsAsync(node.DatabaseName, schema, node.Name);
+
+        if (columns.Count == 0) return;
+
+        var colNames = string.Join(",\n    ", columns.Select(c => $"[{c.Name}]"));
+        var colValues = string.Join(",\n    ", columns.Select(c => $"/* {c.TypeName} */ NULL"));
+        var sql = $"INSERT INTO [{schema}].[{node.Name}]\n(\n    {colNames}\n)\nVALUES\n(\n    {colValues}\n)";
+        InsertTextRequested?.Invoke(sql, false);
+    }
+
+    /// <summary>Generate ALTER TABLE ADD column template.</summary>
+    public void ScriptAsAlterTable(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var sql = $"ALTER TABLE [{schema}].[{node.Name}]\n    ADD [ColumnName] NVARCHAR(50) NULL";
+        InsertTextRequested?.Invoke(sql, false);
+    }
+
+    /// <summary>Generate CREATE TABLE script from column metadata.</summary>
+    public async Task ScriptTableAsCreateAsync(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var columns = _activeConnectionString != null
+            ? await _db.GetColumnsAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+            : await _db.GetColumnsAsync(node.DatabaseName, schema, node.Name);
+
+        if (columns.Count == 0) return;
+
+        var pkCols = columns.Where(c => c.IsPrimaryKey).Select(c => $"[{c.Name}]").ToList();
+        var colDefs = columns.Select(c =>
+        {
+            var typeFmt = Services.SqlTypeFormatter.Format(c.TypeName, c.MaxLength);
+            var nullable = c.IsNullable ? "NULL" : "NOT NULL";
+            return $"    [{c.Name}] {typeFmt} {nullable}";
+        });
+
+        var sql = $"CREATE TABLE [{schema}].[{node.Name}]\n(\n{string.Join(",\n", colDefs)}";
+        if (pkCols.Count > 0)
+            sql += $",\n    CONSTRAINT [PK_{node.Name}] PRIMARY KEY ({string.Join(", ", pkCols)})";
+        sql += "\n)";
+
+        InsertTextRequested?.Invoke(sql, false);
+    }
+
+    /// <summary>Script column as SELECT with this column.</summary>
+    public void ScriptColumnAsSelect(ObjectExplorerNode node)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var table = node.ParentTableName;
+        var sql = $"SELECT [{node.Name}] FROM [{schema}].[{table}]";
+        InsertTextRequested?.Invoke(sql, false);
+    }
+
+    /// <summary>Script column as WHERE clause.</summary>
+    public void ScriptColumnAsWhere(ObjectExplorerNode node)
+    {
+        var sql = $"WHERE [{node.Name}] = ''";
+        InsertAtCursorRequested?.Invoke(sql);
+    }
+
+    /// <summary>Copy column name to clipboard (handled via event).</summary>
+    public event Action<string>? CopyToClipboardRequested;
+
+    public void CopyColumnName(ObjectExplorerNode node)
+    {
+        CopyToClipboardRequested?.Invoke(node.Name);
+    }
+
     public async Task GenerateExecAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;

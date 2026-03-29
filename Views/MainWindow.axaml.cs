@@ -138,6 +138,9 @@ public partial class MainWindow : Window
         MenuFind.Click += (_, _) => OpenSearchPanel(false);
         MenuReplace.Click += (_, _) => OpenSearchPanel(true);
 
+        // Tools menu
+        MenuSqlQuoter.Click += async (_, _) => await ShowSqlQuoterDialogAsync();
+
         // Help menu
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
         MenuCheckUpdates.Click += async (_, _) =>
@@ -354,6 +357,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Redo: Ctrl+Y or Cmd/Ctrl+Shift+Z
+        if (ctrl && (e.Key == Key.Y || (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Z)))
+        {
+            var editor = GetActiveEditor();
+            if (editor?.Document.UndoStack.CanRedo == true)
+            {
+                editor.Document.UndoStack.Redo();
+                e.Handled = true;
+            }
+            return;
+        }
+
+        // Ctrl+Shift+Q — Quick Quote selection
+        if (ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Q && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.QuickQuoteSelection(nPrefix: false);
+            e.Handled = true;
+            return;
+        }
+
+        // Alt+Up/Down (move lines), Ctrl+G (go to line)
+        var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        if (QueryEditorTab.IsChecked == true &&
+            ((alt && (e.Key == Key.Up || e.Key == Key.Down)) || (ctrl && e.Key == Key.G)))
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host?.HandleKeyDown(e) == true)
+                e.Handled = true;
+            return;
+        }
+
         if (!ctrl && e.Key != Key.Escape) return;
 
         switch (e.Key)
@@ -567,6 +602,12 @@ public partial class MainWindow : Window
     private async Task ShowSettingsDialogAsync()
     {
         var dialog = new SettingsDialog(_settings, RefreshDiffViews);
+        await dialog.ShowDialog(this);
+    }
+
+    private async Task ShowSqlQuoterDialogAsync()
+    {
+        var dialog = new SqlQuoterDialog();
         await dialog.ShowDialog(this);
     }
 

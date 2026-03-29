@@ -1,8 +1,44 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.7.0 (March 2026)
-v1.7.0: Collapsible panels (OE + results grid with Ctrl+B/Ctrl+J), OE color fix (sidebar matches editor), Sequences in Object Explorer, Table Structure Compare in Compare Databases (column-level diffs, CREATE TABLE / ALTER TABLE DDL generation), SQL Agent Jobs in Object Explorer (msdb queries, job status/history/steps, Start Job with confirmation), Copy as INSERT crash diagnostic (try-catch to capture intermittent crash). v1.6.0: Per-tab connections + quick-switch buttons. Each query tab owns its connection string — Tab 1 on DEV, Tab 2 on PROD simultaneously. Named connections appear as colored buttons in the status bar; clicking one opens a new tab on that server. Object Explorer, status bar stripe, and window title update on tab switch. Session save/restore preserves per-tab connections. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
+## PROJECT STATUS: v1.8.3 (March 29, 2026)
+
+v1.8.3: Tools menu, editor enhancements, Script Object As. See docs/ folder for full specs.
+
+**v1.8.3 changes:**
+- Tools menu with SQL Quoter dialog (paste values, get IN clause output)
+- Quick Quote toolbar button (`"` icon, Ctrl+Shift+Q) — quotes selected text in-place
+- Script Object As context menus (CREATE, ALTER, DROP, INSERT for tables; ALTER/DROP for procs/views/functions)
+- Peek Definition (Cmd+Click / Ctrl+Click on proc/view/function names)
+- Highlight all occurrences of selected word (case-insensitive, whole-word)
+- Move line up/down (Alt+Up/Down)
+- Go to Line (Cmd+G / Ctrl+G)
+- Redo keybinding fix (Cmd+Shift+Z / Ctrl+Y)
+- Context menu styling (12px font, themed background)
+
+v1.8.2: Major design system overhaul + architecture changes. See docs/ folder for full specs.
+
+**v1.8.x changes (March 29 session):**
+- Complete visual redesign — DESIGN-SYSTEM.md governs all UI decisions
+- Merged toolbar into query tab row (4 bars → 3 bars before editor)
+- Merged main view tabs into menu bar row (3 bars → 2 bars before editor)
+- Warm cream light theme with full theme switching (ThemeChanged event system)
+- Shortened tab labels: Editor, History, Compare, Exec Plan, Settings
+- Removed Query menu (redundant — Run/Stop already in toolbar)
+- Per-view connection ownership — each view remembers its own connection, status bar mirrors active view
+- Colored dots on query tabs showing their connection environment
+- Connection stripe gradient fade (transparent at edges)
+- OE density restored, 20px left padding, compact filter box
+- Results panel collapsed by default, expands on F5 (70/30 split)
+- Overlay auto-hide scrollbars
+- Configurable grid row height and monospace font size in Settings
+- DDL audit source configurable in Settings (no more hardcoded VMAuditDb)
+- Git integration path in Settings (UI only, export logic pending)
+- Closed-eye logo (monochrome, line-art, works at all sizes)
+- Tooltips on all toolbar buttons with keyboard shortcuts
+- CI fix: publish with `-f net9.0` flag (csproj targets both net9.0 and net10.0)
+
+v1.7.0: Collapsible panels, Sequences in OE, Table Structure Compare, SQL Agent Jobs. v1.6.0: Per-tab connections + quick-switch buttons. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
 ---
 
 ## Project Identity
@@ -32,12 +68,17 @@ Write and run SQL queries against any database on the connected server:
 - **Drag-and-drop** from Object Explorer into editor: Table/View → `[schema].[name]` at drop position; Function → `[schema].[name]()`; Column → `[name]`; Proc → opens full definition
 - **Editable result grid** (TOAD-style): For simple single-table SELECTs with a PK, "Edit" button appears on result tab header. Toggle enters edit mode — DataGrid becomes writable. Row-based change tracking: snapshot on row enter, compare on row leave, Escape reverts. Yellow=modified, green=new, red=deleted. "Mark for Delete" via right-click. "Add Row" for inserts. "Show SQL" previews parameterized DML. "Apply" executes in a single transaction with row-count verification. "Edit Data" context menu on tables auto-runs SELECT TOP 200 and enters edit mode.
 
-### Menu Bar (v1.4.0)
-Traditional menu bar (File, Edit, Query, Help) inside the dark titlebar, above the app tab row:
-- **File**: New Query (Ctrl+N), Open File (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), Recent Files submenu, Exit
+### Menu Bar + View Tabs (v1.8.2)
+Merged into a single row: menus left-aligned, view tabs right-aligned. Only 2 bars before SQL editor content.
+
+Layout: `[traffic lights] File  Edit  Help  ——  Editor  History  Compare  Exec Plan  Settings`
+
+- **File**: New Query (Ctrl+N), Open File (Ctrl+O), Save (Ctrl+S), Save As (Ctrl+Shift+S), Change Connection, Recent Files submenu, Exit
 - **Edit**: Undo, Redo, Cut, Copy, Paste, Find (Ctrl+F), Replace (Ctrl+H) — pass-through to active tab's AvaloniaEdit
-- **Query**: Run (F5), Stop, Change Database
 - **Help**: About (shows version dialog), Check for Updates (opens GitHub releases)
+- **Query menu removed** — Run/Stop are toolbar buttons, Change Connection moved to File
+- **View tabs**: Editor, History, Compare, Exec Plan are RadioButtons styled as tabs
+- **Settings**: text button, opens SettingsDialog (replaces old gear icon)
 
 ### Saved Queries (v1.4.0 Task 7)
 Full .sql file persistence for query tabs:
@@ -90,11 +131,20 @@ Generate and visualize SQL Server estimated execution plans with human-readable 
 
 ## Project Structure
 ```
-CheatTeam/
+SqlVersionControl/
 ├── Views/           - Avalonia XAML views and code-behind
 ├── ViewModels/      - MVVM view models
 ├── Models/          - Data models (ConnectionSettings, ObjectVersion, QueryResult, etc.)
-├── Services/        - DatabaseService, SettingsService, ThemeManager, PlanTranslator, PlanXmlHelper
+├── Services/        - DatabaseService, SettingsService, ThemeManager, etc.
+├── Styles/          - AppTheme.axaml (dark), AppThemeLight.axaml (warm cream light)
+├── Assets/          - Logo SVGs (logo.svg, logo-dark.svg, logo-light.svg), backup icons
+├── docs/            - Design & planning docs (read these first for context)
+│   ├── DESIGN-SYSTEM.md      - Visual design bible (colors, spacing, components, phases)
+│   ├── QUALITY-POLISH.md     - Architecture changes (menu merge, connection model, stripe)
+│   ├── DATA-COMPARE.md       - Table data compare feature spec
+│   ├── TOOLS-MENU.md         - Tools menu features (quoter, formatter, dependencies, etc.)
+│   ├── LOCAL-DEV-NOTES.md    - Docker dev environment setup
+│   └── SESSION-SUMMARY-*.md  - Session logs
 ├── lib/             - Git submodule: PlanViewer.Core (DO NOT MODIFY)
 ├── CLAUDE.md        - This file (developer guide)
 └── SqlVersionControl.csproj
@@ -383,15 +433,15 @@ if (SelectedSourceConnection != null && !IsSourceConnected)
 
 ## UI Color Scheme
 
-**ALL colors are defined in `Styles/AppTheme.axaml` (Ghostty Default Dark palette).** No hardcoded hex values anywhere else.
+**Two themes**: Dark (Ghostty Default Dark) in `Styles/AppTheme.axaml`, Light (warm cream) in `Styles/AppThemeLight.axaml`. See docs/DESIGN-SYSTEM.md for the full color spec.
 
-Every AXAML file uses `{DynamicResource KeyName}` — change one value in AppTheme.axaml and the entire app updates.
+Every AXAML file uses `{DynamicResource KeyName}`. ThemeManager.ApplyTheme() swaps the resource dictionary and fires `ThemeChanged` event. All code-behind that uses theme colors subscribes to this event and re-applies.
 
-Key resources: `EditorBackground`, `ToolbarBackground`, `SidebarBackground`, `TitleBarBackground`, `TextPrimary`, `TextSecondary`, `ButtonPrimary`, `ButtonDanger`, `ButtonSecondary`, `BorderDefault`, `AccentBlue`.
+Key resources: `EditorBackground`, `ToolbarBackground`, `SidebarBackground`, `TitleBarBackground`, `PanelHeaderBackground`, `TextPrimary`, `TextSecondary`, `ButtonPrimary`, `ButtonDanger`, `ButtonSecondary`, `BorderDefault`, `AccentBlue`.
 
-Syntax highlighting colors are in `ThemeManager.cs` (must match AppTheme.axaml): `SyntaxKeyword` (#88a1bb), `SyntaxString` (#b7bd73), `SyntaxComment` (#666666), `SyntaxNumber` (#e9c880), `SyntaxVariable` (#ad95b8).
+Syntax highlighting: `ThemeManager.cs` has both Dark and Light color sets. `ThemeManager.GetKeywordColor()` etc. return the correct color for the current theme.
 
-**NEVER add a hardcoded `#xxxxxx` to any AXAML file.** Add a new resource to AppTheme.axaml and reference it with `{DynamicResource}`.
+**NEVER add a hardcoded `#xxxxxx` to any AXAML or code-behind file.** Add a resource to both AppTheme.axaml AND AppThemeLight.axaml, reference with `{DynamicResource}` in XAML, or use ThemeManager helpers in code-behind and subscribe to ThemeChanged.
 
 ---
 

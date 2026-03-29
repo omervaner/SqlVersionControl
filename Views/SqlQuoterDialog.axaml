@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.SqlQuoterDialog"
+        Title="SQL Quoter"
+        Width="520" Height="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto,*,Auto" Margin="20">
+        <!-- Input -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,*">
+            <TextBlock Grid.Row="0" Text="Paste values (one per line):" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+            <TextBox Grid.Row="1" x:Name="InputBox"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     Watermark="P100&#x0a;P200&#x0a;P300"
+                     FontFamily="Consolas, Menlo, monospace"
+                     FontSize="13"/>
+        </Grid>
+
+        <!-- Format options -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="16" Margin="0,12">
+            <RadioButton x:Name="FormatString" Content="String" IsChecked="True" GroupName="Format"
+                         Foreground="{DynamicResource TextPrimary}"/>
+            <RadioButton x:Name="FormatNumeric" Content="Numeric" GroupName="Format"
+                         Foreground="{DynamicResource TextPrimary}"/>
+            <RadioButton x:Name="FormatParenthesized" Content="Parenthesized" GroupName="Format"
+                         Foreground="{DynamicResource TextPrimary}"/>
+            <RadioButton x:Name="FormatNString" Content="N-String" GroupName="Format"
+                         Foreground="{DynamicResource TextPrimary}"/>
+        </StackPanel>
+
+        <!-- Output -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+            <TextBlock Grid.Row="0" Text="Output:" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+            <TextBox Grid.Row="1" x:Name="OutputBox"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas, Menlo, monospace"
+                     FontSize="13"/>
+        </Grid>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="10" Margin="0,12,0,0">
+            <Button x:Name="CopyButton" Content="Copy to Clipboard" Classes="btn-primary" Padding="15,8"/>
+            <Button x:Name="CloseButton" Content="Close" Classes="btn-secondary" Padding="15,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -107,6 +107,14 @@ public partial class QueryTabView : UserControl
         ResultsCollapseButton.Click += (_, _) => ToggleResultsPanel();
         ResultsTabBar.DoubleTapped += (_, _) => ToggleResultsPanel();
 
+        // Peek Definition: Cmd+Click (Mac) / Ctrl+Click (Windows) on word in editor
+        SqlEditor.AddHandler(InputElement.PointerPressedEvent, OnEditorPointerPressed, handledEventsToo: true);
+        PeekCloseButton.Click += (_, _) => ClosePeekPanel();
+
+        // Apply syntax highlighting to peek editor too
+        if (SqlEditor.SyntaxHighlighting != null)
+            PeekEditor.SyntaxHighlighting = SqlEditor.SyntaxHighlighting;
+
         // Start with results panel collapsed — editor gets full height
         EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
         ResultsSplitter.IsEnabled = false;
@@ -173,6 +181,10 @@ public partial class QueryTabView : UserControl
 
             return true;
         }
+
+        // Alt+Up/Down (move lines), Ctrl+G (go to line)
+        if (HandleEditorKeyDown(e))
+            return true;
 
         return false;
     }
@@ -276,6 +288,8 @@ public partial class QueryTabView : UserControl
         }
     }
 
+    private OccurrenceHighlighter? _occurrenceHighlighter;
+
     private void ConfigureEditor()
     {
         SqlEditor.Options.ConvertTabsToSpaces = true;
@@ -293,6 +307,215 @@ public partial class QueryTabView : UserControl
 
         SqlEditor.TextArea.TextEntering += OnTextEntering;
         SqlEditor.TextArea.TextEntered += OnTextEntered;
+
+        // Section 11: Highlight all occurrences of selected word
+        _occurrenceHighlighter = new OccurrenceHighlighter();
+        SqlEditor.TextArea.TextView.LineTransformers.Add(_occurrenceHighlighter);
+        SqlEditor.TextArea.SelectionChanged += (_, _) => UpdateOccurrenceHighlight();
+        SqlEditor.TextArea.Caret.PositionChanged += (_, _) => UpdateOccurrenceHighlight();
+    }
+
+    // ── Section 11: Highlight All Occurrences ────────────────────────
+
+    private void UpdateOccurrenceHighlight()
+    {
+        if (_occurrenceHighlighter == null) return;
+
+        var selection = SqlEditor.SelectedText?.Trim();
+
+        // Only highlight if it's a whole word (no spaces, not empty)
+        if (string.IsNullOrWhiteSpace(selection) || selection.Contains(' ') || selection.Contains('\n'))
+        {
+            _occurrenceHighlighter.SelectedWord = null;
+            SqlEditor.TextArea.TextView.Redraw();
+            return;
+        }
+
+        // Check it's a "word" (alphanumeric/underscore)
+        if (!selection.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '#' || c == '@'))
+        {
+            _occurrenceHighlighter.SelectedWord = null;
+            SqlEditor.TextArea.TextView.Redraw();
+            return;
+        }
+
+        _occurrenceHighlighter.SelectedWord = selection;
+        _occurrenceHighlighter.HighlightColor = GetWordHighlightColor();
+        SqlEditor.TextArea.TextView.Redraw();
+    }
+
+    private static Color GetWordHighlightColor()
+    {
+        if (Application.Current?.Resources.TryGetResource("WordHighlight", null, out var res) == true
+            && res is SolidColorBrush brush)
+            return brush.Color;
+        return Color.FromRgb(61, 53, 32); // fallback dark amber
+    }
+
+    // ── Section 12: Move Line Up/Down ────────────────────────────────
+
+    /// <summary>Handle Alt+Up/Down to move lines, Cmd/Ctrl+G for Go to Line.</summary>
+    public bool HandleEditorKeyDown(KeyEventArgs e)
+    {
+        var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        if (alt && e.Key == Key.Up)
+        {
+            MoveLines(-1);
+            e.Handled = true;
+            return true;
+        }
+        if (alt && e.Key == Key.Down)
+        {
+            MoveLines(1);
+            e.Handled = true;
+            return true;
+        }
+
+        // Section 13: Go to Line
+        if (ctrl && e.Key == Key.G)
+        {
+            ShowGoToLinePopup();
+            e.Handled = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void MoveLines(int direction)
+    {
+        var doc = SqlEditor.Document;
+        var textArea = SqlEditor.TextArea;
+        var sel = textArea.Selection;
+
+        int startLine, endLine;
+        if (sel.IsEmpty)
+        {
+            startLine = endLine = textArea.Caret.Line;
+        }
+        else
+        {
+            startLine = sel.StartPosition.Line;
+            endLine = sel.EndPosition.Line;
+            // If selection ends at column 1 of a line, don't include that line
+            if (sel.EndPosition.Column == 1 && endLine > startLine)
+                endLine--;
+        }
+
+        var targetLine = direction < 0 ? startLine - 1 : endLine + 1;
+        if (targetLine < 1 || targetLine > doc.LineCount) return;
+
+        // Get the block of lines to move
+        var blockStart = doc.GetLineByNumber(startLine);
+        var blockEnd = doc.GetLineByNumber(endLine);
+        var blockOffset = blockStart.Offset;
+        var blockLength = blockEnd.EndOffset - blockStart.Offset;
+        var blockText = doc.GetText(blockOffset, blockLength);
+
+        var swapDocLine = doc.GetLineByNumber(targetLine);
+        var swapText = doc.GetText(swapDocLine.Offset, swapDocLine.Length);
+
+        doc.BeginUpdate();
+        try
+        {
+            if (direction < 0)
+            {
+                // Moving up: swap the line above with our block
+                doc.Replace(blockStart.Offset, blockLength, swapText);
+                doc.Replace(swapDocLine.Offset, swapDocLine.Length, blockText);
+            }
+            else
+            {
+                // Moving down: swap our block with the line below
+                doc.Replace(swapDocLine.Offset, swapDocLine.Length, blockText);
+                doc.Replace(blockStart.Offset, blockLength, swapText);
+            }
+        }
+        finally
+        {
+            doc.EndUpdate();
+        }
+
+        // Move caret to follow the moved block
+        var newStartLine = startLine + direction;
+        var newEndLine = endLine + direction;
+        var newCaretLine = textArea.Caret.Line + direction;
+        if (newCaretLine >= 1 && newCaretLine <= doc.LineCount)
+        {
+            textArea.Caret.Line = newCaretLine;
+        }
+    }
+
+    // ── Section 13: Go to Line ───────────────────────────────────────
+
+    private TextBox? _goToLineBox;
+
+    private void ShowGoToLinePopup()
+    {
+        if (_goToLineBox != null)
+        {
+            // Already showing — focus it
+            _goToLineBox.Focus();
+            _goToLineBox.SelectAll();
+            return;
+        }
+
+        // Create lightweight input overlay at top of editor
+
+        var box = new TextBox
+        {
+            Watermark = $"Go to line (1–{SqlEditor.Document.LineCount})",
+            FontSize = 12,
+            Height = 28,
+            Padding = new Thickness(8, 4),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Width = 250,
+            Margin = new Thickness(0, 4, 0, 0),
+            ZIndex = 100
+        };
+
+        _goToLineBox = box;
+
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (int.TryParse(box.Text, out var line) && line >= 1 && line <= SqlEditor.Document.LineCount)
+                {
+                    SqlEditor.TextArea.Caret.Line = line;
+                    SqlEditor.TextArea.Caret.Column = 1;
+                    SqlEditor.ScrollTo(line, 1);
+                    SqlEditor.Focus();
+                }
+                CloseGoToLinePopup();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                CloseGoToLinePopup();
+                SqlEditor.Focus();
+                e.Handled = true;
+            }
+        };
+
+        box.LostFocus += (_, _) => CloseGoToLinePopup();
+
+        // Add to the Grid at Row 0 (on top of editor)
+        Grid.SetRow(box, 0);
+        EditorResultsGrid.Children.Add(box);
+        box.Focus();
+    }
+
+    private void CloseGoToLinePopup()
+    {
+        if (_goToLineBox != null)
+        {
+            EditorResultsGrid.Children.Remove(_goToLineBox);
+            _goToLineBox = null;
+        }
     }
 
     // ── Intellisense / Autocomplete ─────────────────────────────────
@@ -930,6 +1153,115 @@ public partial class QueryTabView : UserControl
     /// <summary>Fired when a proc is dropped — host should fetch definition and route back.</summary>
     public event Action<ObjectExplorerNode>? ProcDropRequested;
 
+    // ── Peek Definition (Cmd+Click / Ctrl+Click) ────────────────────
+
+    /// <summary>Fired when user Cmd/Ctrl+Clicks a word — host fetches definition and calls ShowPeekDefinition.</summary>
+    public event Func<string, Task<string?>>? PeekDefinitionRequested;
+
+    private void OnEditorPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(SqlEditor);
+        if (!point.Properties.IsLeftButtonPressed) return;
+
+        // Check for Cmd (Mac) or Ctrl (Windows/Linux)
+        var mods = e.KeyModifiers;
+        var hasModifier = mods.HasFlag(KeyModifiers.Meta) || mods.HasFlag(KeyModifiers.Control);
+        if (!hasModifier) return;
+
+        var word = GetWordAtCaret();
+        if (string.IsNullOrWhiteSpace(word)) return;
+
+        // Strip square brackets if present: [dbo].[MyProc] → MyProc
+        word = word.Trim('[', ']');
+        if (word.Length == 0) return;
+
+        _ = PeekDefinitionAsync(word);
+        e.Handled = true;
+    }
+
+    private string? GetWordAtCaret()
+    {
+        var doc = SqlEditor.Document;
+        var offset = SqlEditor.CaretOffset;
+        if (offset < 0 || offset > doc.TextLength) return null;
+
+        // Expand left and right to find word boundaries (letters, digits, underscore, brackets, dot)
+        int start = offset, end = offset;
+        while (start > 0 && IsWordChar(doc.GetCharAt(start - 1))) start--;
+        while (end < doc.TextLength && IsWordChar(doc.GetCharAt(end))) end++;
+
+        if (start == end) return null;
+        return doc.GetText(start, end - start);
+    }
+
+    private static bool IsWordChar(char c)
+        => char.IsLetterOrDigit(c) || c == '_' || c == '[' || c == ']' || c == '.' || c == '#';
+
+    private async Task PeekDefinitionAsync(string objectName)
+    {
+        if (PeekDefinitionRequested == null) return;
+
+        var definition = await PeekDefinitionRequested.Invoke(objectName);
+        if (definition == null)
+        {
+            // Show "not found" briefly in the peek panel
+            ShowPeekPanel($"Peek: {objectName}", $"-- Object '{objectName}' not found or is not a scriptable object");
+            return;
+        }
+
+        ShowPeekPanel($"Peek: {objectName}", definition);
+    }
+
+    private void ShowPeekPanel(string title, string content)
+    {
+        PeekTitle.Text = title;
+        PeekEditor.Text = content;
+
+        // Apply syntax highlighting from main editor
+        if (SqlEditor.SyntaxHighlighting != null)
+            PeekEditor.SyntaxHighlighting = SqlEditor.SyntaxHighlighting;
+        ApplyThemeToEditor(PeekEditor);
+
+        // Show peek, hide other result panels
+        ResultsGrid.IsVisible = false;
+        MessagesPanel.IsVisible = false;
+        EmptyState.IsVisible = false;
+        PeekPanel.IsVisible = true;
+
+        // Expand results panel if collapsed
+        if (_resultsCollapsed)
+        {
+            _resultsCollapsed = false;
+            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(6, GridUnitType.Star);
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(4, GridUnitType.Star);
+            ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.Content = "\u25BC"; // ▼
+        }
+    }
+
+    private void ClosePeekPanel()
+    {
+        PeekPanel.IsVisible = false;
+        // Restore previous result view
+        if (_viewModel?.Results.Count > 0)
+        {
+            if (_selectedTabIndex >= 0)
+                SelectResultTab(_selectedTabIndex);
+            else
+                SelectMessagesTab();
+        }
+        else
+        {
+            EmptyState.IsVisible = true;
+        }
+    }
+
+    private void ApplyThemeToEditor(TextEditor editor)
+    {
+        editor.Background = new SolidColorBrush(ThemeManager.GetDiffBackground());
+        editor.Foreground = new SolidColorBrush(ThemeManager.GetIdentifierColor());
+    }
+
     // ── Result Tabs ──────────────────────────────────────────────────
 
     private void OnResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1202,4 +1534,50 @@ public partial class QueryTabView : UserControl
             }
         }
     }
+}
+
+/// <summary>
+/// AvaloniaEdit line transformer that highlights all occurrences of the selected word.
+/// </summary>
+internal class OccurrenceHighlighter : AvaloniaEdit.Rendering.DocumentColorizingTransformer
+{
+    public string? SelectedWord { get; set; }
+    public Color HighlightColor { get; set; } = Color.FromRgb(61, 53, 32);
+
+    protected override void ColorizeLine(AvaloniaEdit.Document.DocumentLine line)
+    {
+        if (string.IsNullOrEmpty(SelectedWord)) return;
+
+        var lineText = CurrentContext.Document.GetText(line.Offset, line.Length);
+        var wordLen = SelectedWord.Length;
+        var idx = 0;
+
+        while (idx <= lineText.Length - wordLen)
+        {
+            var pos = lineText.IndexOf(SelectedWord, idx, StringComparison.OrdinalIgnoreCase);
+            if (pos < 0) break;
+
+            // Whole-word check
+            var before = pos > 0 ? lineText[pos - 1] : ' ';
+            var after = pos + wordLen < lineText.Length ? lineText[pos + wordLen] : ' ';
+            if (!IsWordBoundary(before) || !IsWordBoundary(after))
+            {
+                idx = pos + 1;
+                continue;
+            }
+
+            var startOffset = line.Offset + pos;
+            var endOffset = startOffset + wordLen;
+
+            ChangeLinePart(startOffset, endOffset, element =>
+            {
+                element.TextRunProperties.SetBackgroundBrush(new SolidColorBrush(HighlightColor));
+            });
+
+            idx = pos + wordLen;
+        }
+    }
+
+    private static bool IsWordBoundary(char c)
+        => !char.IsLetterOrDigit(c) && c != '_' && c != '#' && c != '@';
 }

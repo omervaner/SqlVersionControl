@@ -74,6 +74,7 @@ public partial class QueryEditorHost : UserControl
         _viewModel.ObjectExplorer.InsertTextRequested += OnInsertText;
         _viewModel.ObjectExplorer.InsertAtCursorRequested += OnInsertAtCursor;
         _viewModel.ObjectExplorer.EditDataRequested += OnEditDataRequested;
+        _viewModel.ObjectExplorer.CopyToClipboardRequested += OnCopyToClipboard;
         _viewModel.ObjectExplorer.AlterSequenceRequested += OnAlterSequenceRequested;
         _viewModel.ObjectExplorer.ResetSequenceRequested += OnResetSequenceRequested;
         _viewModel.ObjectExplorer.StartJobRequested += OnStartJobRequested;
@@ -93,6 +94,9 @@ public partial class QueryEditorHost : UserControl
         // Wire autocomplete toggle
         AutocompleteToggleButton.Click += OnAutocompleteToggleClicked;
         UpdateAutocompleteToggleVisual();
+
+        // Wire Quick Quote button
+        QuickQuoteButton.Click += (_, _) => QuickQuoteSelection(nPrefix: false);
 
         // Wire OE collapse/expand buttons
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
@@ -283,6 +287,7 @@ public partial class QueryEditorHost : UserControl
         tabView.Initialize(vm, _settings);
         tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
+        tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
 
         _tabs.Add(tabView);
         TabContentPanel.Children.Add(tabView);
@@ -657,6 +662,24 @@ public partial class QueryEditorHost : UserControl
     {
         if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return null;
         return _tabs[_activeTabIndex].Editor;
+    }
+
+    /// <summary>
+    /// Replace the editor's selected text with quoted, comma-separated values.
+    /// Uses shared SqlQuoterService logic.
+    /// </summary>
+    public void QuickQuoteSelection(bool nPrefix)
+    {
+        var editor = GetActiveEditor();
+        if (editor == null) return;
+
+        var selected = editor.SelectedText;
+        if (string.IsNullOrWhiteSpace(selected)) return;
+
+        var quoted = SqlQuoterService.QuickQuote(selected, nPrefix);
+        if (quoted.Length == 0) return;
+
+        editor.Document.Replace(editor.SelectionStart, editor.SelectionLength, quoted);
     }
 
     public void ToggleActiveResultsPanel()
@@ -1088,6 +1111,48 @@ public partial class QueryEditorHost : UserControl
             _tabs[_activeTabIndex].InsertAtCursor(text);
     }
 
+    private async void OnCopyToClipboard(string text)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(text);
+    }
+
+    private async Task<string?> OnPeekDefinitionRequested(string objectName)
+    {
+        if (_db == null) return null;
+
+        var activeVm = ActiveTabViewModel;
+        var connStr = activeVm?.TabConnectionString ?? _primaryConnectionString;
+        var database = activeVm?.SelectedDatabase;
+        if (connStr == null || database == null) return null;
+
+        // Try with schema prefix if it contains a dot (e.g., "dbo.MyProc")
+        string schema = "dbo", name = objectName;
+        if (objectName.Contains('.'))
+        {
+            var parts = objectName.Split('.', 2);
+            schema = parts[0].Trim('[', ']');
+            name = parts[1].Trim('[', ']');
+        }
+
+        // Try exact match first
+        var definition = await _db.GetObjectDefinitionAsync(connStr, database, schema, name);
+        if (definition != null) return definition;
+
+        // If no dot was provided, try all schemas by searching with just the name
+        if (!objectName.Contains('.'))
+        {
+            // Try common schemas
+            foreach (var s in new[] { "dbo", "sys" })
+            {
+                definition = await _db.GetObjectDefinitionAsync(connStr, database, s, name);
+                if (definition != null) return definition;
+            }
+        }
+
+        return null;
+    }
+
     private void OnProcDropRequested(ObjectExplorerNode node)
     {
         if (_viewModel == null) return;
@@ -1293,22 +1358,33 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(CreateMenuItem("SELECT COUNT(*)", () => explorer.SelectCount(node)));
                 menu.Items.Add(CreateMenuItem("Edit Data", () => explorer.EditData(node)));
                 menu.Items.Add(new Separator());
-                menu.Items.Add(CreateMenuItem("Script as CREATE", () => explorer.ScriptAsCreate(node)));
+                menu.Items.Add(CreateMenuItem("Script as CREATE", () => _ = explorer.ScriptTableAsCreateAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as INSERT", () => _ = explorer.ScriptAsInsertAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
+                menu.Items.Add(CreateMenuItem("Script as ALTER (add column)", () => explorer.ScriptAsAlterTable(node)));
                 break;
 
             case ObjectExplorerNodeType.View:
                 menu.Items.Add(CreateMenuItem("SELECT TOP 100", () => explorer.SelectTop100(node)));
                 menu.Items.Add(new Separator());
-                menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as CREATE", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
                 break;
 
             case ObjectExplorerNodeType.Proc:
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
                 menu.Items.Add(CreateMenuItem("Generate EXEC", () => _ = explorer.GenerateExecAsync(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
                 break;
 
             case ObjectExplorerNodeType.Function:
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
                 break;
 
             case ObjectExplorerNodeType.Sequence:
@@ -1328,8 +1404,12 @@ public partial class QueryEditorHost : UserControl
                 break;
 
             case ObjectExplorerNodeType.Column:
-                menu.Items.Add(CreateMenuItem("SELECT DISTINCT", () => explorer.SelectDistinct(node)));
+                menu.Items.Add(CreateMenuItem("Copy Column Name", () => explorer.CopyColumnName(node)));
                 menu.Items.Add(CreateMenuItem("Insert Column Name", () => explorer.InsertColumnName(node)));
+                menu.Items.Add(CreateMenuItem("SELECT DISTINCT", () => explorer.SelectDistinct(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Script as SELECT", () => explorer.ScriptColumnAsSelect(node)));
+                menu.Items.Add(CreateMenuItem("Script as WHERE", () => explorer.ScriptColumnAsWhere(node)));
                 break;
 
             case ObjectExplorerNodeType.Database:

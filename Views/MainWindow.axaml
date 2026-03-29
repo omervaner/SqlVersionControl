@@ -48,6 +48,9 @@
                             <MenuItem x:Name="MenuFind" Header="Find..." InputGesture="Ctrl+F"/>
                             <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
                         </MenuItem>
+                        <MenuItem Header="_Tools">
+                            <MenuItem x:Name="MenuSqlQuoter" Header="SQL Quoter"/>
+                        </MenuItem>
                         <MenuItem Header="_Help">
                             <MenuItem x:Name="MenuAbout" Header="About..."/>
                             <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
