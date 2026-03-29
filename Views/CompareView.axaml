@@ -28,14 +28,16 @@
 
                 <!-- Mode Toggle + Search (centered) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                    <ToggleButton IsChecked="{Binding IsTableCompareMode}"
-                                  Padding="8,4" FontSize="11" FontWeight="SemiBold"
-                                  ToolTip.Tip="Toggle between code objects and table structure comparison">
-                        <Panel>
-                            <TextBlock Text="Code" IsVisible="{Binding !IsTableCompareMode}"/>
-                            <TextBlock Text="Tables" IsVisible="{Binding IsTableCompareMode}"/>
-                        </Panel>
-                    </ToggleButton>
+                    <Border Background="{DynamicResource SidebarBackground}" CornerRadius="4" Padding="2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <RadioButton x:Name="ModeCode" GroupName="CompareMode" IsChecked="True"
+                                         Classes="ModeButton" Content="Code"/>
+                            <RadioButton x:Name="ModeTables" GroupName="CompareMode"
+                                         Classes="ModeButton" Content="Tables"/>
+                            <RadioButton x:Name="ModeData" GroupName="CompareMode"
+                                         Classes="ModeButton" Content="Data"/>
+                        </StackPanel>
+                    </Border>
                     <TextBox x:Name="CompareSearchBox" Text="{Binding SearchText}"
                              Watermark="Search objects..."
                              Width="200"/>
@@ -163,11 +165,14 @@
 
             <!-- Detail Panel Container -->
             <Grid Grid.Column="2">
-                <!-- Table Structure Comparison Grid (table mode) -->
+                <!-- Table Structure Comparison Grid (table mode, not data mode) -->
                 <Grid RowDefinitions="Auto,*" IsVisible="{Binding IsTableCompareMode}">
-                    <Border Grid.Row="0" Padding="10" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                    <Border Grid.Row="0" Padding="10" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                            IsVisible="{Binding !IsDataCompareMode}">
                         <TextBlock Text="Column Comparison" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </Border>
+
+                    <!-- Structure comparison grid -->
                     <DataGrid x:Name="TableCompareGrid" Grid.Row="1"
                               ItemsSource="{Binding TableCompareColumns}"
                               IsReadOnly="True"
@@ -175,7 +180,8 @@
                               CanUserReorderColumns="False"
                               CanUserSortColumns="True"
                               GridLinesVisibility="All"
-                              HeadersVisibility="Column">
+                              HeadersVisibility="Column"
+                              IsVisible="{Binding !IsDataCompareMode}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Column" Binding="{Binding ColumnName}" Width="*"/>
                             <DataGridTextColumn Header="Source Type" Binding="{Binding SourceType}" Width="*"/>
@@ -208,9 +214,109 @@
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
+
+                    <!-- Data Compare View (replaces structure grid when active) -->
+                    <Grid Grid.Row="0" Grid.RowSpan="2" RowDefinitions="Auto,Auto,*,Auto,Auto"
+                          IsVisible="{Binding IsDataCompareMode}">
+
+                        <!-- Row 0: Toolbar — Back, Table name, Filter, Summary -->
+                        <Border Grid.Row="0" Padding="10,8" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding SelectedObject.FullName}"
+                                           FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+
+                                <!-- Column filter -->
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding DataFilterColumns}"
+                                          SelectedItem="{Binding DataFilterColumn}"
+                                          MinWidth="120" Margin="15,0,0,0"
+                                          PlaceholderText="All columns"/>
+                                <TextBox Grid.Column="2" Text="{Binding DataFilterText}"
+                                         Watermark="Filter..." Width="150" Margin="6,0,0,0"/>
+
+                                <!-- Loading indicator -->
+                                <ProgressBar Grid.Column="3" IsIndeterminate="True" Width="100"
+                                             IsVisible="{Binding IsDataLoading}" Foreground="{DynamicResource AccentBlue}"
+                                             VerticalAlignment="Center" Margin="15,0"/>
+
+                                <Button Grid.Column="4" Content="⟳ Refresh" Classes="btn-secondary"
+                                        Command="{Binding CompareDataCommand}" Padding="8,4" FontSize="11"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Row 1: Summary bar -->
+                        <Border Grid.Row="1" Padding="10,5" Background="{DynamicResource SummaryStatsBackground}"
+                                IsVisible="{Binding DataCompareSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding DataCompareSummary}" FontSize="11"
+                                       Foreground="{DynamicResource TextSecondary}"/>
+                        </Border>
+
+                        <!-- Row 2: Master grid (all rows) -->
+                        <DataGrid x:Name="DataCompareGrid" Grid.Row="2"
+                                  ItemsSource="{Binding FilteredDataRows}"
+                                  SelectedItem="{Binding SelectedDataRow}"
+                                  IsReadOnly="True"
+                                  AutoGenerateColumns="False"
+                                  CanUserReorderColumns="False"
+                                  CanUserSortColumns="True"
+                                  GridLinesVisibility="Horizontal"
+                                  HeadersVisibility="Column"/>
+
+                        <!-- Row 3: Splitter -->
+                        <GridSplitter Grid.Row="3" Height="5"
+                                      Background="{DynamicResource BorderDefault}"
+                                      HorizontalAlignment="Stretch"/>
+
+                        <!-- Row 4: Detail panel (field-by-field for selected row) -->
+                        <Grid Grid.Row="4" RowDefinitions="Auto,*" MinHeight="150">
+                            <Border Grid.Row="0" Padding="10,6" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBlock Text="Row Detail" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="Show SQL" Classes="btn-secondary"
+                                            Command="{Binding ShowDataDeploySqlCommand}"
+                                            Padding="8,4" FontSize="11" Margin="0,0,8,0"/>
+                                    <Button Grid.Column="2" Content="Deploy Selected" Classes="btn-primary"
+                                            Command="{Binding DeployDataRowsCommand}"
+                                            Padding="8,4" FontSize="11" Margin="0,0,8,0"/>
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4">
+                                        <Button Content="All" Classes="btn-secondary"
+                                                Command="{Binding SelectAllDataRowsCommand}" FontSize="10" Padding="6,3"/>
+                                        <Button Content="None" Classes="btn-secondary"
+                                                Command="{Binding DeselectAllDataRowsCommand}" FontSize="10" Padding="6,3"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <DataGrid x:Name="DetailFieldGrid" Grid.Row="1"
+                                      ItemsSource="{Binding SelectedRowFields}"
+                                      IsReadOnly="True"
+                                      AutoGenerateColumns="False"
+                                      CanUserReorderColumns="False"
+                                      GridLinesVisibility="Horizontal"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Column" Binding="{Binding ColumnName}" Width="150"/>
+                                    <DataGridTextColumn Header="Source" Binding="{Binding SourceDisplay}" Width="*"/>
+                                    <DataGridTextColumn Header="Target" Binding="{Binding TargetDisplay}" Width="*"/>
+                                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="80"/>
+                                    <DataGridTemplateColumn Header="" Width="50">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="→" FontWeight="Bold" FontSize="12"
+                                                        Padding="6,2" HorizontalAlignment="Center"
+                                                        IsVisible="{Binding IsDifferent}"
+                                                        Command="{Binding #DetailFieldGrid.((vm:CompareViewModel)DataContext).DeployFieldCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip.Tip="Deploy this field to target"
+                                                        Classes="btn-primary"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Grid>
                 </Grid>
 
-                <!-- Code Diff Views (code mode) — single diff -->
+                <!-- Code Diff Views (code mode — hidden in table and data modes) -->
                 <Grid RowDefinitions="Auto,*" IsVisible="{Binding !IsTableCompareMode}">
                     <!-- Headers (single diff) -->
                     <Grid Grid.Row="0" ColumnDefinitions="*,*" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
@@ -285,39 +391,41 @@
                 <!-- Refresh Button -->
                 <Button Grid.Column="0" Content="⟳ Refresh" Classes="btn-secondary"
                         Command="{Binding RefreshCommand}" Margin="0,0,15,0"
-                        FontWeight="SemiBold"/>
+                        FontWeight="SemiBold"
+                        IsVisible="{Binding !IsDataCompareMode}"/>
 
                 <TextBlock Grid.Column="1" Text="{Binding StatusMessage}"
                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
 
-                <!-- Selection controls -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Margin="0,0,15,0">
+                <!-- Structure/Code mode controls (hidden in data mode) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Margin="0,0,15,0"
+                            IsVisible="{Binding !IsDataCompareMode}">
                     <Button Content="All" Classes="btn-secondary"
                             Command="{Binding SelectAllCommand}" FontSize="10" Padding="8,4"/>
                     <Button Content="None" Classes="btn-secondary"
                             Command="{Binding DeselectAllCommand}" FontSize="10" Padding="8,4"/>
                 </StackPanel>
 
-                <!-- Deploy Selected -->
-                <Button Grid.Column="3" Command="{Binding DeploySelectedCommand}"
-                        IsVisible="{Binding HasSelection}"
-                        Background="{DynamicResource PlanScanOrange}" Foreground="{DynamicResource ButtonForeground}"
-                        Padding="12,6" Margin="0,0,10,0">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="Deploy"/>
-                        <TextBlock Text="{Binding SelectedCount}"/>
-                        <TextBlock Text="Selected"/>
-                    </StackPanel>
-                </Button>
+                <Panel Grid.Column="3" IsVisible="{Binding !IsDataCompareMode}">
+                    <Button Command="{Binding DeploySelectedCommand}"
+                            IsVisible="{Binding HasSelection}"
+                            Background="{DynamicResource PlanScanOrange}" Foreground="{DynamicResource ButtonForeground}"
+                            Padding="12,6" Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="Deploy"/>
+                            <TextBlock Text="{Binding SelectedCount}"/>
+                            <TextBlock Text="Selected"/>
+                        </StackPanel>
+                    </Button>
+                </Panel>
 
-                <!-- Deploy Source → Target1 -->
                 <Button Grid.Column="4" Content="Deploy to Target 1"
                         Classes="btn-primary"
                         Command="{Binding DeployCommand}"
                         IsEnabled="{Binding CanDeploy}"
-                        Margin="0,0,10,0"/>
+                        Margin="0,0,10,0"
+                        IsVisible="{Binding !IsDataCompareMode}"/>
 
-                <!-- Deploy Target1 → Target2 (only visible in three-way mode) -->
                 <Button Grid.Column="5" Content="Deploy to Target 2"
                         Classes="btn-toggle"
                         Command="{Binding Deploy2Command}"
@@ -326,4 +434,36 @@
             </Grid>
         </Border>
     </Grid>
+
+    <UserControl.Styles>
+        <Style Selector="RadioButton.ModeButton">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.ModeButton:checked">
+            <Setter Property="Background" Value="{DynamicResource ButtonPrimary}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="RadioButton.ModeButton:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        </Style>
+        <Style Selector="RadioButton.ModeButton:checked:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </UserControl.Styles>
 </UserControl>
