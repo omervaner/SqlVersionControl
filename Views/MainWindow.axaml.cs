@@ -139,7 +139,9 @@ public partial class MainWindow : Window
         MenuReplace.Click += (_, _) => OpenSearchPanel(true);
 
         // Tools menu
+        MenuFormatSql.Click += (_, _) => FormatSqlInEditor();
         MenuSqlQuoter.Click += async (_, _) => await ShowSqlQuoterDialogAsync();
+        MenuTextCompare.Click += async (_, _) => await new TextCompareDialog().ShowDialog(this);
 
         // Help menu
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
@@ -366,6 +368,14 @@ public partial class MainWindow : Window
                 editor.Document.UndoStack.Redo();
                 e.Handled = true;
             }
+            return;
+        }
+
+        // Ctrl+Shift+F — Format SQL
+        if (ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.F && QueryEditorTab.IsChecked == true)
+        {
+            FormatSqlInEditor();
+            e.Handled = true;
             return;
         }
 
@@ -603,6 +613,12 @@ public partial class MainWindow : Window
     {
         var dialog = new SettingsDialog(_settings, RefreshDiffViews);
         await dialog.ShowDialog(this);
+    }
+
+    private void FormatSqlInEditor()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        host?.FormatSqlInEditor();
     }
 
     private async Task ShowSqlQuoterDialogAsync()

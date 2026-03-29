@@ -147,5 +147,53 @@
             <Setter Property="Margin" Value="8,4"/>
             <Setter Property="Height" Value="1"/>
         </Style>
+
+        <!-- ══ Dialog Base Styling ══════════════════════════════════════ -->
+        <!-- All dialogs get consistent chrome, background, and font size -->
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{DynamicResource SidebarBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <!-- Dialog input fields -->
+        <Style Selector="Window TextBox">
+            <Setter Property="Background" Value="{DynamicResource EditorBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <!-- Dialog combo boxes -->
+        <Style Selector="Window ComboBox">
+            <Setter Property="Background" Value="{DynamicResource EditorBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <!-- Dialog check boxes -->
+        <Style Selector="Window CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <!-- Dialog radio buttons -->
+        <Style Selector="Window RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <!-- Dialog labels -->
+        <Style Selector="Window TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        </Style>
+        <!-- Dialog section headers (blue accent, semibold) -->
+        <Style Selector="Window TextBlock.section-header">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBlue}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,8,0,4"/>
+        </Style>
     </Application.Styles>
 </Application>

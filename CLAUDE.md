@@ -1,9 +1,15 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.8.3 (March 29, 2026)
+## PROJECT STATUS: v1.8.4 (March 29, 2026)
 
-v1.8.3: Tools menu, editor enhancements, Script Object As. See docs/ folder for full specs.
+v1.8.4: Query Formatter, Text Compare, dialog styling, toolbar polish. See docs/ folder for full specs.
+
+**v1.8.4 changes:**
+- Query Formatter (Ctrl+Shift+F) — T-SQL formatting via Hogimn.Sql.Formatter, toolbar F button
+- Text Compare dialog (Tools → Text Compare) — reuses DiffView component
+- Dialog base styling — unified background, fonts, inputs, button padding across all 11 dialogs
+- Toolbar separator between Run/Stop and utility buttons (4px/8px spacing)
 
 **v1.8.3 changes:**
 - Tools menu with SQL Quoter dialog (paste values, get IN clause output)
@@ -299,49 +305,57 @@ Common resources:
 
 ### Debug Build
 ```bash
-dotnet build
-dotnet run
+dotnet build -f net10.0    # or net9.0 on machines without .NET 10
+dotnet run -f net10.0
 ```
 
-### Release Builds
+### ⚠️ IMPORTANT: Multi-Target & Velopack Release Process
+
+The csproj targets **both net9.0 and net10.0** (`<TargetFrameworks>net9.0;net10.0</TargetFrameworks>`).
+- **Always publish with `-f net9.0`** for releases — this ensures the self-contained binary works on both net9.0 and net10.0 machines.
+- **Always run debug builds with `-f net10.0`** on the home Mac (which has .NET 10 installed).
+- The `vpk` CLI tool (Velopack v0.0.1298) targets .NET 9. On a .NET 10-only machine, run it with `DOTNET_ROLL_FORWARD=LatestMajor` to force it to use .NET 10 runtime.
+- **Do NOT use `vpk upload github`** — it requires a `--token` env var. Use `gh release create` instead to upload assets.
+
+### Full Release Checklist
 ```bash
-# macOS ARM64
-dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
+# 1. Bump version in SqlVersionControl.csproj (<Version>X.Y.Z</Version>)
+# 2. Update CLAUDE.md project status header
 
-# Windows single file
-dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64-single
-```
+# 3. Commit and push
+git add <files>
+git commit -m "vX.Y.Z — description"
+git push origin main
 
-### Velopack Packaging (Auto-Update)
-```bash
-# Install Velopack CLI (one time)
-dotnet tool install -g vpk
+# 4. Publish (ALWAYS use -f net9.0 for releases)
+dotnet publish -c Release -r osx-arm64 --self-contained -f net9.0 -o publish/osx-arm64
 
-# macOS ARM64
-dotnet publish -c Release -r osx-arm64 --self-contained -o publish/osx-arm64
-vpk pack --packId SqlVersionControl --packVersion 1.6.0 \
+# 5. Velopack package (use DOTNET_ROLL_FORWARD on .NET 10 machines)
+DOTNET_ROLL_FORWARD=LatestMajor vpk pack \
+  --packId SqlVersionControl --packVersion X.Y.Z \
   --packDir publish/osx-arm64 --mainExe SqlVersionControl \
   --icon AppIcon.icns --outputDir Releases
 
-# Windows x64
-dotnet publish -c Release -r win-x64 --self-contained -o publish/win-x64
-vpk pack --packId SqlVersionControl --packVersion 1.6.0 \
-  --packDir publish/win-x64 --mainExe SqlVersionControl.exe \
-  --icon Assets/AppIcon.ico --outputDir Releases
-
-# Upload to GitHub Release
-vpk upload github --repoUrl https://github.com/omervaner/SqlVersionControl \
-  --token $GITHUB_TOKEN --publish --tag v1.6.0 --releaseName "v1.6.0" \
-  --outputDir Releases
+# 6. Create GitHub release with assets (use gh CLI, NOT vpk upload)
+gh release create vX.Y.Z \
+  Releases/SqlVersionControl-X.Y.Z-osx-full.nupkg \
+  Releases/SqlVersionControl-osx-Portable.zip \
+  Releases/SqlVersionControl-osx-Setup.pkg \
+  Releases/RELEASES-osx \
+  Releases/releases.osx.json \
+  Releases/assets.osx.json \
+  --repo omervaner/SqlVersionControl \
+  --title "vX.Y.Z" \
+  --notes-file /tmp/release-notes.md
 ```
 
-### macOS App Bundle (legacy, pre-Velopack)
+### Windows Build (when needed)
 ```bash
-mkdir -p publish/SqlVersionControl.app/Contents/{MacOS,Resources}
-cp -r publish/osx-arm64/* publish/SqlVersionControl.app/Contents/MacOS/
-cp AppIcon.icns publish/SqlVersionControl.app/Contents/Resources/
-codesign --force --deep --sign - publish/SqlVersionControl.app
-hdiutil create -srcfolder publish/SqlVersionControl.app -volname "SQL Version Control" -format UDZO publish/SqlVersionControl-macOS.dmg
+dotnet publish -c Release -r win-x64 --self-contained -f net9.0 -o publish/win-x64
+DOTNET_ROLL_FORWARD=LatestMajor vpk pack \
+  --packId SqlVersionControl --packVersion X.Y.Z \
+  --packDir publish/win-x64 --mainExe SqlVersionControl.exe \
+  --icon Assets/AppIcon.ico --outputDir Releases
 ```
 
 ---

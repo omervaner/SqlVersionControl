@@ -98,6 +98,9 @@ public partial class QueryEditorHost : UserControl
         // Wire Quick Quote button
         QuickQuoteButton.Click += (_, _) => QuickQuoteSelection(nPrefix: false);
 
+        // Wire Format button
+        FormatButton.Click += (_, _) => FormatSqlInEditor();
+
         // Wire OE collapse/expand buttons
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
         OeExpandButton.Click += (_, _) => ToggleObjectExplorer();
@@ -680,6 +683,29 @@ public partial class QueryEditorHost : UserControl
         if (quoted.Length == 0) return;
 
         editor.Document.Replace(editor.SelectionStart, editor.SelectionLength, quoted);
+    }
+
+    /// <summary>
+    /// Format SQL in the active editor (selected text or all).
+    /// </summary>
+    public void FormatSqlInEditor()
+    {
+        var editor = GetActiveEditor();
+        if (editor == null) return;
+
+        if (editor.SelectionLength > 0)
+        {
+            var formatted = SqlFormatterService.Format(editor.SelectedText);
+            editor.Document.Replace(editor.SelectionStart, editor.SelectionLength, formatted);
+        }
+        else
+        {
+            var caret = editor.CaretOffset;
+            var formatted = SqlFormatterService.Format(editor.Text);
+            editor.Text = formatted;
+            if (caret <= formatted.Length)
+                editor.CaretOffset = caret;
+        }
     }
 
     public void ToggleActiveResultsPanel()

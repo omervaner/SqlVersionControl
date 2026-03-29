@@ -19,8 +19,8 @@
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                     Spacing="10" Margin="0,15,0,0">
-            <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="15,8"/>
-            <Button x:Name="SaveButton" Content="Save" Classes="btn-primary" Padding="15,8"/>
+            <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
+            <Button x:Name="SaveButton" Content="Save" Classes="btn-primary" Padding="16,8"/>
         </StackPanel>
     </Grid>
 </Window>

@@ -169,7 +169,7 @@
         <Grid Grid.Column="2" RowDefinitions="Auto,*">
             <!-- Tab Strip + Toolbar (merged into one 28px row) -->
             <Border Grid.Row="0" Background="{DynamicResource TabStripBackground}" Padding="4,0" Height="28">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
                     <!-- Query tabs (left) -->
                     <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2"/>
@@ -186,52 +186,63 @@
                                   BorderBrush="{DynamicResource BorderDefault}"
                                   VerticalAlignment="Center"/>
                     </StackPanel>
-                    <Button Grid.Column="3" x:Name="ToolbarRunButton" Content="Run"
-                            Classes="btn-primary"
-                            Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
-                            Margin="4,2,0,2"
-                            VerticalContentAlignment="Center"
-                            HorizontalContentAlignment="Center"
-                            ToolTip.Tip="Execute query (F5)"/>
-                    <Button Grid.Column="4" x:Name="ToolbarStopButton" Content="Stop"
-                            Classes="btn-danger"
-                            Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
-                            Margin="2,2,0,2"
-                            VerticalContentAlignment="Center"
-                            HorizontalContentAlignment="Center"
-                            ToolTip.Tip="Cancel execution"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="4,0,0,0">
+                        <Button x:Name="ToolbarRunButton" Content="Run"
+                                Classes="btn-primary"
+                                Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                                VerticalContentAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Execute query (F5)"/>
+                        <Button x:Name="ToolbarStopButton" Content="Stop"
+                                Classes="btn-danger"
+                                Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                                VerticalContentAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Cancel execution"/>
+                    </StackPanel>
 
-                    <!-- Separator -->
-                    <Border Grid.Column="5" Width="1" Height="16" Background="{DynamicResource BorderDefault}"
-                            Margin="6,0" VerticalAlignment="Center"/>
+                    <!-- Separator between Run/Stop and utility buttons -->
+                    <Border Grid.Column="4" Width="1" Height="16" Background="{DynamicResource BorderDefault}"
+                            Margin="8,0" VerticalAlignment="Center"/>
 
-                    <Button Grid.Column="6" x:Name="AutocompleteToggleButton"
-                            Background="Transparent"
-                            Foreground="{DynamicResource TextSecondary}"
-                            Padding="4,2" BorderThickness="0"
-                            Cursor="Hand" MinWidth="0" MinHeight="0"
-                            ToolTip.Tip="Toggle autocomplete">
-                        <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
-                                  Data="M11 0L4 8h4l-1 6 7-8h-4z"/>
-                    </Button>
-                    <Button Grid.Column="7" x:Name="QueryHistoryButton"
-                            Background="Transparent"
-                            Foreground="{DynamicResource TextSecondary}"
-                            Padding="4,2" BorderThickness="0"
-                            Cursor="Hand" MinWidth="0" MinHeight="0"
-                            ToolTip.Tip="Query history">
-                        <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
-                                  Data="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 8 2zm-.5 2v4.5l3.5 2 .5-.87-3-1.76V4z"/>
-                    </Button>
-                    <Button Grid.Column="8" x:Name="QuickQuoteButton"
-                            Background="Transparent"
-                            Foreground="{DynamicResource TextSecondary}"
-                            Padding="4,2" BorderThickness="0"
-                            Cursor="Hand" MinWidth="0" MinHeight="0"
-                            FontFamily="Consolas, Menlo, monospace"
-                            FontSize="14" FontWeight="Bold"
-                            Content="&#x201C;"
-                            ToolTip.Tip="Quote selection (Ctrl+Shift+Q)"/>
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Button x:Name="AutocompleteToggleButton"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Padding="4,2" BorderThickness="0"
+                                Cursor="Hand" MinWidth="0" MinHeight="0"
+                                ToolTip.Tip="Toggle autocomplete">
+                            <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
+                                      Data="M11 0L4 8h4l-1 6 7-8h-4z"/>
+                        </Button>
+                        <Button x:Name="QueryHistoryButton"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Padding="4,2" BorderThickness="0"
+                                Cursor="Hand" MinWidth="0" MinHeight="0"
+                                ToolTip.Tip="Query history">
+                            <PathIcon Width="12" Height="12" Foreground="{DynamicResource TextSecondary}"
+                                      Data="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 2a6 6 0 1 1 0 12A6 6 0 0 1 8 2zm-.5 2v4.5l3.5 2 .5-.87-3-1.76V4z"/>
+                        </Button>
+                        <Button x:Name="QuickQuoteButton"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Padding="4,2" BorderThickness="0"
+                                Cursor="Hand" MinWidth="0" MinHeight="0"
+                                FontFamily="Consolas, Menlo, monospace"
+                                FontSize="14" FontWeight="Bold"
+                                Content="&#x201C;"
+                                ToolTip.Tip="Quote selection (Ctrl+Shift+Q)"/>
+                        <Button x:Name="FormatButton"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                Padding="4,2" BorderThickness="0"
+                                Cursor="Hand" MinWidth="0" MinHeight="0"
+                                FontFamily="Consolas, Menlo, monospace"
+                                FontSize="13" FontWeight="Bold"
+                                Content="F"
+                                ToolTip.Tip="Format SQL (Ctrl+Shift+F)"/>
+                    </StackPanel>
                 </Grid>
             </Border>
 

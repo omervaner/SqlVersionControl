@@ -126,8 +126,8 @@
             <TextBlock x:Name="VersionLabel" Grid.Column="0"
                        FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="20,8"/>
-                <Button x:Name="SaveButton" Content="Save" Classes="btn-primary" Padding="20,8"/>
+                <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
+                <Button x:Name="SaveButton" Content="Save" Classes="btn-primary" Padding="16,8"/>
             </StackPanel>
         </Grid>
     </Grid>

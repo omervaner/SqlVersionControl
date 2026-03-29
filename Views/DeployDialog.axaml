@@ -23,9 +23,9 @@
 
         <!-- Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
-            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="20,8"/>
+            <Button Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
             <Button Name="ConfirmButton" Content="Deploy"
-                    Classes="btn-primary" Padding="20,8"/>
+                    Classes="btn-primary" Padding="16,8"/>
         </StackPanel>
     </Grid>
 </Window>

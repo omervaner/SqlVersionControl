@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:SqlVersionControl.Views"
+        x:Class="SqlVersionControl.Views.TextCompareDialog"
+        Title="Text Compare"
+        Width="900" Height="600"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        MinWidth="600" MinHeight="400">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+        <!-- Input row: two text areas side by side -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,12,*" Height="180">
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Text="Left" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBox Grid.Row="1" x:Name="LeftInput"
+                         AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="Consolas, Menlo, monospace" FontSize="12"/>
+            </Grid>
+            <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Text="Right" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBox Grid.Row="1" x:Name="RightInput"
+                         AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="Consolas, Menlo, monospace" FontSize="12"/>
+            </Grid>
+        </Grid>
+
+        <!-- Diff output -->
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <views:DiffView x:Name="DiffOutput"/>
+            <TextBlock x:Name="EmptyHint" Text="Paste text above and click Compare"
+                       Foreground="{DynamicResource TextSecondary}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="10" Margin="0,12,0,0">
+            <Button x:Name="CompareButton" Content="Compare" Classes="btn-primary" Padding="16,8"/>
+            <Button x:Name="CloseButton" Content="Close" Classes="btn-secondary" Padding="16,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

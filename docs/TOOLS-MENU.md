@@ -6,17 +6,29 @@ New "Tools" menu in the menu bar (between Edit and Help). Each tool opens as a d
 
 ## 1. Query Formatter
 
-**What:** Paste ugly SQL, get clean formatted SQL.
 
-**UI:** Dialog with two panels — raw SQL on the left, formatted output on the right. "Format" button in the middle. Options: indent style (spaces/tabs), indent width (2/4), uppercase keywords (yes/no), comma position (before/after).
+**What:** Format ugly SQL into clean, readable SQL.
 
-**Implementation:** Use an open-source SQL formatting library for .NET. Options:
-- `TSqlFormatter` / `PoorMansTSqlFormatterLib` (MIT, available on NuGet)
-- Or build a basic formatter: uppercase keywords, indent after BEGIN/SELECT/FROM/WHERE/JOIN, newline before major clauses
+**UI:** No dialog needed for the common case. Ctrl+Shift+F formats the selected text in the editor (or all text if nothing selected). For advanced options, add a Tools → Format SQL menu item that opens a dialog with formatting preferences.
 
-**Shortcut:** Ctrl+Shift+F (format selected text in editor, or format all if nothing selected). This should also work directly in the query editor — no need to open the dialog for quick formatting.
+**Library:** Use `PoorMansTSqlFormatterLib` NuGet package (MIT license, by TaoK). It's T-SQL specific, handles procedures/batches/GO, preserves comments, and is fault-tolerant. If it doesn't work on .NET 9 due to the .NET Framework 2.0 target, fall back to `Hogimn.Sql.Formatter` (v2.0.2, .NET Standard 2.0, use `Dialect.TSql`).
+
+**Formatting rules (configure the library to match):**
+- SELECT, FROM, WHERE, GROUP BY, ORDER BY, HAVING all start at the same indent level (left-aligned with each other)
+- Column lists after SELECT indented one level
+- JOIN clauses indented one level from FROM, ON indented under its JOIN
+- Subqueries indented one additional level — each nested SELECT gets its own indent block
+- CASE/WHEN/THEN/END indented properly
+- Comments preserved in place — never moved or stripped
+- Keywords uppercased (SELECT, FROM, WHERE, JOIN, etc.)
+- Indent with spaces (4 spaces default, configurable)
+- AND/OR at the start of the line, not end
+- Commas before column names (leading commas), configurable
+
+**Shortcut:** Ctrl+Shift+F (format selected text in editor, or format all if nothing selected)
 
 **Menu item:** Tools → Format SQL (Ctrl+Shift+F)
+
 
 ---
 
@@ -268,21 +280,45 @@ Check if there's a conflicting binding eating the keystroke. If AvaloniaEdit alr
 ---
 
 
+
+## 14. Dialog Base Styling
+
+**What:** All dialogs (Settings, About, Connection, Save Query, Open Query, Close Tab, Deploy, Rollback, and any future dialogs like Query Formatter) look inconsistent with the main app. They use system-default backgrounds, mismatched button styles, and wrong font sizes.
+
+**Fix:** Create a single reusable dialog style that all dialogs inherit. One fix, every dialog benefits — including future ones.
+
+**Requirements:**
+- **Background**: Must use the app's chrome/panel color from the design system — NOT system default gray, NOT pure black. Matches `{DynamicResource PanelHeaderBackground}` or equivalent in both dark and light themes
+- **Buttons**: 2px border radius, proper padding (8px 16px), use `ButtonPrimary` for the main action (Save/OK), `ButtonSecondary` for Cancel/Close. Consistent height and spacing
+- **Font size**: Match the app's UI font size (not monospace — the UI font). Currently the Settings dialog labels feel larger than the rest of the app
+- **Input fields**: Styled consistently — same background, border color, corner radius, padding as inputs elsewhere in the app
+- **Section headers**: Consistent color and weight (the blue "Appearance" / "Version History" headers in Settings are fine as a pattern — just make sure all dialogs use the same approach)
+- **Spacing**: Consistent margins between sections, between label and input, between buttons
+- **Title bar**: Dialog title centered, matching the app's chrome color
+
+**Implementation:** Ideally a set of shared styles in a `DialogStyles.axaml` resource dictionary that all dialog AXAML files reference. Or add the styles to the existing AppTheme files. The key is ONE definition, all dialogs consume it.
+
+**Dialogs to update:** Settings, About, Connection, Quick Connection, Save Query, Open Query, Close Tab, Deploy, Rollback.
+
+---
+
+
 ## Implementation Priority
 
-1. **Redo Keybinding Fix** — 5 minute fix, critical missing functionality ✅ DONE
-2. **Context Menu Styling** — quick fix, makes the right-click menu match the app
-3. **SQL Quoter** — trivial to build, high daily-use value ✅ DONE
-4. **Quick Quote Button** — string manipulation on editor selection ✅ DONE
-5. **Highlight All Occurrences** — automatic, no UI, huge readability win
-6. **Move Line Up/Down** — quick keybinding, daily-use editor shortcut
-7. **Go to Line** — small popup, pairs with error messages
-8. **Script Object As...** — medium effort, huge usability win, makes OE actually useful beyond browsing
-9. **Peek Definition** — Cmd+Click on proc names, medium effort, huge workflow win
-10. **Query Formatter** — medium effort (if using a NuGet library), daily-use feature
-11. **Object Dependencies** — medium effort, important for schema changes
-12. **Index Analysis** — medium effort, high value for DBAs
-13. **Text Compare** — low effort (reuses DiffView), nice to have
+1. ~~Redo Keybinding Fix~~ ✅ DONE
+2. ~~Context Menu Styling~~ ✅ DONE
+3. ~~SQL Quoter~~ ✅ DONE
+4. ~~Quick Quote Button~~ ✅ DONE
+5. ~~Highlight All Occurrences~~ ✅ DONE
+6. ~~Move Line Up/Down~~ ✅ DONE
+7. ~~Go to Line~~ ✅ DONE
+8. ~~Script Object As~~ ✅ DONE
+9. ~~Peek Definition~~ ✅ DONE
+10. **Dialog Base Styling** — one-time fix, every current and future dialog benefits. Do this BEFORE Query Formatter so the formatter dialog inherits it.
+11. **Query Formatter** — medium effort (if using a NuGet library), daily-use feature
+12. **Object Dependencies** — medium effort, important for schema changes
+13. **Index Analysis** — medium effort, high value for DBAs
+14. **Text Compare** — low effort (reuses DiffView), nice to have
 
 
 ## Menu Structure

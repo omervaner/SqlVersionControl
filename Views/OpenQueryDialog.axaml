@@ -20,7 +20,7 @@
                   CanUserResizeColumns="True"
                   SelectionMode="Single"
                   BorderThickness="1"
-                  BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                  BorderBrush="{DynamicResource BorderDefault}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
                 <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="100"/>
@@ -30,13 +30,13 @@
 
         <!-- Buttons -->
         <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
-            <Button x:Name="BrowseButton" Grid.Column="0" Content="Browse..." Classes="btn-secondary" Padding="15,8"
+            <Button x:Name="BrowseButton" Grid.Column="0" Content="Browse..." Classes="btn-secondary" Padding="16,8"
                     ToolTip.Tip="Open a .sql file from anywhere on disk"/>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                <Button x:Name="DeleteButton" Content="Delete" Classes="btn-danger" Padding="15,8"/>
-                <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="15,8"/>
-                <Button x:Name="OpenButton" Content="Open" Classes="btn-primary" Padding="15,8"/>
+                <Button x:Name="DeleteButton" Content="Delete" Classes="btn-danger" Padding="16,8"/>
+                <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
+                <Button x:Name="OpenButton" Content="Open" Classes="btn-primary" Padding="16,8"/>
             </StackPanel>
         </Grid>
     </Grid>
