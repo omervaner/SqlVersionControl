@@ -1,0 +1,108 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.IndexAnalysisDialog"
+        Title="Index Analysis"
+        Width="1100" Height="650"
+        MinWidth="800" MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        CanResize="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <!-- Top: Database dropdown + Refresh -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
+            <TextBlock Text="Database:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            <ComboBox x:Name="DatabaseDropdown" Width="250" />
+            <Button x:Name="RefreshButton" Content="Refresh" Classes="btn-primary" Padding="12,6"/>
+            <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" IsVisible="False"
+                         Width="120" Height="4" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Tabs -->
+        <TabControl x:Name="MainTabs" Grid.Row="1">
+            <!-- Tab 1: Unused Indexes -->
+            <TabItem Header="Unused Indexes">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <!-- Filters -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="16" Margin="0,8,0,8">
+                        <CheckBox x:Name="HideClustered" Content="Hide clustered indexes" IsChecked="True"/>
+                        <CheckBox x:Name="HidePrimaryKeys" Content="Hide primary keys" IsChecked="True"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Min writes:" VerticalAlignment="Center"/>
+                            <TextBox x:Name="MinWritesBox" Width="70" Text="0" Padding="6,4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Grid -->
+                    <DataGrid x:Name="UnusedGrid" Grid.Row="1"
+                              IsReadOnly="True" SelectionMode="Extended"
+                              HeadersVisibility="Column" GridLinesVisibility="All"
+                              BorderThickness="1" CanUserResizeColumns="True" CanUserSortColumns="True"
+                              BorderBrush="{DynamicResource BorderDefault}">
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridCell TextBlock">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                            </Style>
+                        </DataGrid.Styles>
+                    </DataGrid>
+
+                    <!-- Actions -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <Button x:Name="GenerateDropButton" Content="Generate DROP Script" Classes="btn-danger" Padding="12,6"/>
+                        <Button x:Name="ExportUnusedButton" Content="Export" Classes="btn-secondary" Padding="12,6"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Tab 2: Missing Indexes -->
+            <TabItem Header="Missing Indexes">
+                <Grid RowDefinitions="*,Auto">
+                    <DataGrid x:Name="MissingGrid" Grid.Row="0"
+                              IsReadOnly="True" SelectionMode="Extended"
+                              HeadersVisibility="Column" GridLinesVisibility="All"
+                              BorderThickness="1" CanUserResizeColumns="True" CanUserSortColumns="True"
+                              BorderBrush="{DynamicResource BorderDefault}">
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridCell TextBlock">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                            </Style>
+                        </DataGrid.Styles>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <Button x:Name="GenerateCreateButton" Content="Generate CREATE Script" Classes="btn-primary" Padding="12,6"/>
+                        <Button x:Name="ExportMissingButton" Content="Export" Classes="btn-secondary" Padding="12,6"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Tab 3: Duplicate / Overlapping Indexes -->
+            <TabItem Header="Duplicate / Overlapping">
+                <Grid RowDefinitions="*,Auto">
+                    <DataGrid x:Name="DuplicateGrid" Grid.Row="0"
+                              IsReadOnly="True" SelectionMode="Extended"
+                              HeadersVisibility="Column" GridLinesVisibility="All"
+                              BorderThickness="1" CanUserResizeColumns="True" CanUserSortColumns="True"
+                              BorderBrush="{DynamicResource BorderDefault}">
+                        <DataGrid.Styles>
+                            <Style Selector="DataGridCell TextBlock">
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                            </Style>
+                        </DataGrid.Styles>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <Button x:Name="GenerateDropDuplicateButton" Content="Generate DROP Script" Classes="btn-danger" Padding="12,6"/>
+                        <Button x:Name="ExportDuplicateButton" Content="Export" Classes="btn-secondary" Padding="12,6"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Status bar -->
+        <TextBlock x:Name="StatusText" Grid.Row="2" Margin="0,8,0,0"
+                   Foreground="{DynamicResource TextSecondary}" FontSize="11"/>
+    </Grid>
+</Window>

@@ -47,13 +47,22 @@
                             <Separator/>
                             <MenuItem x:Name="MenuFind" Header="Find..." InputGesture="Ctrl+F"/>
                             <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuComment" Header="Comment Lines" InputGesture="Ctrl+K"/>
+                            <MenuItem x:Name="MenuUncomment" Header="Uncomment Lines" InputGesture="Ctrl+L"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuToggleWordWrap" Header="Toggle Word Wrap" InputGesture="Alt+Z"/>
                         </MenuItem>
                         <MenuItem Header="_Tools">
                             <MenuItem x:Name="MenuFormatSql" Header="Format SQL" InputGesture="Ctrl+Shift+F"/>
                             <MenuItem x:Name="MenuSqlQuoter" Header="SQL Quoter"/>
                             <MenuItem x:Name="MenuTextCompare" Header="Text Compare"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuIndexAnalysis" Header="Index Analysis"/>
                         </MenuItem>
                         <MenuItem Header="_Help">
+                            <MenuItem x:Name="MenuKeyboardShortcuts" Header="Keyboard Shortcuts"/>
+                            <Separator/>
                             <MenuItem x:Name="MenuAbout" Header="About..."/>
                             <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
                         </MenuItem>

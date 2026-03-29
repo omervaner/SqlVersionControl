@@ -137,13 +137,22 @@ public partial class MainWindow : Window
         MenuPaste.Click += (_, _) => GetActiveEditor()?.Paste();
         MenuFind.Click += (_, _) => OpenSearchPanel(false);
         MenuReplace.Click += (_, _) => OpenSearchPanel(true);
+        MenuComment.Click += (_, _) => GetActiveQueryTabView()?.CommentLines();
+        MenuUncomment.Click += (_, _) => GetActiveQueryTabView()?.UncommentLines();
+        MenuToggleWordWrap.Click += (_, _) =>
+        {
+            var editor = GetActiveEditor();
+            if (editor != null) editor.WordWrap = !editor.WordWrap;
+        };
 
         // Tools menu
         MenuFormatSql.Click += (_, _) => FormatSqlInEditor();
         MenuSqlQuoter.Click += async (_, _) => await ShowSqlQuoterDialogAsync();
         MenuTextCompare.Click += async (_, _) => await new TextCompareDialog().ShowDialog(this);
+        MenuIndexAnalysis.Click += async (_, _) => await ShowIndexAnalysisDialogAsync();
 
         // Help menu
+        MenuKeyboardShortcuts.Click += async (_, _) => await new KeyboardShortcutsDialog().ShowDialog(this);
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
         MenuCheckUpdates.Click += async (_, _) =>
         {
@@ -174,6 +183,12 @@ public partial class MainWindow : Window
     {
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         return host?.GetActiveEditor();
+    }
+
+    private QueryTabView? GetActiveQueryTabView()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        return host?.GetActiveTabView();
     }
 
     private void OpenSearchPanel(bool withReplace)
@@ -324,6 +339,14 @@ public partial class MainWindow : Window
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
 
+        // Cmd+? / Ctrl+? — Keyboard Shortcuts dialog
+        if (ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.OemQuestion)
+        {
+            _ = new KeyboardShortcutsDialog().ShowDialog(this);
+            e.Handled = true;
+            return;
+        }
+
         // F5 — run query when Query Editor tab is active (no ctrl required)
         if (e.Key == Key.F5 && QueryEditorTab.IsChecked == true)
         {
@@ -388,10 +411,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Alt+Up/Down (move lines), Ctrl+G (go to line)
+        // Editor shortcuts: Alt+Up/Down (move lines), Ctrl+G (go to line),
+        // Ctrl+K (comment), Ctrl+L (uncomment), Ctrl+Shift+U (upper), Ctrl+Shift+L (lower), Alt+Z (word wrap)
         var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         if (QueryEditorTab.IsChecked == true &&
-            ((alt && (e.Key == Key.Up || e.Key == Key.Down)) || (ctrl && e.Key == Key.G)))
+            ((alt && (e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Z)) ||
+             (ctrl && e.Key == Key.G) ||
+             (ctrl && !shift && (e.Key == Key.K || e.Key == Key.L)) ||
+             (ctrl && shift && (e.Key == Key.U || e.Key == Key.L))))
         {
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
             if (host?.HandleKeyDown(e) == true)
@@ -625,6 +653,30 @@ public partial class MainWindow : Window
     {
         var dialog = new SqlQuoterDialog();
         await dialog.ShowDialog(this);
+    }
+
+    private async Task ShowIndexAnalysisDialogAsync()
+    {
+        if (!_viewModel.DatabaseService.IsConnected) return;
+
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        var activeVm = host?.ActiveTabViewModel;
+        var connStr = activeVm?.TabConnectionString;
+        if (connStr == null) return;
+
+        var databases = await _viewModel.DatabaseService.GetDatabasesAsync(connStr);
+        var currentDb = activeVm?.SelectedDatabase;
+
+        var dialog = new IndexAnalysisDialog(_viewModel.DatabaseService, connStr, databases, currentDb);
+        dialog.OnScriptGenerated += script =>
+        {
+            host?.OpenScriptInNewTab(script, activeVm?.TabConnectionString, activeVm?.TabConnectionProfile);
+        };
+
+        // Save main window position — macOS nudges the owner when showing large modal dialogs
+        var savedPos = Position;
+        await dialog.ShowDialog(this);
+        Position = savedPos;
     }
 
     private async Task ShowAboutDialogAsync()

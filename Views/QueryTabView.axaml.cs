@@ -28,6 +28,10 @@ public partial class QueryTabView : UserControl
     private SettingsService? _settings;
     private bool _resultsCollapsed = true; // Start collapsed — expand on first query result
 
+    // Pinned result tabs — preserved across query re-runs
+    private readonly List<(QueryResult Result, string Label)> _pinnedResults = [];
+    private readonly HashSet<int> _pinnedTabIndices = []; // indices in the combined tab list that are pinned
+
     // Row state colors — resolved from AppTheme resources at runtime
     private IBrush GetRowBrush(string key) =>
         Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
@@ -290,20 +294,29 @@ public partial class QueryTabView : UserControl
 
     private OccurrenceHighlighter? _occurrenceHighlighter;
 
+    private void UpdatePlaceholder()
+    {
+        EditorPlaceholder.IsVisible = string.IsNullOrEmpty(SqlEditor.Text) && !SqlEditor.TextArea.IsFocused;
+    }
+
     private void ConfigureEditor()
     {
         SqlEditor.Options.ConvertTabsToSpaces = true;
         SqlEditor.Options.IndentationSize = 4;
 
-        var defaultText = "-- Write your SQL query here\n-- Press F5 or Ctrl+Enter to execute\n\n";
-        SqlEditor.Text = defaultText;
-        _viewModel?.SetInitialText(defaultText);
+        SqlEditor.Text = "";
+        _viewModel?.SetInitialText("");
+        UpdatePlaceholder();
 
         SqlEditor.TextChanged += (_, _) =>
         {
             if (_viewModel != null)
                 _viewModel.SqlText = SqlEditor.Text;
+            UpdatePlaceholder();
         };
+
+        SqlEditor.TextArea.GotFocus += (_, _) => UpdatePlaceholder();
+        SqlEditor.TextArea.LostFocus += (_, _) => UpdatePlaceholder();
 
         SqlEditor.TextArea.TextEntering += OnTextEntering;
         SqlEditor.TextArea.TextEntered += OnTextEntered;
@@ -359,6 +372,7 @@ public partial class QueryTabView : UserControl
     {
         var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
         if (alt && e.Key == Key.Up)
         {
@@ -373,6 +387,14 @@ public partial class QueryTabView : UserControl
             return true;
         }
 
+        // Word Wrap Toggle: Alt+Z
+        if (alt && e.Key == Key.Z)
+        {
+            SqlEditor.WordWrap = !SqlEditor.WordWrap;
+            e.Handled = true;
+            return true;
+        }
+
         // Section 13: Go to Line
         if (ctrl && e.Key == Key.G)
         {
@@ -381,7 +403,117 @@ public partial class QueryTabView : UserControl
             return true;
         }
 
+        // Comment: Cmd/Ctrl+K
+        if (ctrl && !shift && e.Key == Key.K)
+        {
+            CommentLines();
+            e.Handled = true;
+            return true;
+        }
+
+        // Uncomment: Cmd/Ctrl+L
+        if (ctrl && !shift && e.Key == Key.L)
+        {
+            UncommentLines();
+            e.Handled = true;
+            return true;
+        }
+
+        // Uppercase: Cmd/Ctrl+Shift+U
+        if (ctrl && shift && e.Key == Key.U)
+        {
+            TransformSelection(s => s.ToUpperInvariant());
+            e.Handled = true;
+            return true;
+        }
+
+        // Lowercase: Cmd/Ctrl+Shift+L
+        if (ctrl && shift && e.Key == Key.L)
+        {
+            TransformSelection(s => s.ToLowerInvariant());
+            e.Handled = true;
+            return true;
+        }
+
         return false;
+    }
+
+    public void CommentLines()
+    {
+        var doc = SqlEditor.Document;
+        var textArea = SqlEditor.TextArea;
+        var sel = textArea.Selection;
+
+        int startLine, endLine;
+        if (sel.IsEmpty)
+        {
+            startLine = endLine = textArea.Caret.Line;
+        }
+        else
+        {
+            startLine = sel.StartPosition.Line;
+            endLine = sel.EndPosition.Line;
+            if (sel.EndPosition.Column == 1 && endLine > startLine) endLine--;
+        }
+
+        doc.BeginUpdate();
+        for (var line = startLine; line <= endLine; line++)
+        {
+            var docLine = doc.GetLineByNumber(line);
+            doc.Insert(docLine.Offset, "-- ");
+        }
+        doc.EndUpdate();
+    }
+
+    public void UncommentLines()
+    {
+        var doc = SqlEditor.Document;
+        var textArea = SqlEditor.TextArea;
+        var sel = textArea.Selection;
+
+        int startLine, endLine;
+        if (sel.IsEmpty)
+        {
+            startLine = endLine = textArea.Caret.Line;
+        }
+        else
+        {
+            startLine = sel.StartPosition.Line;
+            endLine = sel.EndPosition.Line;
+            if (sel.EndPosition.Column == 1 && endLine > startLine) endLine--;
+        }
+
+        doc.BeginUpdate();
+        for (var line = startLine; line <= endLine; line++)
+        {
+            var docLine = doc.GetLineByNumber(line);
+            var text = doc.GetText(docLine.Offset, docLine.Length);
+            if (text.StartsWith("-- "))
+                doc.Remove(docLine.Offset, 3);
+            else if (text.StartsWith("--"))
+                doc.Remove(docLine.Offset, 2);
+        }
+        doc.EndUpdate();
+    }
+
+    private void TransformSelection(Func<string, string> transform)
+    {
+        var textArea = SqlEditor.TextArea;
+        var sel = textArea.Selection;
+        if (sel.IsEmpty) return;
+
+        var doc = SqlEditor.Document;
+        var start = sel.SurroundingSegment.Offset;
+        var length = sel.SurroundingSegment.Length;
+        var text = doc.GetText(start, length);
+        var transformed = transform(text);
+
+        doc.BeginUpdate();
+        doc.Replace(start, length, transformed);
+        doc.EndUpdate();
+
+        // Restore selection
+        textArea.Selection = AvaloniaEdit.Editing.Selection.Create(textArea, start, start + transformed.Length);
     }
 
     private void MoveLines(int direction)
@@ -648,6 +780,18 @@ public partial class QueryTabView : UserControl
 
     private async void OnResultsGridKeyDown(object? sender, KeyEventArgs e)
     {
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+                   e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
+        // Copy with Headers: Cmd/Ctrl+Shift+C (works in both read-only and edit mode)
+        if (ctrl && shift && e.Key == Key.C)
+        {
+            e.Handled = true;
+            await CopyWithHeadersAsync();
+            return;
+        }
+
         if (_viewModel is not { IsEditMode: true }) return;
 
         if (e.Key == Key.Escape)
@@ -656,9 +800,6 @@ public partial class QueryTabView : UserControl
             _viewModel.CancelChangesCommand.Execute(null);
             return;
         }
-
-        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
-                   e.KeyModifiers.HasFlag(KeyModifiers.Meta);
 
         if (ctrl && e.Key == Key.Z)
         {
@@ -930,6 +1071,42 @@ public partial class QueryTabView : UserControl
         }
     }
 
+    /// <summary>Get the currently displayed result (live or pinned).</summary>
+    private QueryResult? GetCurrentResult()
+    {
+        if (_viewModel == null) return null;
+        if (_selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count)
+            return _viewModel.Results[_selectedTabIndex];
+        if (_selectedTabIndex < 0 && _selectedTabIndex != MessagesTabTag)
+        {
+            var pinnedIdx = -(_selectedTabIndex + 1);
+            if (pinnedIdx >= 0 && pinnedIdx < _pinnedResults.Count)
+                return _pinnedResults[pinnedIdx].Result;
+        }
+        return _viewModel.Results.Count > 0 ? _viewModel.Results[0] : null;
+    }
+
+    private async Task CopyWithHeadersAsync()
+    {
+        var result = GetCurrentResult();
+        if (result == null) return;
+
+        var selected = GetSelectedRows();
+        var rows = selected.Count > 0 ? selected : result.Rows;
+
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join("\t", result.ColumnNames));
+        foreach (var row in rows)
+            sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(sb.ToString());
+            _viewModel.StatusText = $"Copied {rows.Count} row{(rows.Count == 1 ? "" : "s")} with headers";
+        }
+    }
+
     private List<object?[]> GetSelectedRows()
     {
         var list = new List<object?[]>();
@@ -996,9 +1173,13 @@ public partial class QueryTabView : UserControl
         var copyRows = new MenuItem { Header = "Copy Selected Rows" };
         copyRows.Click += async (_, _) => await CopySelectedRowsAsync();
 
+        var copyWithHeaders = new MenuItem { Header = "Copy with Headers (Ctrl+Shift+C)" };
+        copyWithHeaders.Click += async (_, _) => await CopyWithHeadersAsync();
+
         menu.Items.Add(exportSelected);
         menu.Items.Add(copyInsert);
         menu.Items.Add(copyRows);
+        menu.Items.Add(copyWithHeaders);
 
         menu.Opening += (_, _) =>
         {
@@ -1006,7 +1187,8 @@ public partial class QueryTabView : UserControl
             var hasTable = _viewModel?.EditTableSchema != null && _viewModel?.EditTableName != null;
 
             exportSelected.IsVisible = hasSelection;
-            copyInsert.IsVisible = hasSelection && hasTable;
+            copyInsert.IsVisible = true;
+            copyInsert.IsEnabled = hasSelection && hasTable;
             copyRows.IsVisible = hasSelection;
         };
 
@@ -1019,11 +1201,12 @@ public partial class QueryTabView : UserControl
         {
             if (_viewModel == null) return;
             var rows = GetSelectedRows();
-            if (rows.Count == 0 || _viewModel.EditTableSchema == null || _viewModel.EditTableName == null) return;
+            if (rows.Count == 0) { _viewModel.StatusText = "Select rows first"; return; }
+            if (_viewModel.EditTableSchema == null || _viewModel.EditTableName == null)
+            { _viewModel.StatusText = "Copy as INSERT requires a simple single-table SELECT"; return; }
 
-            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-                ? _selectedTabIndex : 0;
-            var result = _viewModel.Results[resultIndex];
+            var result = GetCurrentResult();
+            if (result == null) return;
 
             var sql = ExportService.GenerateInsertStatements(
                 _viewModel.EditTableSchema, _viewModel.EditTableName,
@@ -1052,9 +1235,8 @@ public partial class QueryTabView : UserControl
             var rows = GetSelectedRows();
             if (rows.Count == 0) return;
 
-            var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-                ? _selectedTabIndex : 0;
-            var result = _viewModel.Results[resultIndex];
+            var result = GetCurrentResult();
+            if (result == null) return;
 
             var sb = new StringBuilder();
             sb.AppendLine(string.Join("\t", result.ColumnNames));
@@ -1243,9 +1425,9 @@ public partial class QueryTabView : UserControl
     {
         PeekPanel.IsVisible = false;
         // Restore previous result view
-        if (_viewModel?.Results.Count > 0)
+        if (_viewModel?.Results.Count > 0 || _pinnedResults.Count > 0)
         {
-            if (_selectedTabIndex >= 0)
+            if (_selectedTabIndex != MessagesTabTag && _selectedTabIndex != -1)
                 SelectResultTab(_selectedTabIndex);
             else
                 SelectMessagesTab();
@@ -1372,10 +1554,12 @@ public partial class QueryTabView : UserControl
 
         ResultTabHeaders.Children.Clear();
         _selectedTabIndex = -1;
+        _pinnedTabIndices.Clear();
 
         var results = _viewModel.Results;
+        var hasTabs = _pinnedResults.Count > 0 || results.Count > 0;
 
-        if (results.Count == 0)
+        if (!hasTabs)
         {
             ResultsGrid.IsVisible = false;
             MessagesPanel.IsVisible = false;
@@ -1385,6 +1569,38 @@ public partial class QueryTabView : UserControl
 
         EmptyState.IsVisible = false;
 
+        // Pinned tabs first (tag = -(pinnedIdx + 1))
+        for (int p = 0; p < _pinnedResults.Count; p++)
+        {
+            var (pinnedResult, pinnedLabel) = _pinnedResults[p];
+            var pinnedTag = -(p + 1);
+            var tabIdx = ResultTabHeaders.Children.Count;
+            _pinnedTabIndices.Add(tabIdx);
+
+            var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+            panel.Children.Add(new TextBlock { Text = "\u25CF", FontSize = 9, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center }); // 📌
+            panel.Children.Add(new TextBlock { Text = pinnedLabel, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+
+            var pTag = pinnedTag;
+            var btn = new Button
+            {
+                Content = panel,
+                Padding = new Thickness(10, 4),
+                Margin = new Thickness(0),
+                FontSize = 11,
+                Foreground = GetRowBrush("TextSecondary"),
+                Background = Brushes.Transparent,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                BorderBrush = Brushes.Transparent,
+                Tag = pTag
+            };
+            btn.Click += (_, _) => SelectResultTab(pTag);
+            btn.ContextMenu = BuildResultTabContextMenu(pinnedResult, pTag);
+            ResultTabHeaders.Children.Add(btn);
+        }
+
+        // Live result tabs (tag = positive index)
         for (int i = 0; i < results.Count; i++)
         {
             var r = results[i];
@@ -1393,9 +1609,33 @@ public partial class QueryTabView : UserControl
                 : $"Result {i + 1} ({r.RowCount} rows)";
 
             var idx = i;
+
+            var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+            panel.Children.Add(new TextBlock { Text = label, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+
+            // Pin button
+            var pinBtn = new Button
+            {
+                Content = "\u25CF", // 📌
+                FontSize = 9,
+                Padding = new Thickness(2, 0),
+                Margin = new Thickness(0),
+                Background = Brushes.Transparent,
+                Foreground = GetRowBrush("TextSecondary"),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                Opacity = 0.5
+            };
+            ToolTip.SetTip(pinBtn, "Pin this result");
+            var capturedIdx = idx;
+            var capturedLabel = label;
+            pinBtn.Click += (_, _) => PinResultTab(capturedIdx, capturedLabel);
+            panel.Children.Add(pinBtn);
+
             var btn = new Button
             {
-                Content = label,
+                Content = panel,
                 Padding = new Thickness(10, 4),
                 Margin = new Thickness(0),
                 FontSize = 11,
@@ -1407,6 +1647,7 @@ public partial class QueryTabView : UserControl
                 Tag = idx
             };
             btn.Click += (_, _) => SelectResultTab(idx);
+            btn.ContextMenu = BuildResultTabContextMenu(r, idx);
             ResultTabHeaders.Children.Add(btn);
         }
 
@@ -1422,21 +1663,99 @@ public partial class QueryTabView : UserControl
             Cursor = new Cursor(StandardCursorType.Hand),
             BorderThickness = new Thickness(0, 0, 0, 2),
             BorderBrush = Brushes.Transparent,
-            Tag = -1
+            Tag = -1000 // Special messages marker
         };
         msgBtn.Click += (_, _) => SelectMessagesTab();
         ResultTabHeaders.Children.Add(msgBtn);
 
-        var firstGood = results.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Error == null);
-        if (firstGood.r != null)
-            SelectResultTab(firstGood.i);
+        // Auto-select first live result
+        if (results.Count > 0)
+        {
+            var firstGood = results.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Error == null);
+            if (firstGood.r != null)
+                SelectResultTab(firstGood.i);
+            else
+                SelectMessagesTab();
+        }
+        else if (_pinnedResults.Count > 0)
+        {
+            SelectResultTab(-1); // First pinned tab
+        }
         else
+        {
             SelectMessagesTab();
+        }
     }
 
+    private void PinResultTab(int liveIndex, string label)
+    {
+        if (_viewModel == null || liveIndex < 0 || liveIndex >= _viewModel.Results.Count) return;
+        var result = _viewModel.Results[liveIndex];
+        var timestamp = DateTime.Now.ToString("HH:mm");
+        _pinnedResults.Add((result, $"{label} - {timestamp}"));
+        RebuildResultTabs();
+    }
+
+    private void UnpinResultTab(int pinnedIndex)
+    {
+        if (pinnedIndex < 0 || pinnedIndex >= _pinnedResults.Count) return;
+        _pinnedResults.RemoveAt(pinnedIndex);
+        RebuildResultTabs();
+    }
+
+    /// <summary>Fired when user wants to open a source query in a new tab.</summary>
+    public event Action<string>? OpenSourceQueryRequested;
+
+    private ContextMenu BuildResultTabContextMenu(QueryResult result, int tag)
+    {
+        var menu = new ContextMenu();
+
+        var openSource = new MenuItem { Header = "Open Source Query" };
+        openSource.Click += (_, _) =>
+        {
+            if (!string.IsNullOrEmpty(result.SourceSql))
+                OpenSourceQueryRequested?.Invoke(result.SourceSql);
+        };
+        menu.Items.Add(openSource);
+
+        // Pinned tabs get an Unpin option, live tabs get Pin
+        if (tag < 0 && tag != MessagesTabTag)
+        {
+            var pinnedIdx = -(tag + 1);
+            var unpin = new MenuItem { Header = "Unpin" };
+            unpin.Click += (_, _) => UnpinResultTab(pinnedIdx);
+            menu.Items.Add(unpin);
+        }
+
+        menu.Opening += (_, _) =>
+        {
+            openSource.IsEnabled = !string.IsNullOrEmpty(result.SourceSql);
+        };
+
+        return menu;
+    }
+
+    /// <summary>
+    /// Select a result tab. Positive index = live result, negative = pinned (-(pinnedIdx+1)).
+    /// </summary>
     private void SelectResultTab(int index)
     {
-        if (_viewModel == null || index < 0 || index >= _viewModel.Results.Count) return;
+        if (_viewModel == null) return;
+
+        QueryResult? result;
+
+        if (index < 0)
+        {
+            // Pinned tab: -(pinnedIdx + 1)
+            var pinnedIdx = -(index + 1);
+            if (pinnedIdx < 0 || pinnedIdx >= _pinnedResults.Count) return;
+            result = _pinnedResults[pinnedIdx].Result;
+        }
+        else
+        {
+            if (index >= _viewModel.Results.Count) return;
+            result = _viewModel.Results[index];
+        }
 
         // Exit edit mode if switching result tabs
         if (_viewModel.IsEditMode)
@@ -1447,8 +1766,6 @@ public partial class QueryTabView : UserControl
         _selectedTabIndex = index;
         MessagesPanel.IsVisible = false;
         EmptyState.IsVisible = false;
-
-        var result = _viewModel.Results[index];
 
         if (result.Error != null)
         {
@@ -1504,13 +1821,15 @@ public partial class QueryTabView : UserControl
         }
     }
 
+    private const int MessagesTabTag = -1000;
+
     private void SelectMessagesTab()
     {
-        _selectedTabIndex = -1;
+        _selectedTabIndex = MessagesTabTag;
         ResultsGrid.IsVisible = false;
         MessagesPanel.IsVisible = true;
         EmptyState.IsVisible = false;
-        UpdateTabHighlight(-1);
+        UpdateTabHighlight(MessagesTabTag);
     }
 
     private void UpdateTabHighlight(int selectedIndex)
@@ -1523,10 +1842,8 @@ public partial class QueryTabView : UserControl
         {
             if (ResultTabHeaders.Children[i] is Button btn)
             {
-                var isMessages = (int)(btn.Tag ?? -1) == -1;
-                var isSelected = isMessages
-                    ? selectedIndex == -1
-                    : (int)(btn.Tag ?? -1) == selectedIndex;
+                var tag = (int)(btn.Tag ?? MessagesTabTag);
+                var isSelected = tag == selectedIndex;
 
                 btn.BorderBrush = isSelected ? accentBrush : Brushes.Transparent;
                 btn.Foreground = isSelected ? activeFg : normalFg;

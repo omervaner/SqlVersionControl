@@ -77,48 +77,95 @@ P200
 
 ---
 
-## 4. Object Dependencies
 
-**What:** "What references this table/column?" — find every sproc, view, function, and trigger that references a given object.
 
-**UI:** Dialog or panel with:
-- Object picker (dropdown or search, populated from OE)
-- Results grid showing: referencing object name, object type, schema, and the line(s) where the reference appears
-- Click a result to see the object's definition with the reference highlighted
+**What:** Analyze indexes on the current database — find unused indexes wasting write performance, missing indexes the optimizer is begging for, and duplicate/overlapping indexes.
 
-**Implementation:** Query `sys.dm_sql_referencing_entities(@object_name, 'OBJECT')` for objects that reference the selected object. Optionally also search `sys.sql_modules` for text-based matches (catches dynamic SQL references that the DMV misses).
+**UI:** Dialog with three tabs, each with a DataGrid. Database dropdown at the top (defaults to current connection's database).
 
-**Can also be triggered from:** Object Explorer right-click → "Find Dependencies" (see Section 6 below)
+### Tab 1: Unused Indexes
+Indexes with zero or near-zero reads but high write overhead — prime candidates for dropping.
 
-**Menu item:** Tools → Object Dependencies
+**Query:** `sys.dm_db_index_usage_stats` joined with `sys.indexes`, `sys.objects`, `sys.schemas`
 
----
+**Columns:**
+- Schema.Table (e.g. `dbo.Orders`)
+- Index Name
+- Type (Clustered / Nonclustered / Unique)
+- User Seeks (reads)
+- User Scans (reads)
+- User Lookups (reads)
+- User Updates (writes)
+- Total Reads (seeks + scans + lookups)
+- Last Read Date
+- Last Write Date
+- Row Count (from `sys.dm_db_partition_stats`)
+- Size MB (from `sys.dm_db_partition_stats` — `reserved_page_count * 8 / 1024`)
 
-## 5. Index Analysis
+**Default sort:** Total Reads ascending — indexes with 0 reads at the top.
 
-**What:** Show unused indexes (wasting write performance) and missing indexes (suggested by the query optimizer).
+**Filters:**
+- Checkbox: "Hide clustered indexes" (on by default — you almost never drop a clustered index)
+- Checkbox: "Hide primary keys" (on by default)
+- Min writes threshold (default 0 — show all)
 
-**UI:** Dialog or panel with two tabs:
+**Actions:**
+- Select one or more rows → "Generate DROP" button → generates `DROP INDEX [index] ON [schema].[table]` script, opens in new query tab
+- "Refresh" button to re-query
 
-**Unused Indexes tab:**
-- Query `sys.dm_db_index_usage_stats` joined with `sys.indexes` and `sys.objects`
-- Show: table name, index name, type (clustered/nonclustered), reads (seeks + scans + lookups), writes (updates), last read date, last write date
-- Sort by reads ascending — indexes with 0 reads and high writes are prime candidates for dropping
-- "Generate DROP" button: creates DROP INDEX script for selected indexes
+**Important:** DMV stats reset on server restart. Show a note at the bottom: "Stats since last server restart: [date from `sys.dm_os_sys_info` `sqlserver_start_time`]"
 
-**Missing Indexes tab:**
-- Query `sys.dm_db_missing_index_details` + `sys.dm_db_missing_index_groups` + `sys.dm_db_missing_index_group_stats`
-- Show: table name, equality columns, inequality columns, included columns, user seeks, user scans, avg user impact (%), last seek date
-- Sort by impact descending — highest impact suggestions first
-- "Generate CREATE" button: creates CREATE INDEX script for selected suggestions
+### Tab 2: Missing Indexes
+Indexes the query optimizer has suggested during query execution.
 
-**Implementation:** Standard DMV queries, no special permissions needed (just VIEW SERVER STATE). Results displayed in DataGrids.
+**Query:** `sys.dm_db_missing_index_details` + `sys.dm_db_missing_index_groups` + `sys.dm_db_missing_index_group_stats`
 
+**Columns:**
+- Schema.Table
+- Equality Columns (columns in `=` predicates)
+- Inequality Columns (columns in `>`, `<`, `BETWEEN`, etc.)
+- Included Columns
+- User Seeks (how many times the optimizer wanted this index)
+- User Scans
+- Avg User Impact (% improvement the optimizer estimates)
+- Last Seek Date
+- Score (calculated: `user_seeks * avg_total_user_cost * avg_user_impact / 100` — higher = more impactful)
+
+**Default sort:** Score descending — highest impact suggestions first.
+
+**Actions:**
+- Select one or more rows → "Generate CREATE" button → generates `CREATE NONCLUSTERED INDEX [IX_table_columns] ON [schema].[table] ([equality_cols], [inequality_cols]) INCLUDE ([included_cols])` with a sensible auto-generated name, opens in new query tab
+- "Refresh" button
+
+### Tab 3: Duplicate / Overlapping Indexes
+Indexes that are subsets of other indexes on the same table — one can likely be dropped.
+
+**Query:** Compare `sys.index_columns` across indexes on the same table. Two indexes overlap if the key columns of one are a leading prefix of the other.
+
+**Columns:**
+- Schema.Table
+- Index 1 Name — Key Columns — Include Columns
+- Index 2 Name — Key Columns — Include Columns
+- Relationship: "Exact Duplicate" or "Index 1 is subset of Index 2" or "Overlapping"
+
+**Default sort:** Exact duplicates first, then subsets, then overlapping.
+
+**Actions:**
+- "Generate DROP" for the smaller/redundant index
+
+### General
+- All tabs share the database dropdown at the top
+- Status bar showing "Stats since server restart: [datetime]"
+- Export button on each tab (reuse existing export functionality)
+- Respects dialog base styling (Section 14)
+
+**Shortcut:** None (menu only)
 **Menu item:** Tools → Index Analysis
 
----
+
 
 ## 6. Script Object As... (Object Explorer Right-Click)
+
 
 **What:** Right-click any object in Object Explorer to generate common SQL scripts.
 
@@ -314,11 +361,10 @@ Check if there's a conflicting binding eating the keystroke. If AvaloniaEdit alr
 7. ~~Go to Line~~ ✅ DONE
 8. ~~Script Object As~~ ✅ DONE
 9. ~~Peek Definition~~ ✅ DONE
-10. **Dialog Base Styling** — one-time fix, every current and future dialog benefits. Do this BEFORE Query Formatter so the formatter dialog inherits it.
-11. **Query Formatter** — medium effort (if using a NuGet library), daily-use feature
-12. **Object Dependencies** — medium effort, important for schema changes
-13. **Index Analysis** — medium effort, high value for DBAs
-14. **Text Compare** — low effort (reuses DiffView), nice to have
+10. ~~Dialog Base Styling~~ ✅ DONE
+11. ~~Query Formatter~~ ✅ DONE
+12. ~~Text Compare~~ ✅ DONE
+13. **Index Analysis** — three-tab dialog: unused indexes, missing indexes, duplicate/overlapping indexes
 
 
 ## Menu Structure

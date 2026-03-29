@@ -9,15 +9,25 @@
     <Grid x:Name="EditorResultsGrid" RowDefinitions="*,Auto,*">
             <!-- SQL Editor -->
             <Border Grid.Row="0">
-                <ae:TextEditor x:Name="SqlEditor"
-                               Focusable="True"
-                               IsReadOnly="False"
+                <Panel>
+                    <ae:TextEditor x:Name="SqlEditor"
+                                   Focusable="True"
+                                   IsReadOnly="False"
+                                   FontFamily="Consolas, Menlo, Monaco, monospace"
+                                   FontSize="12"
+                                   ShowLineNumbers="True"
+                                   WordWrap="False"
+                                   HorizontalScrollBarVisibility="Auto"
+                                   VerticalScrollBarVisibility="Auto"/>
+                    <TextBlock x:Name="EditorPlaceholder"
+                               Text="Write your SQL query here — press F5 to execute"
                                FontFamily="Consolas, Menlo, Monaco, monospace"
                                FontSize="12"
-                               ShowLineNumbers="True"
-                               WordWrap="False"
-                               HorizontalScrollBarVisibility="Auto"
-                               VerticalScrollBarVisibility="Auto"/>
+                               Foreground="{DynamicResource TextSecondary}"
+                               Opacity="0.5"
+                               Margin="52,4,0,0"
+                               IsHitTestVisible="False"/>
+                </Panel>
             </Border>
 
             <!-- Row 1: Splitter (direct child of EditorResultsGrid) -->

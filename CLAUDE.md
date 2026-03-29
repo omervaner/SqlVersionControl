@@ -1,9 +1,21 @@
 # CheatTeam - SQL Version Control Tool
 
 ---
-## PROJECT STATUS: v1.8.4 (March 29, 2026)
+## PROJECT STATUS: v1.9.0 (March 29, 2026)
 
-v1.8.4: Query Formatter, Text Compare, dialog styling, toolbar polish. See docs/ folder for full specs.
+v1.9.0: Index Analysis, editor QoL, keyboard shortcuts dialog, result tab pinning. See docs/ folder for full specs.
+
+**v1.9.0 changes:**
+- Index Analysis dialog (Tools → Index Analysis) — three-tab DMV analysis: unused indexes, missing indexes, duplicate/overlapping indexes with DROP/CREATE script generation and CSV export
+- Comment/Uncomment lines (Cmd+K / Cmd+L)
+- Uppercase/Lowercase selection (Cmd+Shift+U / Cmd+Shift+L)
+- Copy results with column headers (Cmd+Shift+C) + context menu
+- Pin Result Tab — preserve result tabs across query re-runs, with unpin via context menu
+- Word Wrap toggle (Option+Z / Alt+Z) + Edit menu item
+- Keyboard Shortcuts dialog (Help → Keyboard Shortcuts) — grouped by category, platform-aware symbols
+- Right-click result tab → Open Source Query (opens original SQL in new tab)
+- Editor placeholder text (disappears on focus)
+- Fix: Copy as INSERT crash on boolean columns (InvalidCastException)
 
 **v1.8.4 changes:**
 - Query Formatter (Ctrl+Shift+F) — T-SQL formatting via Hogimn.Sql.Formatter, toolbar F button
@@ -503,24 +515,46 @@ dotnet run
 ```
 
 ### Keyboard shortcuts
+
 | Shortcut | Action |
 |---|---|
+| **Navigation** | |
 | `Cmd/Ctrl+1` | Switch to Query Editor tab |
 | `Cmd/Ctrl+2` | Switch to Version History tab |
 | `Cmd/Ctrl+3` | Switch to Compare Databases tab |
 | `Cmd/Ctrl+4` | Switch to Execution Plan tab |
+| `Cmd/Ctrl+G` | Go to line number |
+| `Escape` | Back from dependencies → clear search → deselect |
+| **Query Tabs** | |
 | `Ctrl+N` | New query tab |
 | `Ctrl+W` | Close active query tab |
-| `F5` | Run query (Query Editor tab) |
-| `Ctrl+Enter` | Run query (Query Editor tab) |
+| `F5` | Run query |
+| `Ctrl+Enter` | Run query |
+| **File** | |
+| `Cmd/Ctrl+O` | Open saved query |
+| `Cmd/Ctrl+S` | Save query / Sync from DDL log (other tabs) |
+| `Cmd/Ctrl+Shift+S` | Save As query |
+| **Search** | |
 | `Cmd/Ctrl+F` | Focus search box / Find in editor |
-| `Cmd/Ctrl+H` | Replace in editor (Query Editor tab) |
-| `Cmd/Ctrl+O` | Open saved query (Query Editor tab) |
-| `Cmd/Ctrl+S` | Save query (Query Editor tab) / Sync from DDL log (other tabs) |
-| `Cmd/Ctrl+Shift+S` | Save As query (Query Editor tab) |
+| `Cmd/Ctrl+H` | Replace in editor |
 | `Cmd/Ctrl+R` | Refresh |
 | `Cmd/Ctrl+D` | Dependencies for selected object |
-| `Escape` | Back from dependencies → clear search → deselect |
+| **Editor** | |
+| `Cmd+K` / `Ctrl+K` | Comment selected lines (`--` prefix) |
+| `Cmd+L` / `Ctrl+L` | Uncomment selected lines (remove `--`) |
+| `Cmd+Shift+U` / `Ctrl+Shift+U` | Uppercase selection |
+| `Cmd+Shift+L` / `Ctrl+Shift+L` | Lowercase selection |
+| `Alt+Up` / `Alt+Up` | Move line up |
+| `Alt+Down` / `Alt+Down` | Move line down |
+| `Option+Z` / `Alt+Z` | Toggle word wrap |
+| `Cmd+Shift+Z` / `Ctrl+Y` | Redo |
+| **Tools** | |
+| `Ctrl+Shift+F` | Format SQL (selection or all) |
+| `Ctrl+Shift+Q` | Quick quote selection |
+| `Cmd+Click` / `Ctrl+Click` | Peek definition (proc/function/view) |
+| **Results Grid** | |
+| `Cmd+Shift+C` / `Ctrl+Shift+C` | Copy with column headers |
+
 
 ### Other UI
 - Settings: Gear icon (top right)

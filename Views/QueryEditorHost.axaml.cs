@@ -291,6 +291,7 @@ public partial class QueryEditorHost : UserControl
         tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
         tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
+        tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
 
         _tabs.Add(tabView);
         TabContentPanel.Children.Add(tabView);
@@ -665,6 +666,13 @@ public partial class QueryEditorHost : UserControl
     {
         if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return null;
         return _tabs[_activeTabIndex].Editor;
+    }
+
+    /// <summary>Get the active QueryTabView (for editor operations that need the full view).</summary>
+    public QueryTabView? GetActiveTabView()
+    {
+        if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return null;
+        return _tabs[_activeTabIndex];
     }
 
     /// <summary>
@@ -1120,6 +1128,15 @@ public partial class QueryEditorHost : UserControl
     }
 
     // ── Object Explorer Event Routing ────────────────────────────────
+
+    /// <summary>Open a script in a new tab (for tools/dialogs that generate SQL).</summary>
+    public void OpenScriptInNewTab(string sql, string? connectionString = null, SavedConnection? profile = null)
+    {
+        var activeVm = ActiveTabViewModel;
+        AddNewTab(connectionString ?? activeVm?.TabConnectionString, profile ?? activeVm?.TabConnectionProfile);
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            _tabs[_activeTabIndex].InsertText(sql, false);
+    }
 
     private void OnInsertText(string sql, bool autoRun)
     {

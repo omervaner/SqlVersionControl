@@ -8,4 +8,5 @@ public class QueryResult
     public int RowCount { get; set; }
     public long ExecutionTimeMs { get; set; }
     public string? Error { get; set; }
+    public string? SourceSql { get; set; }
 }

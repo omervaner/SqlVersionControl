@@ -215,7 +215,10 @@ public partial class QueryTabViewModel : ObservableObject
             sw.Stop();
 
             foreach (var r in results)
+            {
+                r.SourceSql = sql;
                 Results.Add(r);
+            }
 
             Messages = messages;
 

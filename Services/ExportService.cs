@@ -96,7 +96,7 @@ public static class ExportService
 
         // Boolean
         if (type == typeof(bool))
-            return (bool)value ? "1" : "0";
+            return value is bool b ? (b ? "1" : "0") : (Convert.ToBoolean(value) ? "1" : "0");
 
         // DateTime
         if (value is DateTime dt)
