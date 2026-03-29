@@ -3,7 +3,7 @@
         x:Class="SqlVersionControl.Views.KeyboardShortcutsDialog"
         Title="Keyboard Shortcuts"
         Width="520" Height="580"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="CenterOwner"
         CanResize="False">
 
     <Grid RowDefinitions="*,Auto" Margin="24">
