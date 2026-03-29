@@ -12,9 +12,11 @@ public partial class ConfirmDialog : Window
         InitializeComponent();
     }
 
-    public ConfirmDialog(string message) : this()
+    public ConfirmDialog(string message, string okText = "OK", string cancelText = "Cancel") : this()
     {
         MessageText.Text = message;
+        OkButton.Content = okText;
+        CancelButton.Content = cancelText;
 
         OkButton.Click += (_, _) => { Confirmed = true; Close(); };
         CancelButton.Click += (_, _) => { Confirmed = false; Close(); };

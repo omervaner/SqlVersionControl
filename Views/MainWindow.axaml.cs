@@ -73,12 +73,15 @@ public partial class MainWindow : Window
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings, _registry);
         if (qeHost != null)
+        {
             qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
             qeHost.CaretPositionChanged += (line, col) =>
             {
                 CursorPositionText.Text = $"Ln {line}, Col {col}";
                 CursorPositionText.IsVisible = QueryEditorTab.IsChecked == true;
             };
+            qeHost.NewConnectionRequested += async () => await OnMenuManageConnectionsAsync();
+        }
 
         // Enable window dragging from title bar area (empty space not consumed by menus/buttons)
         TitleBarBorder.PointerPressed += (s, e) =>

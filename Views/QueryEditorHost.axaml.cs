@@ -54,6 +54,9 @@ public partial class QueryEditorHost : UserControl
     /// <summary>Fired when cursor position changes in the active editor. (line, column)</summary>
     public event Action<int, int>? CaretPositionChanged;
 
+    /// <summary>Fired when user requests "New Connection" from OE empty-space context menu.</summary>
+    public event Action? NewConnectionRequested;
+
     public QueryEditorHost()
     {
         InitializeComponent();
@@ -176,7 +179,9 @@ public partial class QueryEditorHost : UserControl
             if (tab.DataContext is QueryTabViewModel vm && vm.TabConnectionString == null)
             {
                 vm.TabConnectionString = settings.ConnectionString;
-                vm.TabConnectionProfile = profile;
+                // Don't override profile if it was restored from a different connection (e.g. disconnected DEV tab)
+                if (vm.TabConnectionProfile == null)
+                    vm.TabConnectionProfile = profile;
             }
         }
     }
@@ -279,6 +284,33 @@ public partial class QueryEditorHost : UserControl
             TabConnectionString = connectionString ?? _primaryConnectionString,
             TabConnectionProfile = profile ?? _primaryProfile
         };
+
+        // Wire reconnect callback for disconnected connections
+        if (_registry != null)
+        {
+            var registry = _registry;
+            vm.ReconnectCallback = async connectionId =>
+            {
+                var managed = registry.GetById(connectionId);
+                if (managed == null) return null;
+                if (managed.IsConnected) return managed.ResolvedConnectionString;
+
+                // Ask the user before reconnecting
+                var parent = TopLevel.GetTopLevel(this) as Window;
+                if (parent == null) return null;
+
+                var dialog = new ConfirmDialog(
+                    $"{managed.DisplayName} connection is lost. Do you want to reconnect?",
+                    "Yes", "No");
+                await dialog.ShowDialog(parent);
+                if (!dialog.Confirmed) return null;
+
+                var (success, error) = await registry.ConnectAsync(connectionId);
+                if (success) return managed.ResolvedConnectionString;
+
+                return null;
+            };
+        }
 
         // Load databases from appropriate server
         var effectiveConn = vm.TabConnectionString;
@@ -1666,6 +1698,23 @@ public partial class QueryEditorHost : UserControl
 
         switch (node.NodeType)
         {
+            case ObjectExplorerNodeType.Connection:
+                menu.Items.Add(CreateMenuItem("New Query", () =>
+                {
+                    var connStr = _registry?.GetConnectionString(node.ConnectionId!);
+                    var managed = _registry?.GetById(node.ConnectionId!);
+                    if (connStr != null)
+                        AddNewTab(connStr, managed?.Config);
+                }));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Disconnect", () =>
+                {
+                    if (_registry == null || node.ConnectionId == null) return;
+                    _registry.Disconnect(node.ConnectionId);
+                    explorer.RootNodes.Remove(node);
+                }));
+                break;
+
             case ObjectExplorerNodeType.Table:
                 menu.Items.Add(CreateMenuItem("SELECT TOP 100", () => explorer.SelectTop100(node)));
                 menu.Items.Add(CreateMenuItem("SELECT COUNT(*)", () => explorer.SelectCount(node)));
@@ -1770,6 +1819,17 @@ public partial class QueryEditorHost : UserControl
 
         if (e.Source is not Visual visual) return;
         var treeViewItem = visual.FindAncestorOfType<TreeViewItem>();
+
+        // Right-click on empty space → "New Connection" menu
+        if (treeViewItem == null && e.InitialPressMouseButton == MouseButton.Right)
+        {
+            var menu = new MenuFlyout();
+            menu.Items.Add(CreateMenuItem("New Connection...", () => NewConnectionRequested?.Invoke()));
+            menu.ShowAt(ObjectExplorerTree, true);
+            e.Handled = true;
+            return;
+        }
+
         if (treeViewItem?.DataContext is not ObjectExplorerNode node) return;
 
         // Left-click on "Back to Object Explorer" in dependency mode

@@ -75,7 +75,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         if (_registry == null) return;
 
         RootNodes.Clear();
-        foreach (var managed in _registry.Connections)
+        foreach (var managed in _registry.Connections.Where(c => c.IsConnected))
         {
             var node = CreateConnectionNode(managed);
             RootNodes.Add(node);
@@ -132,6 +132,11 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 }
 
                 RootNodes[idx] = newNode;
+            }
+            else if (managed.IsConnected)
+            {
+                // Node was removed (e.g. by disconnect context menu) — re-add it
+                RootNodes.Add(CreateConnectionNode(managed));
             }
         });
     }

@@ -165,6 +165,12 @@ public partial class QueryTabViewModel : ObservableObject
     public string TabConnectionColor =>
         TabConnectionProfile?.Color ?? "#88a1bb";
 
+    /// <summary>
+    /// Callback to verify connection is still active and attempt reconnect if needed.
+    /// Takes connectionId, returns resolved connection string or null if user cancelled.
+    /// </summary>
+    public Func<string, Task<string?>>? ReconnectCallback { get; set; }
+
     public string GetEffectiveConnectionString(string database)
     {
         if (TabConnectionString != null)
@@ -216,6 +222,20 @@ public partial class QueryTabViewModel : ObservableObject
     private async Task RunQueryAsync()
     {
         if (IsRunning) return;
+
+        // Check if connection was disconnected and attempt reconnect
+        if (TabConnectionProfile?.Id != null && ReconnectCallback != null)
+        {
+            var newConnStr = await ReconnectCallback(TabConnectionProfile.Id);
+            if (newConnStr == null)
+            {
+                Messages = "Query cancelled — connection is disconnected.";
+                StatusText = "× Disconnected";
+                QueryStatusText = "Disconnected";
+                return;
+            }
+            TabConnectionString = newConnStr;
+        }
 
         if (string.IsNullOrEmpty(TabConnectionString))
         {
