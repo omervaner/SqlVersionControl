@@ -1,4 +1,4 @@
-# SQL Version Control
+# Lookout
 
 A cross-platform SQL Server desktop IDE for teams that need more than SSMS but less than a full DevOps pipeline. Track DDL changes, write and run queries, compare databases across environments, visualize execution plans, and manage SQL Agent Jobs — all from one app.
 

@@ -11,7 +11,7 @@
 
     <StackPanel Margin="24">
         <!-- Title -->
-        <TextBlock Text="SQL Version Control" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextBright}"/>
+        <TextBlock Text="Lookout" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextBright}"/>
         <TextBlock Text="Connect to your database server" Foreground="{DynamicResource TextSecondary}" FontSize="12" Margin="0,4,0,20"/>
 
         <!-- Form -->

@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
         x:Class="SqlVersionControl.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="SQL Version Control"
+        Title="Lookout"
         Width="1200" Height="700"
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"

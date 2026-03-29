@@ -1340,15 +1340,19 @@ public partial class QueryTabView : UserControl
     /// <summary>Fired when user Cmd/Ctrl+Clicks a word — host fetches definition and calls ShowPeekDefinition.</summary>
     public event Func<string, Task<string?>>? PeekDefinitionRequested;
 
+    /// <summary>Fired when user Shift+Clicks a word — host fetches params and opens exec template.</summary>
+    public event Func<string, Task>? QuickExecuteRequested;
+
     private void OnEditorPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var point = e.GetCurrentPoint(SqlEditor);
         if (!point.Properties.IsLeftButtonPressed) return;
 
-        // Check for Cmd (Mac) or Ctrl (Windows/Linux)
         var mods = e.KeyModifiers;
-        var hasModifier = mods.HasFlag(KeyModifiers.Meta) || mods.HasFlag(KeyModifiers.Control);
-        if (!hasModifier) return;
+        var hasCmdCtrl = mods.HasFlag(KeyModifiers.Meta) || mods.HasFlag(KeyModifiers.Control);
+        var hasShift = mods.HasFlag(KeyModifiers.Shift);
+
+        if (!hasCmdCtrl && !hasShift) return;
 
         var word = GetWordAtCaret();
         if (string.IsNullOrWhiteSpace(word)) return;
@@ -1357,7 +1361,16 @@ public partial class QueryTabView : UserControl
         word = word.Trim('[', ']');
         if (word.Length == 0) return;
 
-        _ = PeekDefinitionAsync(word);
+        if (hasShift && !hasCmdCtrl)
+        {
+            // Shift+Click → Quick Execute
+            _ = QuickExecuteRequested?.Invoke(word);
+        }
+        else if (hasCmdCtrl)
+        {
+            // Cmd/Ctrl+Click → Peek Definition
+            _ = PeekDefinitionAsync(word);
+        }
         e.Handled = true;
     }
 

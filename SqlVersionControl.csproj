@@ -9,10 +9,10 @@
     <RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers>
 
     <!-- App Metadata -->
-    <Version>2.0.0</Version>
-    <AssemblyTitle>SQL Version Control</AssemblyTitle>
-    <Product>SQL Version Control</Product>
-    <Description>Track and manage SQL Server stored procedure versions with diff view and rollback support</Description>
+    <Version>2.1.0</Version>
+    <AssemblyTitle>Lookout</AssemblyTitle>
+    <Product>Lookout</Product>
+    <Description>SQL Server desktop IDE — queries, version tracking, database comparison, execution plans, and job management</Description>
     <Company>Internal Tools</Company>
     <Copyright>2024</Copyright>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>

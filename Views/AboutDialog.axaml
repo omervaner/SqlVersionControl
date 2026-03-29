@@ -7,12 +7,12 @@
         CanResize="False">
 
     <StackPanel Margin="24" Spacing="12" VerticalAlignment="Center">
-        <TextBlock Text="SQL Version Control" FontSize="18" FontWeight="SemiBold"
+        <TextBlock Text="Lookout" FontSize="18" FontWeight="SemiBold"
                    HorizontalAlignment="Center" Foreground="{DynamicResource TextBright}"/>
         <TextBlock x:Name="VersionLabel" FontSize="14"
                    HorizontalAlignment="Center"
                    Foreground="{DynamicResource TextSecondary}"/>
-        <TextBlock Text="Track and manage SQL Server changes"
+        <TextBlock Text="SQL Server management &amp; version control"
                    FontSize="12" HorizontalAlignment="Center"
                    Foreground="{DynamicResource TextSecondary}"/>
 

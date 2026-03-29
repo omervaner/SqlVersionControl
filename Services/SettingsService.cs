@@ -7,7 +7,7 @@ public class SettingsService
 {
     public static readonly string DefaultDataFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "SqlVersionControl");
+        "Lookout");
 
     private static readonly string SettingsPath = Path.Combine(DefaultDataFolder, "settings.json");
 
@@ -15,8 +15,31 @@ public class SettingsService
 
     public SettingsService()
     {
+        MigrateLegacyDataFolder();
         Load();
         PasswordStore.Load();
+    }
+
+    /// <summary>
+    /// One-time migration: move data from old "SqlVersionControl" folder to new "Lookout" folder.
+    /// </summary>
+    private static void MigrateLegacyDataFolder()
+    {
+        var legacyFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "SqlVersionControl");
+
+        if (Directory.Exists(legacyFolder) && !Directory.Exists(DefaultDataFolder))
+        {
+            try
+            {
+                Directory.Move(legacyFolder, DefaultDataFolder);
+            }
+            catch
+            {
+                // If move fails (permissions, etc.), just start fresh
+            }
+        }
     }
 
     public void Save()

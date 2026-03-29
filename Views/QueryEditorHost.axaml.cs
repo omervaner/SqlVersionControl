@@ -295,6 +295,7 @@ public partial class QueryEditorHost : UserControl
         tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
         tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
+        tabView.QuickExecuteRequested += OnQuickExecuteRequested;
         tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
 
         _tabs.Add(tabView);
@@ -1198,6 +1199,77 @@ public partial class QueryEditorHost : UserControl
         }
 
         return null;
+    }
+
+    private async Task OnQuickExecuteRequested(string objectName)
+    {
+        if (_db == null) return;
+
+        var activeVm = ActiveTabViewModel;
+        var connStr = activeVm?.TabConnectionString ?? _primaryConnectionString;
+        var database = activeVm?.SelectedDatabase;
+        if (connStr == null || database == null) return;
+
+        // Parse schema.name
+        string schema = "dbo", name = objectName;
+        if (objectName.Contains('.'))
+        {
+            var parts = objectName.Split('.', 2);
+            schema = parts[0].Trim('[', ']');
+            name = parts[1].Trim('[', ']');
+        }
+
+        // Fetch parameters
+        var parameters = await _db.GetProcParametersDetailedAsync(connStr, database, schema, name);
+
+        // If object not found, try without schema
+        if (parameters.Count == 0 && !objectName.Contains('.'))
+        {
+            // Verify the proc actually exists by checking definition
+            var def = await _db.GetObjectDefinitionAsync(connStr, database, schema, name);
+            if (def == null) return; // Object not found
+        }
+
+        // Build the template
+        var sb = new System.Text.StringBuilder();
+
+        foreach (var p in parameters)
+        {
+            var paramName = p.Name.TrimStart('@');
+            var typeFmt = Services.SqlTypeFormatter.Format(p.TypeName, p.MaxLength, p.Precision, p.Scale);
+            sb.Append($"DECLARE @{paramName} {typeFmt} = NULL");
+            if (p.IsOutput) sb.Append("  -- OUTPUT");
+            sb.AppendLine();
+        }
+
+        if (parameters.Count > 0) sb.AppendLine();
+
+        sb.Append($"EXEC [{schema}].[{name}]");
+        if (parameters.Count > 0)
+        {
+            sb.AppendLine();
+            for (var i = 0; i < parameters.Count; i++)
+            {
+                var p = parameters[i];
+                var paramName = p.Name.TrimStart('@');
+                var comma = i < parameters.Count - 1 ? "," : "";
+                var output = p.IsOutput ? " OUTPUT" : "";
+                sb.AppendLine($"    @{paramName} = @{paramName}{output}{comma}");
+            }
+        }
+
+        // Open in new tab with proc name as title
+        var template = sb.ToString();
+        AddNewTab(connStr, activeVm?.TabConnectionProfile);
+        var newTab = ActiveTabViewModel;
+        if (newTab != null)
+        {
+            newTab.SelectedDatabase = database;
+            newTab.CurrentQueryName = name;
+            newTab.TabTitle = name;
+        }
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            _tabs[_activeTabIndex].InsertText(template, false);
     }
 
     private void OnProcDropRequested(ObjectExplorerNode node)

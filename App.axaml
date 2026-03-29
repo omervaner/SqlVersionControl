@@ -3,6 +3,7 @@
              xmlns:conv="using:SqlVersionControl.Converters"
              x:Class="SqlVersionControl.App"
              xmlns:local="using:SqlVersionControl"
+             Name="Lookout"
              RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>

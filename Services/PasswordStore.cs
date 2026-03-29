@@ -120,8 +120,8 @@ public static class PasswordStore
     private static byte[] DeriveKey()
     {
         // Derive a key from machine name + username — ties to this user on this machine
-        var seed = $"{Environment.MachineName}|{Environment.UserName}|SqlVersionControl";
-        var salt = Encoding.UTF8.GetBytes("SqlVersionControl.PasswordStore");
+        var seed = $"{Environment.MachineName}|{Environment.UserName}|Lookout";
+        var salt = Encoding.UTF8.GetBytes("Lookout.PasswordStore");
         return Rfc2898DeriveBytes.Pbkdf2(
             Encoding.UTF8.GetBytes(seed), salt, 100_000, HashAlgorithmName.SHA256, 32);
     }

@@ -1447,6 +1447,36 @@ public class DatabaseService
         return result as string;
     }
 
+    public async Task<List<(string Name, string TypeName, int MaxLength, byte Precision, byte Scale, bool IsOutput)>>
+        GetProcParametersDetailedAsync(string connectionString, string database, string schema, string procName)
+    {
+        var results = new List<(string, string, int, byte, byte, bool)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT p.name, TYPE_NAME(p.user_type_id) AS TypeName,
+                   p.max_length, p.precision, p.scale, p.is_output
+            FROM [{safeDb}].sys.parameters p
+            JOIN [{safeDb}].sys.objects o ON p.object_id = o.object_id
+            JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE s.name = @schema AND o.name = @procName
+            ORDER BY p.parameter_id";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@procName", procName);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1),
+                reader.GetInt16(2), reader.GetByte(3), reader.GetByte(4), reader.GetBoolean(5)));
+
+        return results;
+    }
+
     public async Task<List<(string Name, string TypeName)>> GetProcParametersAsync(
         string database, string schema, string procName)
         => await GetProcParametersAsync(_connectionString, database, schema, procName);
