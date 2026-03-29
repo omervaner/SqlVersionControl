@@ -158,6 +158,12 @@ public partial class MainWindow : Window
         if (CrashLogger.HasPendingCrashReports())
             CrashBanner.IsVisible = true;
 
+        // Command Palette wiring
+        CommandPaletteInput.TextChanged += (_, _) => FilterCommandPalette(CommandPaletteInput.Text ?? "");
+        CommandPaletteInput.KeyDown += OnCommandPaletteKeyDown;
+        CommandPaletteList.DoubleTapped += (_, _) => ExecuteSelectedCommand();
+        CommandPaletteBackdrop.PointerPressed += (_, _) => HideCommandPalette();
+
         // Check for updates (non-blocking)
         _ = CheckForUpdatesAsync();
 
@@ -440,7 +446,13 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        // Escape dismisses reconnect overlay
+        // Escape dismisses overlays
+        if (e.Key == Key.Escape && CommandPaletteOverlay.IsVisible)
+        {
+            HideCommandPalette();
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Escape && ReconnectOverlay.IsVisible)
         {
             DismissReconnectOverlay();
@@ -450,6 +462,14 @@ public partial class MainWindow : Window
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        // Cmd+E / Ctrl+E — Command Palette
+        if (ctrl && e.Key == Key.E)
+        {
+            ShowCommandPalette();
+            e.Handled = true;
+            return;
+        }
 
         // Cmd+? / Ctrl+? — Keyboard Shortcuts dialog
         if (ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.OemQuestion)
@@ -1167,6 +1187,140 @@ public partial class MainWindow : Window
             CrashBannerText.Text = "Lookout crashed last session.";
         };
         timer.Start();
+    }
+
+    // ── Command Palette ─────────────────────────────────────────────
+
+    private List<CommandPaletteItem>? _allCommands;
+
+    private List<CommandPaletteItem> BuildCommandRegistry()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        var isMac = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX);
+        var mod = isMac ? "Cmd" : "Ctrl";
+
+        return
+        [
+            // File
+            new() { Name = "New Query", Shortcut = $"{mod}+N", Description = "Open a new query tab", Execute = OnMenuNewQuery },
+            new() { Name = "Open File", Shortcut = $"{mod}+O", Description = "Open a saved query", Execute = () => _ = OnMenuOpenFileAsync() },
+            new() { Name = "Save", Shortcut = $"{mod}+S", Description = "Save current query", Execute = () => _ = OnMenuSaveAsync() },
+            new() { Name = "Save As", Shortcut = $"{mod}+Shift+S", Description = "Save query as new file", Execute = () => _ = OnMenuSaveAsAsync() },
+            new() { Name = "Manage Connections", Shortcut = $"{mod}+Shift+M", Description = "Open connection manager", Execute = () => _ = OnMenuManageConnectionsAsync() },
+            new() { Name = "Export to Git", Shortcut = "", Description = "Export database objects to git", Execute = () => _ = ExportToGitAsync() },
+
+            // Edit
+            new() { Name = "Find", Shortcut = $"{mod}+F", Description = "Find in editor", Execute = () => OpenSearchPanel(false) },
+            new() { Name = "Replace", Shortcut = $"{mod}+H", Description = "Find and replace", Execute = () => OpenSearchPanel(true) },
+            new() { Name = "Go to Line", Shortcut = $"{mod}+G", Description = "Jump to line number", Execute = () => GetActiveQueryTabView()?.ShowGoToLinePopup() },
+            new() { Name = "Comment Lines", Shortcut = $"{mod}+K", Description = "Toggle line comments", Execute = () => GetActiveQueryTabView()?.CommentLines() },
+            new() { Name = "Uncomment Lines", Shortcut = $"{mod}+L", Description = "Remove line comments", Execute = () => GetActiveQueryTabView()?.UncommentLines() },
+            new() { Name = "Uppercase Selection", Shortcut = $"{mod}+Shift+U", Description = "Transform to uppercase", Execute = () => GetActiveEditor()?.SelectedText?.ToUpperInvariant() },
+            new() { Name = "Lowercase Selection", Shortcut = $"{mod}+Shift+L", Description = "Transform to lowercase", Execute = () => GetActiveEditor()?.SelectedText?.ToLowerInvariant() },
+            new() { Name = "Toggle Word Wrap", Shortcut = "Alt+Z", Description = "Wrap long lines", Execute = () => { var e = GetActiveEditor(); if (e != null) e.WordWrap = !e.WordWrap; } },
+
+            // View
+            new() { Name = "Toggle Object Explorer", Shortcut = $"{mod}+B", Description = "Show/hide sidebar", Execute = () => host?.ToggleObjectExplorer() },
+            new() { Name = "Toggle Results Panel", Shortcut = $"{mod}+J", Description = "Show/hide results", Execute = () => host?.ToggleActiveResultsPanel() },
+            new() { Name = "Zoom In", Shortcut = $"{mod}+=", Description = "Increase font size", Execute = () => { var s = Math.Min(_settings.Settings.FontSize + 1, 32); _settings.Settings.FontSize = s; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, s); _settings.Save(); } },
+            new() { Name = "Zoom Out", Shortcut = $"{mod}+-", Description = "Decrease font size", Execute = () => { var s = Math.Max(_settings.Settings.FontSize - 1, 8); _settings.Settings.FontSize = s; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, s); _settings.Save(); } },
+            new() { Name = "Reset Zoom", Shortcut = "", Description = "Reset to default font size", Execute = () => { _settings.Settings.FontSize = 12; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, 12); _settings.Save(); } },
+            new() { Name = "Toggle Dark/Light Theme", Shortcut = $"{mod}+Shift+T", Description = "Switch theme", Execute = () => { _settings.Settings.UseDarkTheme = !_settings.Settings.UseDarkTheme; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize); _settings.Save(); } },
+
+            // Tools
+            new() { Name = "Format SQL", Shortcut = "Ctrl+Shift+F", Description = "Format selected SQL", Execute = () => host?.FormatSqlInEditor() },
+            new() { Name = "Quick Quote Selection", Shortcut = "Ctrl+Shift+Q", Description = "Quote selected text", Execute = () => host?.QuickQuoteSelection(false) },
+            new() { Name = "SQL Quoter", Shortcut = "", Description = "Open SQL Quoter dialog", Execute = () => _ = ShowSqlQuoterDialogAsync() },
+            new() { Name = "Text Compare", Shortcut = "", Description = "Compare two text blocks", Execute = () => _ = new TextCompareDialog().ShowDialog(this) },
+            new() { Name = "Index Analysis", Shortcut = "", Description = "Analyze unused/missing indexes", Execute = () => _ = ShowIndexAnalysisDialogAsync() },
+
+            // Tabs
+            new() { Name = "Close Tab", Shortcut = $"{mod}+W", Description = "Close active query tab", Execute = () => { if (host != null) _ = host.CloseActiveTabAsync(); } },
+
+            // Navigation
+            new() { Name = "Query Editor", Shortcut = $"{mod}+1", Description = "Switch to editor", Execute = () => QueryEditorTab.IsChecked = true },
+            new() { Name = "Version History", Shortcut = $"{mod}+2", Description = "Switch to history", Execute = () => VersionHistoryTab.IsChecked = true },
+            new() { Name = "Compare Databases", Shortcut = $"{mod}+3", Description = "Switch to compare", Execute = () => CompareTab.IsChecked = true },
+            new() { Name = "Execution Plan", Shortcut = $"{mod}+4", Description = "Switch to plan", Execute = () => PlanTab.IsChecked = true },
+            new() { Name = "Activity Monitor", Shortcut = $"{mod}+5", Description = "Switch to activity", Execute = () => ActivityTab.IsChecked = true },
+            new() { Name = "Query Trace", Shortcut = $"{mod}+6", Description = "Switch to trace", Execute = () => TraceTab.IsChecked = true },
+
+            // Run
+            new() { Name = "Run Query", Shortcut = "F5", Description = "Execute query", Execute = () => { } }, // handled by F5 key
+            new() { Name = "Run with Trace", Shortcut = "Ctrl+Shift+F5", Description = "Execute with XE tracing", Execute = () => { } },
+
+            // Help
+            new() { Name = "Keyboard Shortcuts", Shortcut = "", Description = "View all shortcuts", Execute = () => _ = new KeyboardShortcutsDialog().ShowDialog(this) },
+            new() { Name = "About Lookout", Shortcut = "", Description = "Version info", Execute = () => _ = ShowAboutDialogAsync() },
+            new() { Name = "Settings", Shortcut = "", Description = "Open settings", Execute = () => _ = ShowSettingsDialogAsync() },
+        ];
+    }
+
+    private void OnCommandPaletteKeyDown(object? sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter:
+                ExecuteSelectedCommand();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                HideCommandPalette();
+                e.Handled = true;
+                break;
+            case Key.Down:
+                if (CommandPaletteList.SelectedIndex < (CommandPaletteList.ItemCount - 1))
+                    CommandPaletteList.SelectedIndex++;
+                e.Handled = true;
+                break;
+            case Key.Up:
+                if (CommandPaletteList.SelectedIndex > 0)
+                    CommandPaletteList.SelectedIndex--;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void ShowCommandPalette()
+    {
+        _allCommands ??= BuildCommandRegistry();
+
+        CommandPaletteInput.Text = "";
+        CommandPaletteList.ItemsSource = _allCommands;
+        CommandPaletteList.SelectedIndex = 0;
+        CommandPaletteOverlay.IsVisible = true;
+        CommandPaletteInput.Focus();
+    }
+
+    private void HideCommandPalette()
+    {
+        CommandPaletteOverlay.IsVisible = false;
+        // Return focus to editor
+        GetActiveEditor()?.Focus();
+    }
+
+    private void FilterCommandPalette(string query)
+    {
+        if (_allCommands == null) return;
+
+        var filtered = _allCommands
+            .Select(c => (item: c, score: c.FuzzyMatch(query)))
+            .Where(x => x.score > 0)
+            .OrderByDescending(x => x.score)
+            .Select(x => x.item)
+            .ToList();
+
+        CommandPaletteList.ItemsSource = filtered;
+        CommandPaletteList.SelectedIndex = filtered.Count > 0 ? 0 : -1;
+    }
+
+    private void ExecuteSelectedCommand()
+    {
+        if (CommandPaletteList.SelectedItem is CommandPaletteItem item)
+        {
+            HideCommandPalette();
+            item.Execute();
+        }
     }
 
     // ── Status Bar ──────────────────────────────────────────────────

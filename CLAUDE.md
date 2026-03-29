@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.0 (March 30, 2026)
+## PROJECT STATUS: v2.4.1 (March 30, 2026)
+
+v2.4.1: Command Palette (Cmd+E) — VS Code-style fuzzy command search.
 
 v2.4.0: Object Explorer depth + Crash Reporter + Editor polish.
 
