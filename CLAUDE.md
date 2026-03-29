@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.2 (March 30, 2026)
+## PROJECT STATUS: v2.4.3 (March 30, 2026)
+
+v2.4.3: Connection dialog scrollable, password preserved on mode switch, command palette uppercase/lowercase fix.
 
 v2.4.2: Offline UX — Continue Offline on connection dialog, contextual error messages on F5, dynamic empty state.
 

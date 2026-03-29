@@ -1216,8 +1216,8 @@ public partial class MainWindow : Window
             new() { Name = "Go to Line", Shortcut = $"{mod}+G", Description = "Jump to line number", Execute = () => GetActiveQueryTabView()?.ShowGoToLinePopup() },
             new() { Name = "Comment Lines", Shortcut = $"{mod}+K", Description = "Toggle line comments", Execute = () => GetActiveQueryTabView()?.CommentLines() },
             new() { Name = "Uncomment Lines", Shortcut = $"{mod}+L", Description = "Remove line comments", Execute = () => GetActiveQueryTabView()?.UncommentLines() },
-            new() { Name = "Uppercase Selection", Shortcut = $"{mod}+Shift+U", Description = "Transform to uppercase", Execute = () => GetActiveEditor()?.SelectedText?.ToUpperInvariant() },
-            new() { Name = "Lowercase Selection", Shortcut = $"{mod}+Shift+L", Description = "Transform to lowercase", Execute = () => GetActiveEditor()?.SelectedText?.ToLowerInvariant() },
+            new() { Name = "Uppercase Selection", Shortcut = $"{mod}+Shift+U", Description = "Transform to uppercase", Execute = () => GetActiveQueryTabView()?.UppercaseSelection() },
+            new() { Name = "Lowercase Selection", Shortcut = $"{mod}+Shift+L", Description = "Transform to lowercase", Execute = () => GetActiveQueryTabView()?.LowercaseSelection() },
             new() { Name = "Toggle Word Wrap", Shortcut = "Alt+Z", Description = "Wrap long lines", Execute = () => { var e = GetActiveEditor(); if (e != null) e.WordWrap = !e.WordWrap; } },
 
             // View

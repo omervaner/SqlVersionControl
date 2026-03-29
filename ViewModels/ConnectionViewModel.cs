@@ -116,8 +116,6 @@ public partial class ConnectionViewModel : ViewModelBase
     partial void OnUseRecentConnectionChanged(bool value)
     {
         OnPropertyChanged(nameof(NeedsPassword));
-        // Clear password when switching modes
-        Password = "";
     }
 
     [RelayCommand]

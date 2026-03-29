@@ -628,6 +628,9 @@ public partial class QueryTabView : UserControl
         doc.EndUpdate();
     }
 
+    public void UppercaseSelection() => TransformSelection(s => s.ToUpperInvariant());
+    public void LowercaseSelection() => TransformSelection(s => s.ToLowerInvariant());
+
     private void TransformSelection(Func<string, string> transform)
     {
         var textArea = SqlEditor.TextArea;
