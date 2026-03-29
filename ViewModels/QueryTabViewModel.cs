@@ -208,6 +208,7 @@ public partial class QueryTabViewModel : ObservableObject
         IsRunning = true;
         StatusText = "Executing...";
         QueryStatusText = "Running...";
+        Services.CrashLogger.LastQuery = sql;
         Results.Clear();
         Messages = "";
         _cts = new CancellationTokenSource();

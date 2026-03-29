@@ -1,7 +1,26 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.3.0 (March 30, 2026)
+## PROJECT STATUS: v2.4.0 (March 30, 2026)
+
+v2.4.0: Object Explorer depth + Crash Reporter + Editor polish.
+
+**v2.4.0 changes:**
+- OE: Parameters under Procs/Functions (new `Parameter` node type, detailed type info with OUTPUT badge)
+- OE: Columns under Views (expandable with same display as table columns)
+- OE: Indexes under Tables (type, key columns, included columns from sys.indexes)
+- OE: Foreign Keys under Tables (referenced table, column mapping, cascade actions)
+- OE: Constraints under Tables (CHECK expressions, DEFAULT values)
+- OE: User-Defined Types top-level folder (scalar + table types)
+- OE: Database-Level DDL Triggers folder (name, enabled/disabled, event types)
+- OE: Show Dependencies right-click on Proc/Function/View/Trigger — replaces tree with Uses/Used By, chain navigation, Back button
+- Executed Selection Flash: 300ms blue highlight on F5'd selection range
+- Crash Reporter: CrashLogger service, global exception handlers (AppDomain + TaskScheduler + main try/catch), structured crash logs with context, red banner on next startup with View Report / Copy / Dismiss
+- View menu: Toggle OE (Ctrl+B), Toggle Results (Ctrl+J), Zoom In/Out/Reset, Toggle Theme, Word Wrap
+- Edit menu: added Go to Line (Cmd+G), Select All (Cmd+A)
+- Cmd/Ctrl+Mouse Wheel zoom on editor (8-32 range, persists to settings)
+- Editor selection colors: themed SelectionBrush + SelectionForeground (readable in both themes)
+- Editor right-click context menu: Cut/Copy/Paste, Format SQL, Comment/Uncomment, Upper/Lowercase, Quick Quote, Go to Line, Find/Replace, contextual Peek Definition/Quick Execute/Show Dependencies
 
 v2.3.0: Query Trace (XE-based profiler) + QoL batch.
 

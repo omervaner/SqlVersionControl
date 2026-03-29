@@ -34,6 +34,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     /// <summary>Fired when "Start Job" wants confirmation and execution.</summary>
     public event Action<ObjectExplorerNode>? StartJobRequested;
 
+    /// <summary>Fired when dependency mode wants to peek a definition in the results panel.</summary>
+    public event Action<string, string>? PeekDefinitionRequested; // (objectName, definition)
+
     public void RequestAlterSequence(ObjectExplorerNode node) => AlterSequenceRequested?.Invoke(node);
     public void RequestResetSequence(ObjectExplorerNode node) => ResetSequenceRequested?.Invoke(node);
     public void RequestStartJob(ObjectExplorerNode node) => StartJobRequested?.Invoke(node);
@@ -195,7 +198,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
         switch (node.NodeType)
         {
             case ObjectExplorerNodeType.Column:
-                // Columns follow parent visibility — always visible
+            case ObjectExplorerNodeType.Parameter:
+                // Columns/Parameters follow parent visibility — always visible
                 node.IsVisibleInFilter = true;
                 return true;
 
@@ -205,6 +209,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             case ObjectExplorerNodeType.Function:
             case ObjectExplorerNodeType.Sequence:
             case ObjectExplorerNodeType.Job:
+            case ObjectExplorerNodeType.Trigger:
                 // Leaf objects: match against name
                 var matches = node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
                 node.IsVisibleInFilter = matches;
@@ -297,6 +302,13 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 case ObjectExplorerNodeType.Table:
                     await LoadTableChildrenAsync(node);
                     break;
+                case ObjectExplorerNodeType.View:
+                    await LoadViewChildrenAsync(node);
+                    break;
+                case ObjectExplorerNodeType.Proc:
+                case ObjectExplorerNodeType.Function:
+                    await LoadProcChildrenAsync(node);
+                    break;
             }
         }
         catch (Exception ex)
@@ -380,6 +392,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ("Stored Procedures", ObjectExplorerNodeType.Folder),
             ("Functions", ObjectExplorerNodeType.Folder),
             ("Sequences", ObjectExplorerNodeType.Folder),
+            ("Types", ObjectExplorerNodeType.Folder),
+            ("Database Triggers", ObjectExplorerNodeType.Folder),
             ("Jobs", ObjectExplorerNodeType.Folder),
         };
 
@@ -424,12 +438,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 var views = connStr != null
                     ? await _db.GetViewsAsync(connStr, db)
                     : await _db.GetViewsAsync(db);
-                var viewNodes = views.Select(v => new ObjectExplorerNode
+                var viewNodes = views.Select(v => WireChild(new ObjectExplorerNode
                 {
                     Name = v.Name, Schema = v.Schema, DatabaseName = db,
                     NodeType = ObjectExplorerNodeType.View,
-                    ConnectionId = folderNode.ConnectionId
-                });
+                    Children = [ObjectExplorerNode.CreateDummy()]
+                }, folderNode));
                 await AddChildrenInBatchesAsync(folderNode, viewNodes);
                 break;
 
@@ -439,12 +453,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     : await _db.GetProcsAndFunctionsAsync(db);
                 var procNodes = procsAndFuncs
                     .Where(x => x.Type == "SQL_STORED_PROCEDURE")
-                    .Select(p => new ObjectExplorerNode
+                    .Select(p => WireChild(new ObjectExplorerNode
                     {
                         Name = p.Name, Schema = p.Schema, DatabaseName = db,
                         NodeType = ObjectExplorerNodeType.Proc,
-                        ConnectionId = folderNode.ConnectionId
-                    });
+                        Children = [ObjectExplorerNode.CreateDummy()]
+                    }, folderNode));
                 await AddChildrenInBatchesAsync(folderNode, procNodes);
                 break;
 
@@ -454,12 +468,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     : await _db.GetProcsAndFunctionsAsync(db);
                 var funcNodes = funcs
                     .Where(x => x.Type != "SQL_STORED_PROCEDURE")
-                    .Select(f => new ObjectExplorerNode
+                    .Select(f => WireChild(new ObjectExplorerNode
                     {
                         Name = f.Name, Schema = f.Schema, DatabaseName = db,
                         NodeType = ObjectExplorerNodeType.Function,
-                        ConnectionId = folderNode.ConnectionId
-                    });
+                        Children = [ObjectExplorerNode.CreateDummy()]
+                    }, folderNode));
                 await AddChildrenInBatchesAsync(folderNode, funcNodes);
                 break;
 
@@ -481,8 +495,32 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 await LoadColumnsAsync(folderNode);
                 break;
 
+            case "Parameters":
+                await LoadParametersAsync(folderNode);
+                break;
+
+            case "Indexes":
+                await LoadIndexesAsync(folderNode);
+                break;
+
+            case "Keys":
+                await LoadForeignKeysAsync(folderNode);
+                break;
+
+            case "Constraints":
+                await LoadConstraintsAsync(folderNode);
+                break;
+
             case "Triggers":
                 await LoadTableTriggersAsync(folderNode);
+                break;
+
+            case "Types":
+                await LoadUserTypesAsync(folderNode);
+                break;
+
+            case "Database Triggers":
+                await LoadDatabaseTriggersAsync(folderNode);
                 break;
 
             case "Jobs":
@@ -568,31 +606,232 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     private Task LoadTableChildrenAsync(ObjectExplorerNode tableNode)
     {
-        // Columns folder
+        var subfolders = new[] { "Columns", "Indexes", "Keys", "Constraints", "Triggers" };
+        foreach (var name in subfolders)
+        {
+            tableNode.Children.Add(WireChild(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = tableNode.DatabaseName,
+                Schema = tableNode.Schema,
+                ParentTableName = tableNode.Name,
+                NodeType = ObjectExplorerNodeType.Folder,
+                Children = [ObjectExplorerNode.CreateDummy()]
+            }, tableNode));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    // ── View expand → Columns folder ───────────────────────────────
+
+    private Task LoadViewChildrenAsync(ObjectExplorerNode viewNode)
+    {
         var columnsFolder = WireChild(new ObjectExplorerNode
         {
             Name = "Columns",
-            DatabaseName = tableNode.DatabaseName,
-            Schema = tableNode.Schema,
-            ParentTableName = tableNode.Name,
+            DatabaseName = viewNode.DatabaseName,
+            Schema = viewNode.Schema,
+            ParentTableName = viewNode.Name,
             NodeType = ObjectExplorerNodeType.Folder,
             Children = [ObjectExplorerNode.CreateDummy()]
-        }, tableNode);
-        tableNode.Children.Add(columnsFolder);
-
-        // Triggers folder
-        var triggersFolder = WireChild(new ObjectExplorerNode
-        {
-            Name = "Triggers",
-            DatabaseName = tableNode.DatabaseName,
-            Schema = tableNode.Schema,
-            ParentTableName = tableNode.Name,
-            NodeType = ObjectExplorerNodeType.Folder,
-            Children = [ObjectExplorerNode.CreateDummy()]
-        }, tableNode);
-        tableNode.Children.Add(triggersFolder);
+        }, viewNode);
+        viewNode.Children.Add(columnsFolder);
 
         return Task.CompletedTask;
+    }
+
+    // ── Proc/Function expand → Parameters folder ────────────────────
+
+    private Task LoadProcChildrenAsync(ObjectExplorerNode procNode)
+    {
+        var paramsFolder = WireChild(new ObjectExplorerNode
+        {
+            Name = "Parameters",
+            DatabaseName = procNode.DatabaseName,
+            Schema = procNode.Schema,
+            ParentTableName = procNode.Name,
+            NodeType = ObjectExplorerNodeType.Folder,
+            Children = [ObjectExplorerNode.CreateDummy()]
+        }, procNode);
+        procNode.Children.Add(paramsFolder);
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadParametersAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var procName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var parameters = connStr != null
+            ? await _db.GetProcParametersDetailedAsync(connStr, db, schema, procName)
+            : await _db.GetProcParametersDetailedAsync(db, schema, procName);
+
+        foreach (var (name, typeName, maxLength, precision, scale, isOutput) in parameters)
+        {
+            var typeInfo = SqlTypeFormatter.Format(typeName, maxLength, precision, scale);
+            if (isOutput) typeInfo += " OUTPUT";
+
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                Schema = schema,
+                NodeType = ObjectExplorerNodeType.Parameter,
+                TypeInfo = typeInfo,
+                ParentTableName = procName,
+                ConnectionId = folderNode.ConnectionId
+            });
+        }
+    }
+
+    private async Task LoadIndexesAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var tableName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var indexes = connStr != null
+            ? await _db.GetTableIndexesAsync(connStr, db, schema, tableName)
+            : await _db.GetTableIndexesAsync(db, schema, tableName);
+
+        foreach (var (name, typeDesc, keyCols, includeCols) in indexes)
+        {
+            var typeInfo = typeDesc;
+            if (!string.IsNullOrEmpty(keyCols))
+                typeInfo += $" ({keyCols})";
+            if (!string.IsNullOrEmpty(includeCols))
+                typeInfo += $" INCLUDE ({includeCols})";
+
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                Schema = schema,
+                NodeType = ObjectExplorerNodeType.Folder, // leaf info node
+                TypeInfo = typeInfo,
+                ParentTableName = tableName,
+                ConnectionId = folderNode.ConnectionId
+            });
+        }
+    }
+
+    private async Task LoadForeignKeysAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var tableName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var fks = connStr != null
+            ? await _db.GetForeignKeysAsync(connStr, db, schema, tableName)
+            : await _db.GetForeignKeysAsync(db, schema, tableName);
+
+        foreach (var (name, refTable, colMapping, deleteAction, updateAction) in fks)
+        {
+            var typeInfo = $"→ {refTable}";
+            if (!string.IsNullOrEmpty(colMapping))
+                typeInfo += $" ({colMapping})";
+            if (deleteAction != "NO_ACTION")
+                typeInfo += $" ON DELETE {deleteAction}";
+            if (updateAction != "NO_ACTION")
+                typeInfo += $" ON UPDATE {updateAction}";
+
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                Schema = schema,
+                NodeType = ObjectExplorerNodeType.Folder, // leaf info node
+                TypeInfo = typeInfo,
+                ParentTableName = tableName,
+                ConnectionId = folderNode.ConnectionId
+            });
+        }
+    }
+
+    private async Task LoadConstraintsAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var tableName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var constraints = connStr != null
+            ? await _db.GetConstraintsAsync(connStr, db, schema, tableName)
+            : await _db.GetConstraintsAsync(db, schema, tableName);
+
+        foreach (var (name, constraintType, expression, columnName) in constraints)
+        {
+            var typeInfo = constraintType == "DEFAULT"
+                ? $"DEFAULT on [{columnName}]: {expression}"
+                : $"CHECK: {expression}";
+
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                Schema = schema,
+                NodeType = ObjectExplorerNodeType.Folder, // leaf info node
+                TypeInfo = typeInfo,
+                ParentTableName = tableName,
+                ConnectionId = folderNode.ConnectionId
+            });
+        }
+    }
+
+    private async Task LoadUserTypesAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var types = connStr != null
+            ? await _db.GetUserTypesAsync(connStr, db)
+            : await _db.GetUserTypesAsync(db);
+
+        foreach (var (name, baseType, isTableType) in types)
+        {
+            var node = new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                NodeType = ObjectExplorerNodeType.Folder, // leaf info node
+                TypeInfo = baseType,
+                ConnectionId = folderNode.ConnectionId
+            };
+
+            folderNode.Children.Add(node);
+        }
+    }
+
+    private async Task LoadDatabaseTriggersAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var connStr = ResolveConnectionString(folderNode);
+
+        var triggers = connStr != null
+            ? await _db.GetDatabaseTriggersAsync(connStr, db)
+            : await _db.GetDatabaseTriggersAsync(db);
+
+        foreach (var (name, isEnabled, eventTypes) in triggers)
+        {
+            var typeInfo = isEnabled ? "" : "Disabled";
+            if (!string.IsNullOrEmpty(eventTypes))
+                typeInfo = string.IsNullOrEmpty(typeInfo) ? eventTypes : $"{typeInfo}, {eventTypes}";
+
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = name,
+                DatabaseName = db,
+                NodeType = ObjectExplorerNodeType.Trigger,
+                TypeInfo = typeInfo,
+                ConnectionId = folderNode.ConnectionId
+            });
+        }
     }
 
     private async Task LoadColumnsAsync(ObjectExplorerNode folderNode)
@@ -655,6 +894,119 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     private static string FormatColumnType(string typeName, int maxLength)
         => SqlTypeFormatter.Format(typeName, maxLength);
+
+    // ── Dependency Mode ────────────────────────────────────────────
+
+    private List<ObjectExplorerNode>? _savedNodes;
+    [ObservableProperty] private bool _isDependencyMode;
+
+    public async Task ShowDependenciesAsync(ObjectExplorerNode node)
+    {
+        var connStr = ResolveConnectionString(node);
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+
+        var (uses, usedBy) = connStr != null
+            ? await _db.GetDependenciesAsync(connStr, node.DatabaseName, schema, node.Name)
+            : await _db.GetDependenciesAsync(node.DatabaseName, schema, node.Name);
+
+        // Save current tree
+        if (!IsDependencyMode)
+            _savedNodes = RootNodes.ToList();
+
+        IsDependencyMode = true;
+        RootNodes.Clear();
+
+        // Back button node
+        RootNodes.Add(new ObjectExplorerNode
+        {
+            Name = "\u25c0 Back to Object Explorer",
+            NodeType = ObjectExplorerNodeType.Folder,
+            ConnectionId = node.ConnectionId
+        });
+
+        // Source object header
+        RootNodes.Add(new ObjectExplorerNode
+        {
+            Name = $"Dependencies of {schema}.{node.Name}",
+            NodeType = ObjectExplorerNodeType.Folder,
+            IsCategoryFolder = true,
+            ConnectionId = node.ConnectionId
+        });
+
+        // Uses section
+        var usesFolder = new ObjectExplorerNode
+        {
+            Name = "Uses",
+            NodeType = ObjectExplorerNodeType.Folder,
+            IsCategoryFolder = true,
+            ChildCount = uses.Count,
+            ConnectionId = node.ConnectionId
+        };
+        foreach (var item in uses)
+        {
+            var depType = MapObjectType(item.ObjectType);
+            usesFolder.Children.Add(new ObjectExplorerNode
+            {
+                Name = item.ObjectName,
+                Schema = item.SchemaName,
+                DatabaseName = node.DatabaseName,
+                NodeType = depType,
+                TypeInfo = item.ObjectType,
+                ConnectionId = node.ConnectionId
+            });
+        }
+        RootNodes.Add(usesFolder);
+
+        // Used By section
+        var usedByFolder = new ObjectExplorerNode
+        {
+            Name = "Used By",
+            NodeType = ObjectExplorerNodeType.Folder,
+            IsCategoryFolder = true,
+            ChildCount = usedBy.Count,
+            ConnectionId = node.ConnectionId
+        };
+        foreach (var item in usedBy)
+        {
+            var depType = MapObjectType(item.ObjectType);
+            usedByFolder.Children.Add(new ObjectExplorerNode
+            {
+                Name = item.ObjectName,
+                Schema = item.SchemaName,
+                DatabaseName = node.DatabaseName,
+                NodeType = depType,
+                TypeInfo = item.ObjectType,
+                ConnectionId = node.ConnectionId
+            });
+        }
+        RootNodes.Add(usedByFolder);
+
+        // Expand both sections
+        usesFolder.IsExpanded = true;
+        usedByFolder.IsExpanded = true;
+    }
+
+    public void BackFromDependencies()
+    {
+        if (_savedNodes == null) return;
+
+        IsDependencyMode = false;
+        RootNodes.Clear();
+        foreach (var node in _savedNodes)
+            RootNodes.Add(node);
+        _savedNodes = null;
+    }
+
+    private static ObjectExplorerNodeType MapObjectType(string typeDesc) => typeDesc.ToUpperInvariant() switch
+    {
+        "SQL_STORED_PROCEDURE" => ObjectExplorerNodeType.Proc,
+        "SQL_SCALAR_FUNCTION" or "SQL_TABLE_VALUED_FUNCTION" or "SQL_INLINE_TABLE_VALUED_FUNCTION"
+            => ObjectExplorerNodeType.Function,
+        "VIEW" => ObjectExplorerNodeType.View,
+        "SQL_TRIGGER" or "SQL_DML_TRIGGER" => ObjectExplorerNodeType.Trigger,
+        "USER_TABLE" => ObjectExplorerNodeType.Table,
+        _ => ObjectExplorerNodeType.Folder
+    };
 
     // ── Context Menu Actions ────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
@@ -6,6 +7,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
@@ -73,6 +75,7 @@ public partial class QueryTabView : UserControl
         ConfigureEditor();
         ApplyGridRowHeight();
         ApplyEditorFontSize();
+        ApplyEditorSelectionColors();
 
         ThemeManager.ThemeChanged += RefreshTheme;
 
@@ -80,6 +83,9 @@ public partial class QueryTabView : UserControl
         DragDrop.SetAllowDrop(SqlEditor, true);
         SqlEditor.AddHandler(DragDrop.DropEvent, OnEditorDrop);
         SqlEditor.AddHandler(DragDrop.DragOverEvent, OnEditorDragOver);
+
+        // Cmd/Ctrl+Mouse Wheel to zoom
+        SqlEditor.AddHandler(InputElement.PointerWheelChangedEvent, OnEditorPointerWheelChanged, handledEventsToo: false);
 
         vm.Results.CollectionChanged += OnResultsChanged;
 
@@ -119,6 +125,9 @@ public partial class QueryTabView : UserControl
 
         // Peek Definition: Cmd+Click (Mac) / Ctrl+Click (Windows) on word in editor
         SqlEditor.AddHandler(InputElement.PointerPressedEvent, OnEditorPointerPressed, handledEventsToo: true);
+
+        // Editor right-click context menu
+        SqlEditor.AddHandler(InputElement.PointerReleasedEvent, OnEditorPointerReleased, handledEventsToo: true);
         PeekCloseButton.Click += (_, _) => ClosePeekPanel();
 
         // Apply syntax highlighting to peek editor too
@@ -187,6 +196,9 @@ public partial class QueryTabView : UserControl
             _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
             _viewModel.SqlText = SqlEditor.Text;
 
+            if (!string.IsNullOrEmpty(_viewModel.SelectedSqlText))
+                FlashExecutedSelection();
+
             if (_viewModel.RunWithTraceCommand.CanExecute(null))
                 _ = _viewModel.RunWithTraceCommand.ExecuteAsync(null);
 
@@ -197,6 +209,9 @@ public partial class QueryTabView : UserControl
         {
             _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
             _viewModel.SqlText = SqlEditor.Text;
+
+            if (!string.IsNullOrEmpty(_viewModel.SelectedSqlText))
+                FlashExecutedSelection();
 
             if (_viewModel.RunQueryCommand.CanExecute(null))
                 _ = _viewModel.RunQueryCommand.ExecuteAsync(null);
@@ -214,6 +229,7 @@ public partial class QueryTabView : UserControl
     public void RefreshTheme()
     {
         LoadSyntaxHighlighting();
+        ApplyEditorSelectionColors();
 
         // Clear cached null brush so GetNullForeground() re-reads from resources
         _nullForeground = null!;
@@ -245,6 +261,37 @@ public partial class QueryTabView : UserControl
     {
         var size = _settings?.Settings.FontSize ?? 12;
         SqlEditor.FontSize = size;
+    }
+
+    private void OnEditorPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (!ctrl) return;
+
+        var delta = e.Delta.Y > 0 ? 1 : -1;
+        var currentSize = _settings?.Settings.FontSize ?? 12;
+        var newSize = Math.Clamp(currentSize + delta, 8, 32);
+
+        if (newSize == currentSize) return;
+
+        if (_settings != null)
+        {
+            _settings.Settings.FontSize = newSize;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
+            _settings.Save();
+        }
+
+        e.Handled = true;
+    }
+
+    private void ApplyEditorSelectionColors()
+    {
+        if (Application.Current?.Resources.TryGetResource("EditorSelectionBrush", null, out var selBrush) == true
+            && selBrush is Avalonia.Media.IBrush brush)
+            SqlEditor.TextArea.SelectionBrush = brush;
+        if (Application.Current?.Resources.TryGetResource("EditorSelectionForeground", null, out var selFg) == true
+            && selFg is Avalonia.Media.IBrush fgBrush)
+            SqlEditor.TextArea.SelectionForeground = fgBrush;
     }
 
     private void LoadSyntaxHighlighting()
@@ -381,6 +428,57 @@ public partial class QueryTabView : UserControl
             && res is SolidColorBrush brush)
             return brush.Color;
         return Color.FromRgb(61, 53, 32); // fallback dark amber
+    }
+
+    // ── Executed Selection Flash ─────────────────────────────────────
+
+    private ExecutionFlashHighlighter? _flashHighlighter;
+
+    /// <summary>
+    /// Briefly highlights the executed selection range (300ms) to confirm what was run.
+    /// </summary>
+    private void FlashExecutedSelection()
+    {
+        var selection = SqlEditor.TextArea.Selection;
+        if (selection.IsEmpty) return;
+
+        var startOffset = SqlEditor.SelectionStart;
+        var endOffset = startOffset + SqlEditor.SelectionLength;
+        if (startOffset >= endOffset) return;
+
+        // Remove previous flash if still active
+        if (_flashHighlighter != null)
+        {
+            SqlEditor.TextArea.TextView.LineTransformers.Remove(_flashHighlighter);
+            _flashHighlighter = null;
+        }
+
+        var isDark = ThemeManager.IsDarkTheme;
+        _flashHighlighter = new ExecutionFlashHighlighter
+        {
+            StartOffset = startOffset,
+            EndOffset = endOffset,
+            FlashColor = isDark
+                ? Color.FromArgb(50, 80, 160, 255)   // subtle blue on dark
+                : Color.FromArgb(50, 30, 100, 200)    // subtle blue on light
+        };
+
+        SqlEditor.TextArea.TextView.LineTransformers.Add(_flashHighlighter);
+        SqlEditor.TextArea.TextView.Redraw();
+
+        // Remove after 300ms
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_flashHighlighter != null)
+            {
+                SqlEditor.TextArea.TextView.LineTransformers.Remove(_flashHighlighter);
+                _flashHighlighter = null;
+                SqlEditor.TextArea.TextView.Redraw();
+            }
+        };
+        timer.Start();
     }
 
     // ── Section 12: Move Line Up/Down ────────────────────────────────
@@ -602,7 +700,7 @@ public partial class QueryTabView : UserControl
 
     private TextBox? _goToLineBox;
 
-    private void ShowGoToLinePopup()
+    public void ShowGoToLinePopup()
     {
         if (_goToLineBox != null)
         {
@@ -1475,6 +1573,80 @@ public partial class QueryTabView : UserControl
         editor.Foreground = new SolidColorBrush(ThemeManager.GetIdentifierColor());
     }
 
+    private void OnEditorPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right) return;
+        ShowEditorContextMenu(e);
+        e.Handled = true;
+    }
+
+    // ── Editor Right-Click Context Menu ─────────────────────────────
+
+    /// <summary>Fired when context menu requests Format SQL (lives on host).</summary>
+    public event Action? FormatSqlRequested;
+
+    /// <summary>Fired when context menu requests Quick Quote (lives on host).</summary>
+    public event Action? QuickQuoteRequested;
+
+    /// <summary>Fired when context menu requests Show Dependencies for a word.</summary>
+    public event Action<string>? ShowDependenciesRequested;
+
+    private void ShowEditorContextMenu(PointerReleasedEventArgs e)
+    {
+        var menu = new MenuFlyout();
+        var isMac = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+        var mod = isMac ? "Cmd" : "Ctrl";
+
+        // Clipboard
+        menu.Items.Add(CreateEditorMenuItem("Cut", $"{mod}+X", () => SqlEditor.Cut()));
+        menu.Items.Add(CreateEditorMenuItem("Copy", $"{mod}+C", () => SqlEditor.Copy()));
+        menu.Items.Add(CreateEditorMenuItem("Paste", $"{mod}+V", () => SqlEditor.Paste()));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateEditorMenuItem("Select All", $"{mod}+A", () => SqlEditor.SelectAll()));
+        menu.Items.Add(new Separator());
+
+        // Formatting
+        menu.Items.Add(CreateEditorMenuItem("Format SQL", "Ctrl+Shift+F", () => FormatSqlRequested?.Invoke()));
+        menu.Items.Add(CreateEditorMenuItem("Comment Lines", $"{mod}+K", CommentLines));
+        menu.Items.Add(CreateEditorMenuItem("Uncomment Lines", $"{mod}+L", UncommentLines));
+        menu.Items.Add(CreateEditorMenuItem("Uppercase", $"{mod}+Shift+U", () => TransformSelection(s => s.ToUpperInvariant())));
+        menu.Items.Add(CreateEditorMenuItem("Lowercase", $"{mod}+Shift+L", () => TransformSelection(s => s.ToLowerInvariant())));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateEditorMenuItem("Quick Quote Selection", "Ctrl+Shift+Q", () => QuickQuoteRequested?.Invoke()));
+        menu.Items.Add(new Separator());
+
+        // Navigation
+        menu.Items.Add(CreateEditorMenuItem("Go to Line...", $"{mod}+G", ShowGoToLinePopup));
+        menu.Items.Add(CreateEditorMenuItem("Find", $"{mod}+F", () => AvaloniaEdit.Search.SearchPanel.Install(SqlEditor)));
+        menu.Items.Add(CreateEditorMenuItem("Replace", $"{mod}+H", () => AvaloniaEdit.Search.SearchPanel.Install(SqlEditor)));
+
+        // Contextual items — only if cursor is on a word
+        var word = GetWordAtCaret();
+        if (!string.IsNullOrEmpty(word))
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateEditorMenuItem($"Peek Definition: {word}", $"{mod}+Click", () => _ = PeekDefinitionAsync(word)));
+            menu.Items.Add(CreateEditorMenuItem($"Quick Execute: {word}", "Shift+Click", () => _ = QuickExecuteRequested?.Invoke(word)));
+            menu.Items.Add(CreateEditorMenuItem($"Show Dependencies: {word}", "", () => ShowDependenciesRequested?.Invoke(word)));
+        }
+
+        menu.ShowAt(SqlEditor, true);
+    }
+
+    private static MenuItem CreateEditorMenuItem(string header, string gesture, Action action)
+    {
+        var item = new MenuItem { Header = header };
+        if (!string.IsNullOrEmpty(gesture))
+            item.InputGesture = null; // just display text, not bound
+        item.Click += (_, _) => action();
+
+        // Show shortcut hint as right-aligned text
+        if (!string.IsNullOrEmpty(gesture))
+            item.Header = $"{header}";
+
+        return item;
+    }
+
     // ── Result Tabs ──────────────────────────────────────────────────
 
     private void OnResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -2023,4 +2195,34 @@ internal class OccurrenceHighlighter : AvaloniaEdit.Rendering.DocumentColorizing
 
     private static bool IsWordBoundary(char c)
         => !char.IsLetterOrDigit(c) && c != '_' && c != '#' && c != '@';
+}
+
+/// <summary>
+/// Temporary line transformer that flashes a highlight on the executed selection range.
+/// </summary>
+internal class ExecutionFlashHighlighter : AvaloniaEdit.Rendering.DocumentColorizingTransformer
+{
+    public int StartOffset { get; set; }
+    public int EndOffset { get; set; }
+    public Color FlashColor { get; set; } = Color.FromArgb(60, 100, 180, 255); // subtle blue
+
+    protected override void ColorizeLine(AvaloniaEdit.Document.DocumentLine line)
+    {
+        if (StartOffset >= EndOffset) return;
+
+        // Check if this line overlaps with the flash range
+        var lineStart = line.Offset;
+        var lineEnd = line.Offset + line.Length;
+
+        var overlapStart = Math.Max(lineStart, StartOffset);
+        var overlapEnd = Math.Min(lineEnd, EndOffset);
+
+        if (overlapStart < overlapEnd)
+        {
+            ChangeLinePart(overlapStart, overlapEnd, element =>
+            {
+                element.TextRunProperties.SetBackgroundBrush(new SolidColorBrush(FlashColor));
+            });
+        }
+    }
 }

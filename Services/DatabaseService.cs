@@ -302,10 +302,14 @@ public class DatabaseService
     /// </summary>
     public async Task<(List<CodeSearchResult> Uses, List<CodeSearchResult> UsedBy)> GetDependenciesAsync(
         string database, string schema, string objectName)
+        => await GetDependenciesAsync(_connectionString, database, schema, objectName);
+
+    public async Task<(List<CodeSearchResult> Uses, List<CodeSearchResult> UsedBy)> GetDependenciesAsync(
+        string connectionString, string database, string schema, string objectName)
     {
         var uses = new List<CodeSearchResult>();
         var usedBy = new List<CodeSearchResult>();
-        using var conn = new SqlConnection(_connectionString);
+        using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
         var safeName = database.Replace("]", "]]");
@@ -1053,6 +1057,82 @@ public class DatabaseService
         return results;
     }
 
+    public async Task<List<(string Name, bool IsEnabled, string EventTypes)>>
+        GetDatabaseTriggersAsync(string database)
+        => await GetDatabaseTriggersAsync(_connectionString, database);
+
+    public async Task<List<(string Name, bool IsEnabled, string EventTypes)>>
+        GetDatabaseTriggersAsync(string connectionString, string database)
+    {
+        var results = new List<(string, bool, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT t.name, ~t.is_disabled,
+                   STUFF((
+                       SELECT ', ' + te.type_desc
+                       FROM [{safeDb}].sys.trigger_events te
+                       WHERE te.object_id = t.object_id
+                       FOR XML PATH('')
+                   ), 1, 2, '') AS EventTypes
+            FROM [{safeDb}].sys.triggers t
+            WHERE t.parent_class_desc = 'DATABASE'
+            ORDER BY t.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetBoolean(1),
+                reader.IsDBNull(2) ? "" : reader.GetString(2)
+            ));
+        }
+
+        return results;
+    }
+
+    public async Task<List<(string Name, string BaseType, bool IsTableType)>>
+        GetUserTypesAsync(string database)
+        => await GetUserTypesAsync(_connectionString, database);
+
+    public async Task<List<(string Name, string BaseType, bool IsTableType)>>
+        GetUserTypesAsync(string connectionString, string database)
+    {
+        var results = new List<(string, string, bool)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT t.name,
+                   CASE WHEN t.is_table_type = 1 THEN 'Table Type'
+                        ELSE TYPE_NAME(t.system_type_id)
+                   END AS BaseType,
+                   t.is_table_type
+            FROM [{safeDb}].sys.types t
+            WHERE t.is_user_defined = 1
+            ORDER BY t.is_table_type, t.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetBoolean(2)
+            ));
+        }
+
+        return results;
+    }
+
     public async Task AlterSequenceRestartAsync(string connectionString, string database, string schema, string name, long restartValue)
     {
         var safeDb = database.Replace("]", "]]");
@@ -1611,6 +1691,10 @@ public class DatabaseService
     }
 
     public async Task<List<(string Name, string TypeName, int MaxLength, byte Precision, byte Scale, bool IsOutput)>>
+        GetProcParametersDetailedAsync(string database, string schema, string procName)
+        => await GetProcParametersDetailedAsync(_connectionString, database, schema, procName);
+
+    public async Task<List<(string Name, string TypeName, int MaxLength, byte Precision, byte Scale, bool IsOutput)>>
         GetProcParametersDetailedAsync(string connectionString, string database, string schema, string procName)
     {
         var results = new List<(string, string, int, byte, byte, bool)>();
@@ -1714,6 +1798,179 @@ public class DatabaseService
                 reader.GetInt16(2),
                 reader.GetBoolean(3),
                 reader.GetInt32(4) == 1
+            ));
+        }
+
+        return results;
+    }
+
+    // ── Object Explorer: Indexes, Foreign Keys, Constraints ───────────
+
+    public async Task<List<(string Name, string TypeDescription, string KeyColumns, string IncludedColumns)>>
+        GetTableIndexesAsync(string database, string schema, string table)
+        => await GetTableIndexesAsync(_connectionString, database, schema, table);
+
+    public async Task<List<(string Name, string TypeDescription, string KeyColumns, string IncludedColumns)>>
+        GetTableIndexesAsync(string connectionString, string database, string schema, string table)
+    {
+        var results = new List<(string, string, string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT i.name,
+                   CASE
+                       WHEN i.is_primary_key = 1 THEN 'Primary Key'
+                       WHEN i.is_unique_constraint = 1 THEN 'Unique Constraint'
+                       WHEN i.is_unique = 1 THEN 'Unique ' + LOWER(i.type_desc)
+                       ELSE CASE i.type
+                           WHEN 1 THEN 'Clustered'
+                           WHEN 2 THEN 'Nonclustered'
+                           WHEN 5 THEN 'Clustered columnstore'
+                           WHEN 6 THEN 'Nonclustered columnstore'
+                           ELSE LOWER(i.type_desc)
+                       END
+                   END AS TypeDescription,
+                   STUFF((
+                       SELECT ', ' + c.name
+                       FROM [{safeDb}].sys.index_columns ic
+                       JOIN [{safeDb}].sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                       WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+                       ORDER BY ic.key_ordinal
+                       FOR XML PATH('')
+                   ), 1, 2, '') AS KeyColumns,
+                   STUFF((
+                       SELECT ', ' + c.name
+                       FROM [{safeDb}].sys.index_columns ic
+                       JOIN [{safeDb}].sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                       WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 1
+                       ORDER BY ic.key_ordinal
+                       FOR XML PATH('')
+                   ), 1, 2, '') AS IncludedColumns
+            FROM [{safeDb}].sys.indexes i
+            JOIN [{safeDb}].sys.tables t ON i.object_id = t.object_id
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = @schema AND t.name = @table
+              AND i.type > 0  -- exclude heap
+              AND i.name IS NOT NULL
+            ORDER BY i.is_primary_key DESC, i.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", table);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? "" : reader.GetString(2),
+                reader.IsDBNull(3) ? "" : reader.GetString(3)
+            ));
+        }
+
+        return results;
+    }
+
+    public async Task<List<(string Name, string ReferencedTable, string ColumnMapping, string DeleteAction, string UpdateAction)>>
+        GetForeignKeysAsync(string database, string schema, string table)
+        => await GetForeignKeysAsync(_connectionString, database, schema, table);
+
+    public async Task<List<(string Name, string ReferencedTable, string ColumnMapping, string DeleteAction, string UpdateAction)>>
+        GetForeignKeysAsync(string connectionString, string database, string schema, string table)
+    {
+        var results = new List<(string, string, string, string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT fk.name,
+                   QUOTENAME(rs.name) + '.' + QUOTENAME(rt.name) AS ReferencedTable,
+                   STUFF((
+                       SELECT ', ' + pc.name + ' → ' + rc.name
+                       FROM [{safeDb}].sys.foreign_key_columns fkc
+                       JOIN [{safeDb}].sys.columns pc ON fkc.parent_object_id = pc.object_id AND fkc.parent_column_id = pc.column_id
+                       JOIN [{safeDb}].sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
+                       WHERE fkc.constraint_object_id = fk.object_id
+                       ORDER BY fkc.constraint_column_id
+                       FOR XML PATH('')
+                   ), 1, 2, '') AS ColumnMapping,
+                   fk.delete_referential_action_desc,
+                   fk.update_referential_action_desc
+            FROM [{safeDb}].sys.foreign_keys fk
+            JOIN [{safeDb}].sys.tables pt ON fk.parent_object_id = pt.object_id
+            JOIN [{safeDb}].sys.schemas ps ON pt.schema_id = ps.schema_id
+            JOIN [{safeDb}].sys.tables rt ON fk.referenced_object_id = rt.object_id
+            JOIN [{safeDb}].sys.schemas rs ON rt.schema_id = rs.schema_id
+            WHERE ps.name = @schema AND pt.name = @table
+            ORDER BY fk.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", table);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? "" : reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4)
+            ));
+        }
+
+        return results;
+    }
+
+    public async Task<List<(string Name, string ConstraintType, string Expression, string ColumnName)>>
+        GetConstraintsAsync(string database, string schema, string table)
+        => await GetConstraintsAsync(_connectionString, database, schema, table);
+
+    public async Task<List<(string Name, string ConstraintType, string Expression, string ColumnName)>>
+        GetConstraintsAsync(string connectionString, string database, string schema, string table)
+    {
+        var results = new List<(string, string, string, string)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            -- Check constraints
+            SELECT cc.name, 'CHECK' AS ConstraintType, cc.definition, ''
+            FROM [{safeDb}].sys.check_constraints cc
+            JOIN [{safeDb}].sys.tables t ON cc.parent_object_id = t.object_id
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = @schema AND t.name = @table
+            UNION ALL
+            -- Default constraints
+            SELECT dc.name, 'DEFAULT', dc.definition, c.name
+            FROM [{safeDb}].sys.default_constraints dc
+            JOIN [{safeDb}].sys.columns c ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+            JOIN [{safeDb}].sys.tables t ON dc.parent_object_id = t.object_id
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = @schema AND t.name = @table
+            ORDER BY ConstraintType, 1";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", table);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3)
             ));
         }
 

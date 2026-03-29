@@ -15,7 +15,8 @@ public enum ObjectExplorerNodeType
     Column,
     Sequence,
     Job,
-    Trigger
+    Trigger,
+    Parameter
 }
 
 public partial class ObjectExplorerNode : ObservableObject
@@ -66,7 +67,7 @@ public partial class ObjectExplorerNode : ObservableObject
     public string DisplayName => NodeType switch
     {
         ObjectExplorerNodeType.Connection => Name,
-        ObjectExplorerNodeType.Column => Name,
+        ObjectExplorerNodeType.Column or ObjectExplorerNodeType.Parameter => Name,
         ObjectExplorerNodeType.Folder => ChildCount > 0 ? $"{Name} ({ChildCount})" : Name,
         ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
             or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
@@ -80,9 +81,10 @@ public partial class ObjectExplorerNode : ObservableObject
     };
 
     // Computed helpers for template binding
-    public bool IsColumn => NodeType == ObjectExplorerNodeType.Column;
+    public bool IsColumn => NodeType is ObjectExplorerNodeType.Column or ObjectExplorerNodeType.Parameter;
     public bool HasTypeInfo => !string.IsNullOrEmpty(TypeInfo);
-    public bool ShowPK => IsColumn && IsPrimaryKey;
+    public bool ShowPK => NodeType == ObjectExplorerNodeType.Column && IsPrimaryKey;
+    public bool ShowNullability => NodeType == ObjectExplorerNodeType.Column;
     public bool IsBold => NodeType is ObjectExplorerNodeType.Connection or ObjectExplorerNodeType.Database or ObjectExplorerNodeType.Folder;
     /// <summary>True for top-level category folders (Tables, Views, etc.) — used for separator lines between groups.</summary>
     public bool IsCategoryFolder { get; set; }
@@ -93,6 +95,7 @@ public partial class ObjectExplorerNode : ObservableObject
     {
         ObjectExplorerNodeType.Column when IsPrimaryKey => "\u25cf", // ●
         ObjectExplorerNodeType.Column => "\u25cb",                   // ○
+        ObjectExplorerNodeType.Parameter => "\u25c7",                // ◇
         _ => "\u25cf"                                                // ●
     };
 
@@ -112,6 +115,7 @@ public partial class ObjectExplorerNode : ObservableObject
         ObjectExplorerNodeType.Trigger => "#d35400",
         ObjectExplorerNodeType.Column when IsPrimaryKey => "#f1c40f",
         ObjectExplorerNodeType.Column => "#888888",
+        ObjectExplorerNodeType.Parameter => "#9b59b6",
         ObjectExplorerNodeType.Folder => FolderIconColor,
         _ => "#aaaaaa"
     };
@@ -129,6 +133,12 @@ public partial class ObjectExplorerNode : ObservableObject
         "Sequences" => "#16a085",
         "Jobs" => "#e74c3c",
         "Triggers" => "#d35400",
+        "Parameters" => "#9b59b6",
+        "Indexes" => "#2980b9",
+        "Keys" => "#e74c3c",
+        "Constraints" => "#f39c12",
+        "Types" => "#16a085",
+        "Database Triggers" => "#d35400",
         _ => "#aaaaaa"
     };
 

@@ -145,6 +145,19 @@ public partial class MainWindow : Window
         UpdateNowButton.Click += OnUpdateNowClicked;
         UpdateLaterButton.Click += (_, _) => UpdateBar.IsVisible = false;
 
+        // Wire crash banner buttons
+        CrashViewButton.Click += OnCrashViewClicked;
+        CrashCopyButton.Click += OnCrashCopyClicked;
+        CrashDismissButton.Click += (_, _) =>
+        {
+            CrashLogger.ClearCrashReports();
+            CrashBanner.IsVisible = false;
+        };
+
+        // Check for crash reports from previous session
+        if (CrashLogger.HasPendingCrashReports())
+            CrashBanner.IsVisible = true;
+
         // Check for updates (non-blocking)
         _ = CheckForUpdatesAsync();
 
@@ -179,7 +192,52 @@ public partial class MainWindow : Window
         MenuReplace.Click += (_, _) => OpenSearchPanel(true);
         MenuComment.Click += (_, _) => GetActiveQueryTabView()?.CommentLines();
         MenuUncomment.Click += (_, _) => GetActiveQueryTabView()?.UncommentLines();
+        MenuGoToLine.Click += (_, _) => GetActiveQueryTabView()?.ShowGoToLinePopup();
+        MenuSelectAll.Click += (_, _) => GetActiveEditor()?.SelectAll();
         MenuToggleWordWrap.Click += (_, _) =>
+        {
+            var editor = GetActiveEditor();
+            if (editor != null) editor.WordWrap = !editor.WordWrap;
+        };
+
+        // View menu
+        MenuToggleOE.Click += (_, _) =>
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.ToggleObjectExplorer();
+        };
+        MenuToggleResults.Click += (_, _) =>
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            host?.ToggleActiveResultsPanel();
+        };
+        MenuZoomIn.Click += (_, _) =>
+        {
+            var newSize = Math.Min(_settings.Settings.FontSize + 1, 32);
+            _settings.Settings.FontSize = newSize;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
+            _settings.Save();
+        };
+        MenuZoomOut.Click += (_, _) =>
+        {
+            var newSize = Math.Max(_settings.Settings.FontSize - 1, 8);
+            _settings.Settings.FontSize = newSize;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
+            _settings.Save();
+        };
+        MenuZoomReset.Click += (_, _) =>
+        {
+            _settings.Settings.FontSize = 12;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, 12);
+            _settings.Save();
+        };
+        MenuToggleTheme.Click += (_, _) =>
+        {
+            _settings.Settings.UseDarkTheme = !_settings.Settings.UseDarkTheme;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
+            _settings.Save();
+        };
+        MenuViewWordWrap.Click += (_, _) =>
         {
             var editor = GetActiveEditor();
             if (editor != null) editor.WordWrap = !editor.WordWrap;
@@ -1075,6 +1133,42 @@ public partial class MainWindow : Window
         }
     }
 
+    // ── Crash Banner ────────────────────────────────────────────────
+
+    private void OnCrashViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var report = CrashLogger.ReadLatestCrashReport();
+        if (report == null) return;
+
+        // Open crash report in a new query tab
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        host?.OpenScriptInNewTab($"-- CRASH REPORT\n-- Copy this and send to the dev team\n\n/*\n{report}\n*/");
+
+        // Switch to editor tab
+        QueryEditorTab.IsChecked = true;
+    }
+
+    private async void OnCrashCopyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var report = CrashLogger.ReadLatestCrashReport();
+        if (report == null) return;
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+            await clipboard.SetTextAsync(report);
+
+        CrashBannerText.Text = "Crash report copied to clipboard!";
+
+        // Reset text after 2 seconds
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            CrashBannerText.Text = "Lookout crashed last session.";
+        };
+        timer.Start();
+    }
+
     // ── Status Bar ──────────────────────────────────────────────────
 
     private QueryTabViewModel? _boundQueryTab;
@@ -1215,6 +1309,11 @@ public partial class MainWindow : Window
             BindActiveQueryTab();
         else
             UnbindQueryTab();
+
+        // Keep crash context up to date
+        CrashLogger.ActiveConnection = _lastConnectionDisplay;
+        CrashLogger.ActiveDatabase = activeTabVm?.SelectedDatabase;
+        CrashLogger.ActiveTabName = activeTabVm?.TabTitle;
     }
 
     private void BindActiveQueryTab()

@@ -131,7 +131,7 @@
                                 <!-- Column: nullable -->
                                 <TextBlock Text="{Binding NullabilityText}" FontSize="11"
                                            Foreground="{DynamicResource TextSecondary}"
-                                           IsVisible="{Binding IsColumn}"
+                                           IsVisible="{Binding ShowNullability}"
                                            VerticalAlignment="Center"/>
                                 <!-- Loading indicator -->
                                 <TextBlock Text="Loading..." FontSize="11" FontStyle="Italic"

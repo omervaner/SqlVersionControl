@@ -316,6 +316,9 @@ public partial class QueryEditorHost : UserControl
         tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
         tabView.QuickExecuteRequested += OnQuickExecuteRequested;
         tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
+        tabView.FormatSqlRequested += FormatSqlInEditor;
+        tabView.QuickQuoteRequested += () => QuickQuoteSelection(nPrefix: false);
+        tabView.ShowDependenciesRequested += OnShowDependenciesFromEditor;
 
         _tabs.Add(tabView);
         TabContentPanel.Children.Add(tabView);
@@ -1435,6 +1438,34 @@ public partial class QueryEditorHost : UserControl
             _tabs[_activeTabIndex].InsertText(template, false);
     }
 
+    private void OnShowDependenciesFromEditor(string objectName)
+    {
+        var activeVm = ActiveTabViewModel;
+        var database = activeVm?.SelectedDatabase;
+        if (database == null) return;
+
+        // Parse schema.name
+        string schema = "dbo", name = objectName;
+        if (objectName.Contains('.'))
+        {
+            var parts = objectName.Split('.', 2);
+            schema = parts[0].Trim('[', ']');
+            name = parts[1].Trim('[', ']');
+        }
+
+        // Create a temporary node for the dependency lookup
+        var node = new ObjectExplorerNode
+        {
+            Name = name,
+            Schema = schema,
+            DatabaseName = database,
+            NodeType = ObjectExplorerNodeType.Proc, // type doesn't matter for dependencies
+            ConnectionId = activeVm?.TabConnectionProfile?.Id
+        };
+
+        _ = _viewModel.ObjectExplorer.ShowDependenciesAsync(node);
+    }
+
     private void OnProcDropRequested(ObjectExplorerNode node)
     {
         if (_viewModel == null) return;
@@ -1649,6 +1680,8 @@ public partial class QueryEditorHost : UserControl
             case ObjectExplorerNodeType.View:
                 menu.Items.Add(CreateMenuItem("SELECT TOP 100", () => explorer.SelectTop100(node)));
                 menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Show Dependencies", () => _ = explorer.ShowDependenciesAsync(node)));
+                menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("Script as CREATE", () => _ = explorer.ViewDefinitionAsync(node)));
                 menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
                 menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
@@ -1658,12 +1691,16 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
                 menu.Items.Add(CreateMenuItem("Generate EXEC", () => _ = explorer.GenerateExecAsync(node)));
                 menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Show Dependencies", () => _ = explorer.ShowDependenciesAsync(node)));
+                menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
                 menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
                 break;
 
             case ObjectExplorerNodeType.Function:
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Show Dependencies", () => _ = explorer.ShowDependenciesAsync(node)));
                 menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
                 menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
@@ -1679,6 +1716,8 @@ public partial class QueryEditorHost : UserControl
 
             case ObjectExplorerNodeType.Trigger:
                 menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Show Dependencies", () => _ = explorer.ShowDependenciesAsync(node)));
                 menu.Items.Add(new Separator());
                 var isDisabled = node.TypeInfo.Contains("Disabled");
                 menu.Items.Add(CreateMenuItem(isDisabled ? "Enable Trigger" : "Disable Trigger",
@@ -1729,11 +1768,20 @@ public partial class QueryEditorHost : UserControl
         _dragPending = false;
         _dragNode = null;
 
-        if (e.InitialPressMouseButton != MouseButton.Right) return;
         if (e.Source is not Visual visual) return;
-
         var treeViewItem = visual.FindAncestorOfType<TreeViewItem>();
         if (treeViewItem?.DataContext is not ObjectExplorerNode node) return;
+
+        // Left-click on "Back to Object Explorer" in dependency mode
+        if (e.InitialPressMouseButton == MouseButton.Left && _viewModel?.ObjectExplorer.IsDependencyMode == true
+            && node.Name.StartsWith("\u25c0"))
+        {
+            _viewModel.ObjectExplorer.BackFromDependencies();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.InitialPressMouseButton != MouseButton.Right) return;
 
         ShowContextMenu(node, treeViewItem);
         e.Handled = true;
@@ -1749,6 +1797,16 @@ public partial class QueryEditorHost : UserControl
             return;
 
         var explorer = _viewModel.ObjectExplorer;
+
+        // In dependency mode, double-click peeks definition
+        if (explorer.IsDependencyMode && node.NodeType is ObjectExplorerNodeType.Proc
+            or ObjectExplorerNodeType.Function or ObjectExplorerNodeType.View
+            or ObjectExplorerNodeType.Trigger)
+        {
+            _ = explorer.ViewDefinitionAsync(node);
+            e.Handled = true;
+            return;
+        }
 
         switch (node.NodeType)
         {
