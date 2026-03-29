@@ -5,6 +5,7 @@ namespace SqlVersionControl.Models;
 
 public enum ObjectExplorerNodeType
 {
+    Connection,
     Database,
     Folder,
     Table,
@@ -27,6 +28,11 @@ public partial class ObjectExplorerNode : ObservableObject
     public bool IsPrimaryKey { get; set; }
     public bool IsNullable { get; set; }
     public string ParentTableName { get; set; } = ""; // For columns: the parent table name
+
+    // Multi-connection support
+    public string? ConnectionId { get; set; }       // Which registry connection this node belongs to
+    public string? ConnectionColor { get; set; }    // Hex color for connection dot
+    public string? Environment { get; set; }        // Dev/Test/Staging/Production
 
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _children = [];
@@ -59,6 +65,7 @@ public partial class ObjectExplorerNode : ObservableObject
 
     public string DisplayName => NodeType switch
     {
+        ObjectExplorerNodeType.Connection => Name,
         ObjectExplorerNodeType.Column => Name,
         ObjectExplorerNodeType.Folder => ChildCount > 0 ? $"{Name} ({ChildCount})" : Name,
         ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
@@ -76,10 +83,10 @@ public partial class ObjectExplorerNode : ObservableObject
     public bool IsColumn => NodeType == ObjectExplorerNodeType.Column;
     public bool HasTypeInfo => !string.IsNullOrEmpty(TypeInfo);
     public bool ShowPK => IsColumn && IsPrimaryKey;
-    public bool IsBold => NodeType is ObjectExplorerNodeType.Database or ObjectExplorerNodeType.Folder;
+    public bool IsBold => NodeType is ObjectExplorerNodeType.Connection or ObjectExplorerNodeType.Database or ObjectExplorerNodeType.Folder;
     /// <summary>True for top-level category folders (Tables, Views, etc.) — used for separator lines between groups.</summary>
     public bool IsCategoryFolder { get; set; }
-    public double DisplayFontSize => NodeType == ObjectExplorerNodeType.Database ? 13 : 12;
+    public double DisplayFontSize => NodeType is ObjectExplorerNodeType.Connection or ObjectExplorerNodeType.Database ? 13 : 12;
     public string NullabilityText => IsNullable ? "NULL" : "NOT NULL";
 
     public string Icon => NodeType switch
@@ -89,8 +96,12 @@ public partial class ObjectExplorerNode : ObservableObject
         _ => "\u25cf"                                                // ●
     };
 
+    public bool IsConnectionNode => NodeType == ObjectExplorerNodeType.Connection;
+    public double DisplayFontWeight => NodeType is ObjectExplorerNodeType.Connection ? 700 : IsBold ? 600 : 400;
+
     public string IconColor => NodeType switch
     {
+        ObjectExplorerNodeType.Connection => ConnectionColor ?? "#aaaaaa",
         ObjectExplorerNodeType.Database => "#aaaaaa",
         ObjectExplorerNodeType.Table => "#2a6e4e",
         ObjectExplorerNodeType.View => "#2980b9",

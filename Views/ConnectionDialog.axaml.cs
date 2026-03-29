@@ -14,6 +14,9 @@ public partial class ConnectionDialog : Window
     public ConnectionSettings? Result { get; private set; }
     public SavedConnection? ResultConnection { get; private set; }
 
+    private ConnectionRegistry? _registry;
+    private DatabaseService? _db;
+
     public ConnectionDialog()
     {
         InitializeComponent();
@@ -28,14 +31,41 @@ public partial class ConnectionDialog : Window
         };
     }
 
-    public ConnectionDialog(DatabaseService db, SettingsService? settings = null) : this()
+    public ConnectionDialog(DatabaseService db, SettingsService? settings = null,
+        ConnectionRegistry? registry = null) : this()
     {
-        var vm = new ConnectionViewModel(db, settings ?? new SettingsService(), connSettings =>
+        _db = db;
+        _registry = registry;
+        var settingsService = settings ?? new SettingsService();
+
+        var vm = new ConnectionViewModel(db, settingsService, connSettings =>
         {
             Result = connSettings;
             ResultConnection = (DataContext as ConnectionViewModel)?.ResultConnection;
             Close();
-        });
+        }, registry);
+
+        // Wire "Manage Connections" button
+        vm.ManageConnectionsRequested += async () =>
+        {
+            if (_registry != null && _db != null)
+            {
+                var managerDialog = new ConnectionManagerDialog(_registry, _db);
+                await managerDialog.ShowDialog(this);
+
+                // Refresh the connection list after manager closes
+                if (DataContext is ConnectionViewModel currentVm)
+                {
+                    currentVm.RecentConnections.Clear();
+                    foreach (var managed in _registry.Connections)
+                        currentVm.RecentConnections.Add(managed.Config);
+
+                    if (currentVm.RecentConnections.Count > 0 && currentVm.SelectedConnection == null)
+                        currentVm.SelectedConnection = currentVm.RecentConnections[0];
+                }
+            }
+        };
+
         DataContext = vm;
         BuildColorPicker(vm);
     }

@@ -20,6 +20,7 @@
             <conv:NullDisplayConverter x:Key="NullDisplay"/>
             <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
             <conv:ColumnStatusToColorConverter x:Key="ColumnStatusToColorConverter"/>
+            <conv:HexToBrushConverter x:Key="HexToBrush"/>
         </ResourceDictionary>
     </Application.Resources>
 

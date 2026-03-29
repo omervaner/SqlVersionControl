@@ -14,6 +14,7 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsService _settings;
+    private readonly ConnectionRegistry _registry;
     private readonly SessionService _sessionService;
     private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
@@ -29,6 +30,8 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _settings = new SettingsService();
+        _registry = new ConnectionRegistry(_settings);
+        _registry.Load();
         _sessionService = new SessionService();
         _queryFileService = new QueryFileService();
         _viewModel = new MainWindowViewModel();
@@ -49,7 +52,7 @@ public partial class MainWindow : Window
         var compareView = this.FindControl<CompareView>("CompareViewControl");
         if (compareView != null)
         {
-            compareView.Initialize(_settings);
+            compareView.Initialize(_settings, _registry);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
             compareView.RefreshTheme();
         }
@@ -64,7 +67,7 @@ public partial class MainWindow : Window
 
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings);
+        qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings, _registry);
         if (qeHost != null)
             qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
 
@@ -149,6 +152,7 @@ public partial class MainWindow : Window
         MenuSave.Click += async (_, _) => await OnMenuSaveAsync();
         MenuSaveAs.Click += async (_, _) => await OnMenuSaveAsAsync();
         MenuChangeDb.Click += async (_, _) => await OnMenuChangeDatabaseAsync();
+        MenuManageConnections.Click += async (_, _) => await OnMenuManageConnectionsAsync();
         MenuExportGit.Click += async (_, _) => await ExportToGitAsync();
         MenuExit.Click += (_, _) => Close();
 
@@ -204,6 +208,12 @@ public partial class MainWindow : Window
     private async Task OnMenuChangeDatabaseAsync()
     {
         await ChangeConnectionAsync();
+    }
+
+    private async Task OnMenuManageConnectionsAsync()
+    {
+        var dialog = new ConnectionManagerDialog(_registry, _viewModel.DatabaseService);
+        await dialog.ShowDialog(this);
     }
 
     private AvaloniaEdit.TextEditor? GetActiveEditor()
@@ -672,7 +682,7 @@ public partial class MainWindow : Window
 
     private async Task ShowConnectionDialogAsync()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
         await dialog.ShowDialog(this);
 
         if (dialog.Result != null)
@@ -800,7 +810,7 @@ public partial class MainWindow : Window
 
     private async Task ChangeConnectionAsync()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
         await dialog.ShowDialog(this);
 
         if (dialog.Result != null)
@@ -822,7 +832,7 @@ public partial class MainWindow : Window
 
     private async Task ChangeHistoryConnectionAsync()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
         await dialog.ShowDialog(this);
 
         if (dialog.Result != null)
@@ -843,7 +853,7 @@ public partial class MainWindow : Window
 
     private async Task ChangeActivityConnectionAsync()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
         await dialog.ShowDialog(this);
 
         if (dialog.Result != null)
@@ -1217,13 +1227,18 @@ public partial class MainWindow : Window
     private void RebuildQuickSwitchButtons()
     {
         QuickSwitchPanel.Children.Clear();
-        var named = _settings.GetNamedConnections();
-        if (named.Count == 0) return;
+
+        // Use registry connections (all named ones), fall back to settings
+        var connections = _registry.Connections
+            .Where(m => !string.IsNullOrEmpty(m.Config.Name))
+            .Select(m => m.Config)
+            .ToList();
+        if (connections.Count == 0) return;
 
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         var activeProfile = host?.ActiveTabViewModel?.TabConnectionProfile;
 
-        foreach (var conn in named)
+        foreach (var conn in connections)
         {
             var isActive = activeProfile != null &&
                            activeProfile.Server == conn.Server &&
@@ -1256,33 +1271,27 @@ public partial class MainWindow : Window
 
     private async Task OnQuickSwitchClickedAsync(SavedConnection conn)
     {
-        // Build connection settings
-        var settings = new ConnectionSettings
-        {
-            Server = conn.Server,
-            Database = conn.Database,
-            UseWindowsAuth = conn.UseWindowsAuth,
-            Username = conn.Username,
-        };
+        _viewModel.StatusMessage = $"Connecting to {conn.Name}...";
 
-        // Look up stored password for SQL auth
-        if (!conn.UseWindowsAuth)
+        // Try registry for already-resolved connection string
+        var managed = _registry.GetById(conn.Id);
+        string? connStr = managed?.ResolvedConnectionString;
+
+        if (connStr == null)
         {
-            var password = PasswordStore.Get(conn.Server, conn.Database, conn.Username);
-            if (string.IsNullOrEmpty(password))
+            // Not connected via registry — try to connect
+            var (success, error) = await _registry.ConnectAsync(conn.Id);
+            if (!success)
             {
-                // No password — fall back to Connection Dialog
+                // Fall back to Connection Dialog
+                _viewModel.StatusMessage = $"Failed: {error}";
                 await ChangeConnectionAsync();
                 return;
             }
-            settings.Password = password;
+            connStr = _registry.GetConnectionString(conn.Id);
         }
 
-        // Test connection
-        var connStr = settings.ConnectionString;
-        _viewModel.StatusMessage = $"Connecting to {conn.Name}...";
-
-        if (!await _viewModel.DatabaseService.TestConnectionAsync(connStr))
+        if (connStr == null)
         {
             _viewModel.StatusMessage = $"Failed to connect to {conn.Name}";
             return;

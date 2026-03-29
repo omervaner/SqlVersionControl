@@ -13,6 +13,7 @@ namespace SqlVersionControl.ViewModels;
 public partial class CompareViewModel : ViewModelBase
 {
     private readonly SettingsService _settings;
+    private readonly ConnectionRegistry? _registry;
     private List<CompareObject> _allObjects = new();
 
     // Table structure comparison
@@ -23,6 +24,7 @@ public partial class CompareViewModel : ViewModelBase
     private CancellationTokenSource? _deployCts;
 
     // Store passwords temporarily for non-Windows auth (not persisted to disk)
+    // Legacy — kept for backward compat when registry is not available
     private readonly Dictionary<string, string> _passwords = new();
 
     // Source connection
@@ -218,9 +220,10 @@ public partial class CompareViewModel : ViewModelBase
     {
     }
 
-    public CompareViewModel(SettingsService settings)
+    public CompareViewModel(SettingsService settings, ConnectionRegistry? registry = null)
     {
         _settings = settings;
+        _registry = registry;
         LoadSavedConnections();
         // Restore dropdown selections visually (no auto-connect)
         // User will click Refresh or select to actually connect
@@ -262,7 +265,11 @@ public partial class CompareViewModel : ViewModelBase
 
     private void LoadSavedConnections()
     {
-        foreach (var conn in _settings.Settings.RecentConnections)
+        var connections = _registry != null
+            ? _registry.Connections.Select(m => m.Config).ToList()
+            : _settings.Settings.RecentConnections;
+
+        foreach (var conn in connections)
         {
             SourceConnections.Add(conn);
             TargetConnections.Add(conn);
@@ -442,11 +449,20 @@ public partial class CompareViewModel : ViewModelBase
 
     private string BuildConnectionString(SavedConnection conn)
     {
+        // Try registry first — it has already resolved connection strings
+        if (_registry != null)
+        {
+            var managed = _registry.GetById(conn.Id);
+            if (managed?.ResolvedConnectionString != null)
+                return managed.ResolvedConnectionString;
+        }
+
         var settings = new ConnectionSettings
         {
             Server = conn.Server,
             Database = conn.Database,
-            UseWindowsAuth = conn.UseWindowsAuth
+            UseWindowsAuth = conn.UseWindowsAuth,
+            TrustServerCertificate = conn.TrustServerCertificate
         };
 
         if (!conn.UseWindowsAuth)
@@ -472,6 +488,25 @@ public partial class CompareViewModel : ViewModelBase
 
         return settings.ConnectionString;
     }
+
+    private bool IsProductionConnection(SavedConnection? conn)
+    {
+        if (conn == null) return false;
+        // Use environment classification from registry if available
+        if (_registry != null)
+        {
+            var managed = _registry.GetById(conn.Id);
+            if (managed != null)
+                return managed.IsProduction;
+        }
+        // Fallback: check environment field on the connection itself
+        if (conn.Environment == "Production") return true;
+        // Legacy fallback: IP heuristic
+        return conn.Server.EndsWith(".15");
+    }
+
+    private string GetTargetDescription(SavedConnection? conn)
+        => IsProductionConnection(conn) ? "PRODUCTION" : conn?.Server ?? "target";
 
     private async Task<bool> TestConnectionAsync(string connectionString)
     {
@@ -973,12 +1008,9 @@ public partial class CompareViewModel : ViewModelBase
 
         if (string.IsNullOrEmpty(SourceCode)) return;
 
-        // Check if deploying to PROD (IP ends with .15)
-        var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
-
         if (DeployRequested != null)
         {
-            var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+            var targetDesc = GetTargetDescription(SelectedTargetConnection);
             var confirmed = await DeployRequested(SelectedObject.FullName, targetDesc);
             if (!confirmed) return;
         }
@@ -1012,12 +1044,9 @@ public partial class CompareViewModel : ViewModelBase
     {
         if (SelectedObject == null || string.IsNullOrEmpty(TargetCode)) return;
 
-        // Check if deploying to PROD (IP ends with .15)
-        var isProd = SelectedTarget2Connection?.Server.EndsWith(".15") == true;
-
         if (DeployRequested != null)
         {
-            var targetDesc = isProd ? "PRODUCTION" : SelectedTarget2Connection?.Server ?? "target2";
+            var targetDesc = IsProductionConnection(SelectedTarget2Connection) ? "PRODUCTION" : SelectedTarget2Connection?.Server ?? "target2";
             var confirmed = await DeployRequested(SelectedObject.FullName, targetDesc);
             if (!confirmed) return;
         }
@@ -1057,8 +1086,7 @@ public partial class CompareViewModel : ViewModelBase
         // Confirmation for single-table deploy
         if (showStatus)
         {
-            var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
-            var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+            var targetDesc = GetTargetDescription(SelectedTargetConnection);
 
             if (DeployRequested != null)
             {
@@ -1129,8 +1157,7 @@ public partial class CompareViewModel : ViewModelBase
         if (tableResult == null) return;
 
         // Build scoped warning message
-        var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
-        var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+        var targetDesc = GetTargetDescription(SelectedTargetConnection);
 
         if (DeployRequested != null)
         {
@@ -1419,8 +1446,7 @@ public partial class CompareViewModel : ViewModelBase
         }
 
         // Confirmation
-        var isProd = SelectedTargetConnection?.Server?.EndsWith(".15") == true;
-        var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+        var targetDesc = GetTargetDescription(SelectedTargetConnection);
 
         if (DeployRequested != null)
         {
@@ -1472,8 +1498,7 @@ public partial class CompareViewModel : ViewModelBase
         var table = DataCompareResult.TableName.Replace("]", "]]");
         var tableRef = $"[{schema}].[{table}]";
 
-        var isProd = SelectedTargetConnection?.Server?.EndsWith(".15") == true;
-        var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+        var targetDesc = GetTargetDescription(SelectedTargetConnection);
 
         if (DeployRequested != null)
         {
@@ -1643,9 +1668,7 @@ public partial class CompareViewModel : ViewModelBase
         var selectedObjects = Objects.Where(o => o.IsSelected && o.ExistsInSource).ToList();
         if (selectedObjects.Count == 0) return;
 
-        // Check if deploying to PROD
-        var isProd = SelectedTargetConnection?.Server.EndsWith(".15") == true;
-        var targetDesc = isProd ? "PRODUCTION" : SelectedTargetConnection?.Server ?? "target";
+        var targetDesc = GetTargetDescription(SelectedTargetConnection);
 
         if (DeployRequested != null)
         {

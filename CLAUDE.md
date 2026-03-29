@@ -1,7 +1,21 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.1.2 (March 29, 2026)
+## PROJECT STATUS: v2.2.0 (March 30, 2026)
+
+v2.2.0: Connection Manager + multi-connection Object Explorer.
+
+**v2.2.0 changes:**
+- ConnectionRegistry service: central management of all database connections with connect/disconnect, credential resolution via PasswordStore, connection state events
+- SavedConnection extended with Id, Environment, TrustServerCertificate, SortOrder, ConnectOnStartup (auto-migrates legacy entries)
+- Connection Manager dialog (File → Manage Connections / Cmd+Shift+M): list+edit form, color picker, environment classification, test connection, connect/disconnect
+- ConnectionDialog refactored: works with registry, "Manage Connections..." button opens manager
+- Compare tab rewired: dropdowns populate from registry, BuildConnectionString checks registry first, production detection uses Environment instead of IP heuristic
+- Multi-connection Object Explorer: root nodes are registry connections, expand to databases, all nodes carry ConnectionId for correct connection resolution
+- OE tree is global (stable across tab switches), no longer rebuilt per-tab in multi-connection mode
+- Quick-switch buttons read from registry, use resolved connection strings
+- Session restore: matches tabs to registry by ConnectionId first, falls back to server/database/username match, gracefully handles deleted connections
+- HexToBrushConverter for DataTemplate color binding
 
 v2.1.2: UX blocking states fixed — reconnect overlay dismissable, scan/deploy cancellable.
 

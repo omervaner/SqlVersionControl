@@ -107,6 +107,9 @@ public class TabState
     public bool? ConnectionUseWindowsAuth { get; set; }
     public string? ConnectionProfileName { get; set; }
     public string? ConnectionProfileColor { get; set; }
+
+    // Connection registry ID (v2.2.0) — preferred over server/database fields
+    public string? ConnectionId { get; set; }
 }
 
 public class HistoryEntry

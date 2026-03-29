@@ -13,6 +13,7 @@ namespace SqlVersionControl.Views;
 public partial class CompareView : UserControl
 {
     private SettingsService? _settings;
+    private ConnectionRegistry? _registry;
     private bool _hasAutoConnected;
 
     public CompareView()
@@ -20,10 +21,11 @@ public partial class CompareView : UserControl
         InitializeComponent();
     }
 
-    public void Initialize(SettingsService settings)
+    public void Initialize(SettingsService settings, ConnectionRegistry? registry = null)
     {
         _settings = settings;
-        DataContext = new CompareViewModel(settings);
+        _registry = registry;
+        DataContext = new CompareViewModel(settings, registry);
 
         AddSourceButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(true, false);
         AddTargetButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(false, false);

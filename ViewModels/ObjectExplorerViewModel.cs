@@ -10,6 +10,7 @@ namespace SqlVersionControl.ViewModels;
 public partial class ObjectExplorerViewModel : ObservableObject
 {
     private readonly DatabaseService _db;
+    private ConnectionRegistry? _registry;
     private Timer? _filterDebounce;
 
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _rootNodes = [];
@@ -37,6 +38,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public void RequestResetSequence(ObjectExplorerNode node) => ResetSequenceRequested?.Invoke(node);
     public void RequestStartJob(ObjectExplorerNode node) => StartJobRequested?.Invoke(node);
 
+    // Legacy: per-tab active connection (used when registry is not available)
     private string? _activeConnectionString;
 
     public void SetActiveConnection(string? connectionString)
@@ -44,10 +46,126 @@ public partial class ObjectExplorerViewModel : ObservableObject
         _activeConnectionString = connectionString;
     }
 
+    public void SetRegistry(ConnectionRegistry registry)
+    {
+        _registry = registry;
+
+        // Subscribe to connection state changes
+        registry.ConnectionStateChanged += OnConnectionStateChanged;
+        registry.ConnectionAdded += OnConnectionAdded;
+        registry.ConnectionRemoved += OnConnectionRemoved;
+    }
+
     public ObjectExplorerViewModel(DatabaseService db)
     {
         _db = db;
     }
+
+    // ── Multi-connection: registry-driven root nodes ─────────────────
+
+    /// <summary>
+    /// Populate OE root with connection nodes from the registry.
+    /// Each active connection becomes a root node that expands to show databases.
+    /// </summary>
+    public void LoadFromRegistry()
+    {
+        if (_registry == null) return;
+
+        RootNodes.Clear();
+        foreach (var managed in _registry.Connections)
+        {
+            var node = CreateConnectionNode(managed);
+            RootNodes.Add(node);
+        }
+    }
+
+    private ObjectExplorerNode CreateConnectionNode(ManagedConnection managed)
+    {
+        var displayName = managed.Config.Name ?? managed.Config.Server;
+        var serverSuffix = managed.Config.Name != null ? $" ({managed.Config.Server})" : "";
+
+        var node = WireNode(new ObjectExplorerNode
+        {
+            Name = $"{displayName}{serverSuffix}",
+            NodeType = ObjectExplorerNodeType.Connection,
+            ConnectionId = managed.Id,
+            ConnectionColor = managed.Color ?? "#88a1bb",
+            Environment = managed.Environment,
+            Children = managed.IsConnected
+                ? [ObjectExplorerNode.CreateDummy()]
+                : []
+        });
+
+        if (!managed.IsConnected)
+        {
+            // Placeholder child for "Click to connect"
+            node.Children.Add(new ObjectExplorerNode
+            {
+                Name = "Click to connect",
+                NodeType = ObjectExplorerNodeType.Folder,
+                ConnectionId = managed.Id,
+            });
+        }
+
+        return node;
+    }
+
+    private void OnConnectionStateChanged(ManagedConnection managed)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var existing = RootNodes.FirstOrDefault(n => n.ConnectionId == managed.Id);
+            if (existing != null)
+            {
+                var idx = RootNodes.IndexOf(existing);
+                var newNode = CreateConnectionNode(managed);
+
+                // Preserve expanded state if reconnecting
+                if (managed.IsConnected && existing.Children.Count > 0 &&
+                    existing.Children[0].Name != "Click to connect")
+                {
+                    // Keep the existing expanded tree
+                    return;
+                }
+
+                RootNodes[idx] = newNode;
+            }
+        });
+    }
+
+    private void OnConnectionAdded(ManagedConnection managed)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (RootNodes.Any(n => n.ConnectionId == managed.Id)) return;
+            RootNodes.Add(CreateConnectionNode(managed));
+        });
+    }
+
+    private void OnConnectionRemoved(ManagedConnection managed)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var node = RootNodes.FirstOrDefault(n => n.ConnectionId == managed.Id);
+            if (node != null)
+                RootNodes.Remove(node);
+        });
+    }
+
+    // ── Connection string resolution ─────────────────────────────────
+
+    /// <summary>
+    /// Resolve a connection string for a node. Uses ConnectionId (registry) if available,
+    /// falls back to _activeConnectionString (legacy per-tab mode).
+    /// </summary>
+    private string? ResolveConnectionString(ObjectExplorerNode node)
+    {
+        if (node.ConnectionId != null && _registry != null)
+            return _registry.GetConnectionString(node.ConnectionId);
+        return _activeConnectionString;
+    }
+
+    // ── Filter ───────────────────────────────────────────────────────
 
     partial void OnFilterTextChanged(string value)
     {
@@ -95,6 +213,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     child.IsVisibleInFilter = true;
                 return matches;
 
+            case ObjectExplorerNodeType.Connection:
             case ObjectExplorerNodeType.Database:
             case ObjectExplorerNodeType.Folder:
                 // Containers: visible if any child matches
@@ -119,6 +238,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
         FilterText = "";
     }
 
+    // ── Legacy: single-connection database loading ───────────────────
+
     public async Task LoadDatabasesAsync(IEnumerable<string> databases)
     {
         RootNodes.Clear();
@@ -136,10 +257,21 @@ public partial class ObjectExplorerViewModel : ObservableObject
         }
     }
 
+    // ── Node wiring & expand ─────────────────────────────────────────
+
     private ObjectExplorerNode WireNode(ObjectExplorerNode node)
     {
         node.ExpandRequested += n => _ = OnNodeExpandedAsync(n);
         return node;
+    }
+
+    /// <summary>
+    /// Propagate ConnectionId to a child node from its parent.
+    /// </summary>
+    private ObjectExplorerNode WireChild(ObjectExplorerNode child, ObjectExplorerNode parent)
+    {
+        child.ConnectionId = parent.ConnectionId;
+        return WireNode(child);
     }
 
     public async Task OnNodeExpandedAsync(ObjectExplorerNode node)
@@ -153,6 +285,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
         {
             switch (node.NodeType)
             {
+                case ObjectExplorerNodeType.Connection:
+                    await LoadConnectionChildrenAsync(node);
+                    break;
                 case ObjectExplorerNodeType.Database:
                     await LoadDatabaseChildrenAsync(node);
                     break;
@@ -169,7 +304,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
             node.Children.Add(new ObjectExplorerNode
             {
                 Name = $"Error: {ex.Message}",
-                NodeType = ObjectExplorerNodeType.Folder
+                NodeType = ObjectExplorerNodeType.Folder,
+                ConnectionId = node.ConnectionId
             });
         }
         finally
@@ -194,6 +330,47 @@ public partial class ObjectExplorerViewModel : ObservableObject
         node.IsExpanded = true;
     }
 
+    // ── Connection node expand → databases ───────────────────────────
+
+    private async Task LoadConnectionChildrenAsync(ObjectExplorerNode connNode)
+    {
+        var connStr = ResolveConnectionString(connNode);
+        if (connStr == null)
+        {
+            connNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = "(not connected)",
+                NodeType = ObjectExplorerNodeType.Folder,
+                ConnectionId = connNode.ConnectionId
+            });
+            return;
+        }
+
+        var databases = await _db.GetDatabasesAsync(connStr);
+        foreach (var dbName in databases)
+        {
+            connNode.Children.Add(WireChild(new ObjectExplorerNode
+            {
+                Name = dbName,
+                DatabaseName = dbName,
+                NodeType = ObjectExplorerNodeType.Database,
+                Children = [ObjectExplorerNode.CreateDummy()]
+            }, connNode));
+        }
+
+        if (connNode.Children.Count == 0)
+        {
+            connNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = "(no databases)",
+                NodeType = ObjectExplorerNodeType.Folder,
+                ConnectionId = connNode.ConnectionId
+            });
+        }
+    }
+
+    // ── Database node expand → folders ───────────────────────────────
+
     private Task LoadDatabaseChildrenAsync(ObjectExplorerNode dbNode)
     {
         var folders = new[]
@@ -208,87 +385,94 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
         foreach (var (name, type) in folders)
         {
-            dbNode.Children.Add(WireNode(new ObjectExplorerNode
+            dbNode.Children.Add(WireChild(new ObjectExplorerNode
             {
                 Name = name,
                 DatabaseName = dbNode.DatabaseName,
                 NodeType = type,
                 IsCategoryFolder = true,
                 Children = [ObjectExplorerNode.CreateDummy()]
-            }));
+            }, dbNode));
         }
 
         return Task.CompletedTask;
     }
 
+    // ── Folder node expand → objects ─────────────────────────────────
+
     private async Task LoadFolderChildrenAsync(ObjectExplorerNode folderNode)
     {
         var db = folderNode.DatabaseName;
+        var connStr = ResolveConnectionString(folderNode);
 
         switch (folderNode.Name)
         {
             case "Tables":
-                var tables = _activeConnectionString != null
-                    ? await _db.GetTablesAsync(_activeConnectionString, db)
+                var tables = connStr != null
+                    ? await _db.GetTablesAsync(connStr, db)
                     : await _db.GetTablesAsync(db);
-                var tableNodes = tables.Select(t => WireNode(new ObjectExplorerNode
+                var tableNodes = tables.Select(t => WireChild(new ObjectExplorerNode
                 {
                     Name = t.Name, Schema = t.Schema, DatabaseName = db,
                     NodeType = ObjectExplorerNodeType.Table,
                     Children = [ObjectExplorerNode.CreateDummy()]
-                }));
+                }, folderNode));
                 await AddChildrenInBatchesAsync(folderNode, tableNodes);
                 break;
 
             case "Views":
-                var views = _activeConnectionString != null
-                    ? await _db.GetViewsAsync(_activeConnectionString, db)
+                var views = connStr != null
+                    ? await _db.GetViewsAsync(connStr, db)
                     : await _db.GetViewsAsync(db);
                 var viewNodes = views.Select(v => new ObjectExplorerNode
                 {
                     Name = v.Name, Schema = v.Schema, DatabaseName = db,
-                    NodeType = ObjectExplorerNodeType.View
+                    NodeType = ObjectExplorerNodeType.View,
+                    ConnectionId = folderNode.ConnectionId
                 });
                 await AddChildrenInBatchesAsync(folderNode, viewNodes);
                 break;
 
             case "Stored Procedures":
-                var procsAndFuncs = _activeConnectionString != null
-                    ? await _db.GetProcsAndFunctionsAsync(_activeConnectionString, db)
+                var procsAndFuncs = connStr != null
+                    ? await _db.GetProcsAndFunctionsAsync(connStr, db)
                     : await _db.GetProcsAndFunctionsAsync(db);
                 var procNodes = procsAndFuncs
                     .Where(x => x.Type == "SQL_STORED_PROCEDURE")
                     .Select(p => new ObjectExplorerNode
                     {
                         Name = p.Name, Schema = p.Schema, DatabaseName = db,
-                        NodeType = ObjectExplorerNodeType.Proc
+                        NodeType = ObjectExplorerNodeType.Proc,
+                        ConnectionId = folderNode.ConnectionId
                     });
                 await AddChildrenInBatchesAsync(folderNode, procNodes);
                 break;
 
             case "Functions":
-                var funcs = _activeConnectionString != null
-                    ? await _db.GetProcsAndFunctionsAsync(_activeConnectionString, db)
+                var funcs = connStr != null
+                    ? await _db.GetProcsAndFunctionsAsync(connStr, db)
                     : await _db.GetProcsAndFunctionsAsync(db);
                 var funcNodes = funcs
                     .Where(x => x.Type != "SQL_STORED_PROCEDURE")
                     .Select(f => new ObjectExplorerNode
                     {
                         Name = f.Name, Schema = f.Schema, DatabaseName = db,
-                        NodeType = ObjectExplorerNodeType.Function
+                        NodeType = ObjectExplorerNodeType.Function,
+                        ConnectionId = folderNode.ConnectionId
                     });
                 await AddChildrenInBatchesAsync(folderNode, funcNodes);
                 break;
 
             case "Sequences":
-                var sequences = _activeConnectionString != null
-                    ? await _db.GetSequencesAsync(_activeConnectionString, db)
+                var sequences = connStr != null
+                    ? await _db.GetSequencesAsync(connStr, db)
                     : await _db.GetSequencesAsync(db);
                 var seqNodes = sequences.Select(seq => new ObjectExplorerNode
                 {
                     Name = seq.Name, Schema = seq.Schema, DatabaseName = db,
                     NodeType = ObjectExplorerNodeType.Sequence,
-                    TypeInfo = $"{seq.DataType}, Current: {seq.CurrentValue}"
+                    TypeInfo = $"{seq.DataType}, Current: {seq.CurrentValue}",
+                    ConnectionId = folderNode.ConnectionId
                 });
                 await AddChildrenInBatchesAsync(folderNode, seqNodes);
                 break;
@@ -304,8 +488,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
             case "Jobs":
                 try
                 {
-                    var jobs = _activeConnectionString != null
-                        ? await _db.GetJobsAsync(_activeConnectionString)
+                    var jobs = connStr != null
+                        ? await _db.GetJobsAsync(connStr)
                         : await _db.GetJobsAsync();
                     var jobNodes = jobs.Select(j => new ObjectExplorerNode
                     {
@@ -313,7 +497,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
                         NodeType = ObjectExplorerNodeType.Job,
                         TypeInfo = j.Enabled
                             ? $"Enabled, Last: {j.LastOutcome}"
-                            : "Disabled"
+                            : "Disabled",
+                        ConnectionId = folderNode.ConnectionId
                     });
                     await AddChildrenInBatchesAsync(folderNode, jobNodes);
                 }
@@ -323,7 +508,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     folderNode.Children.Add(new ObjectExplorerNode
                     {
                         Name = $"(Error: {ex.Message})",
-                        NodeType = ObjectExplorerNodeType.Folder
+                        NodeType = ObjectExplorerNodeType.Folder,
+                        ConnectionId = folderNode.ConnectionId
                     });
                 }
                 break;
@@ -334,7 +520,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
             folderNode.Children.Add(new ObjectExplorerNode
             {
                 Name = "(empty)",
-                NodeType = ObjectExplorerNodeType.Folder
+                NodeType = ObjectExplorerNodeType.Folder,
+                ConnectionId = folderNode.ConnectionId
             });
         }
         else
@@ -377,10 +564,12 @@ public partial class ObjectExplorerViewModel : ObservableObject
         }
     }
 
+    // ── Table expand → Columns + Triggers folders ────────────────────
+
     private Task LoadTableChildrenAsync(ObjectExplorerNode tableNode)
     {
         // Columns folder
-        var columnsFolder = WireNode(new ObjectExplorerNode
+        var columnsFolder = WireChild(new ObjectExplorerNode
         {
             Name = "Columns",
             DatabaseName = tableNode.DatabaseName,
@@ -388,11 +577,11 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ParentTableName = tableNode.Name,
             NodeType = ObjectExplorerNodeType.Folder,
             Children = [ObjectExplorerNode.CreateDummy()]
-        });
+        }, tableNode);
         tableNode.Children.Add(columnsFolder);
 
         // Triggers folder
-        var triggersFolder = WireNode(new ObjectExplorerNode
+        var triggersFolder = WireChild(new ObjectExplorerNode
         {
             Name = "Triggers",
             DatabaseName = tableNode.DatabaseName,
@@ -400,7 +589,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ParentTableName = tableNode.Name,
             NodeType = ObjectExplorerNodeType.Folder,
             Children = [ObjectExplorerNode.CreateDummy()]
-        });
+        }, tableNode);
         tableNode.Children.Add(triggersFolder);
 
         return Task.CompletedTask;
@@ -411,9 +600,10 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var db = folderNode.DatabaseName;
         var schema = folderNode.Schema;
         var tableName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
 
-        var columns = _activeConnectionString != null
-            ? await _db.GetColumnsAsync(_activeConnectionString, db, schema, tableName)
+        var columns = connStr != null
+            ? await _db.GetColumnsAsync(connStr, db, schema, tableName)
             : await _db.GetColumnsAsync(db, schema, tableName);
 
         foreach (var (name, typeName, maxLength, isNullable, isPk) in columns)
@@ -429,7 +619,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 TypeInfo = typeInfo,
                 IsPrimaryKey = isPk,
                 IsNullable = isNullable,
-                ParentTableName = tableName
+                ParentTableName = tableName,
+                ConnectionId = folderNode.ConnectionId
             });
         }
     }
@@ -439,9 +630,10 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var db = folderNode.DatabaseName;
         var schema = folderNode.Schema;
         var tableName = folderNode.ParentTableName;
+        var connStr = ResolveConnectionString(folderNode);
 
-        var triggers = _activeConnectionString != null
-            ? await _db.GetTriggersAsync(_activeConnectionString, db)
+        var triggers = connStr != null
+            ? await _db.GetTriggersAsync(connStr, db)
             : await _db.GetTriggersAsync(db);
 
         var tableTrigs = triggers.Where(t =>
@@ -455,7 +647,8 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 Name = t.Name, Schema = t.Schema, DatabaseName = db,
                 ParentTableName = t.ParentTable,
                 NodeType = ObjectExplorerNodeType.Trigger,
-                TypeInfo = t.IsEnabled ? "" : "Disabled"
+                TypeInfo = t.IsEnabled ? "" : "Disabled",
+                ConnectionId = folderNode.ConnectionId
             });
         }
     }
@@ -482,8 +675,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task ViewDefinitionAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var definition = _activeConnectionString != null
-            ? await _db.GetObjectDefinitionAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var definition = connStr != null
+            ? await _db.GetObjectDefinitionAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetObjectDefinitionAsync(node.DatabaseName, schema, node.Name);
         if (definition != null)
             InsertTextRequested?.Invoke(definition, false);
@@ -499,8 +693,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task ScriptAsAlterAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var definition = _activeConnectionString != null
-            ? await _db.GetObjectDefinitionAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var definition = connStr != null
+            ? await _db.GetObjectDefinitionAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetObjectDefinitionAsync(node.DatabaseName, schema, node.Name);
         if (definition == null) return;
 
@@ -543,8 +738,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task ScriptAsInsertAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var columns = _activeConnectionString != null
-            ? await _db.GetColumnsAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var columns = connStr != null
+            ? await _db.GetColumnsAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetColumnsAsync(node.DatabaseName, schema, node.Name);
 
         if (columns.Count == 0) return;
@@ -567,8 +763,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task ScriptTableAsCreateAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var columns = _activeConnectionString != null
-            ? await _db.GetColumnsAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var columns = connStr != null
+            ? await _db.GetColumnsAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetColumnsAsync(node.DatabaseName, schema, node.Name);
 
         if (columns.Count == 0) return;
@@ -604,8 +801,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public async Task GenerateExecAsync(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
-        var parameters = _activeConnectionString != null
-            ? await _db.GetProcParametersAsync(_activeConnectionString, node.DatabaseName, schema, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var parameters = connStr != null
+            ? await _db.GetProcParametersAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetProcParametersAsync(node.DatabaseName, schema, node.Name);
 
         var sql = $"EXEC [{schema}].[{node.Name}]";
@@ -649,8 +847,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     public async Task ViewJobStepsAsync(ObjectExplorerNode node)
     {
-        var steps = _activeConnectionString != null
-            ? await _db.GetJobStepsAsync(_activeConnectionString, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var steps = connStr != null
+            ? await _db.GetJobStepsAsync(connStr, node.Name)
             : await _db.GetJobStepsAsync(node.Name);
 
         var sb = new System.Text.StringBuilder();
@@ -670,8 +869,9 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     public async Task ViewJobHistoryAsync(ObjectExplorerNode node)
     {
-        var history = _activeConnectionString != null
-            ? await _db.GetJobHistoryAsync(_activeConnectionString, node.Name)
+        var connStr = ResolveConnectionString(node);
+        var history = connStr != null
+            ? await _db.GetJobHistoryAsync(connStr, node.Name)
             : await _db.GetJobHistoryAsync(node.Name);
 
         var sb = new System.Text.StringBuilder();

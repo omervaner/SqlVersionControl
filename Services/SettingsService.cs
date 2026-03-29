@@ -218,12 +218,17 @@ public class AppSettings
 
 public class SavedConnection
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Server { get; set; } = "";
     public string Database { get; set; } = "";
     public string Username { get; set; } = "";
     public bool UseWindowsAuth { get; set; }
     public string? Name { get; set; }
     public string? Color { get; set; }
+    public string Environment { get; set; } = "Unknown";
+    public bool TrustServerCertificate { get; set; } = true;
+    public int SortOrder { get; set; }
+    public bool ConnectOnStartup { get; set; }
     public string DisplayName => Name != null
         ? $"{Name} ({Server}) / {Database} ({(UseWindowsAuth ? "Windows" : Username)})"
         : $"{Server} / {Database} ({(UseWindowsAuth ? "Windows" : Username)})";

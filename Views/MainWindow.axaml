@@ -31,6 +31,7 @@
                             <MenuItem x:Name="MenuSaveAs" Header="Save As..." InputGesture="Ctrl+Shift+S"/>
                             <Separator/>
                             <MenuItem x:Name="MenuChangeDb" Header="Change Connection..."/>
+                            <MenuItem x:Name="MenuManageConnections" Header="Manage Connections..." InputGesture="Ctrl+Shift+M"/>
                             <Separator/>
                             <MenuItem x:Name="MenuExportGit" Header="Export to Git..."/>
                             <Separator/>

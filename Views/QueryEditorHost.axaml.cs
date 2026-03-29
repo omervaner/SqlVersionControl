@@ -15,6 +15,7 @@ public partial class QueryEditorHost : UserControl
 {
     private QueryEditorHostViewModel? _viewModel;
     private DatabaseService? _db;
+    private ConnectionRegistry? _registry;
     private SessionService? _sessionService;
     private readonly List<QueryTabView> _tabs = [];
     private int _activeTabIndex = -1;
@@ -62,12 +63,14 @@ public partial class QueryEditorHost : UserControl
         RebuildTabStrip();
     }
 
-    public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService, SettingsService settings)
+    public void Initialize(DatabaseService db, MainWindowViewModel mainVm, SessionService sessionService, SettingsService settings,
+        ConnectionRegistry? registry = null)
     {
         _db = db;
+        _registry = registry;
         _sessionService = sessionService;
         _settings = settings;
-        _viewModel = new QueryEditorHostViewModel(db);
+        _viewModel = new QueryEditorHostViewModel(db, registry);
         DataContext = _viewModel;
 
         // Wire Object Explorer events → active tab
@@ -375,8 +378,10 @@ public partial class QueryEditorHost : UserControl
 
         var changed = _activeTabIndex != index;
 
-        // Cache outgoing tab's OE tree before switching
-        if (changed && _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count && _viewModel != null)
+        var isMultiConnection = _registry != null && _registry.ActiveConnections.Any();
+
+        // Cache outgoing tab's OE tree before switching (legacy single-connection mode only)
+        if (!isMultiConnection && changed && _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count && _viewModel != null)
         {
             var outgoingVm = _tabs[_activeTabIndex].DataContext as QueryTabViewModel;
             var outgoingConn = outgoingVm?.TabConnectionString;
@@ -400,7 +405,17 @@ public partial class QueryEditorHost : UserControl
             var activeVm = _tabs[index].DataContext as QueryTabViewModel;
             if (activeVm != null)
             {
-                UpdateObjectExplorerForTab(activeVm);
+                if (isMultiConnection)
+                {
+                    // Multi-connection: OE tree is global, just update active connection for highlighting
+                    _viewModel?.ObjectExplorer.SetActiveConnection(activeVm.TabConnectionString);
+                }
+                else
+                {
+                    // Legacy: rebuild OE tree per-tab connection
+                    UpdateObjectExplorerForTab(activeVm);
+                }
+
                 // Push cached intellisense service to the tab
                 if (activeVm.SelectedDatabase != null)
                     OnTabDatabaseChanged(activeVm);
@@ -747,6 +762,8 @@ public partial class QueryEditorHost : UserControl
 
     /// <summary>
     /// Reload databases into Object Explorer and all tabs.
+    /// In multi-connection mode, populates OE from registry connections.
+    /// In single-connection mode, loads databases as root nodes (legacy).
     /// </summary>
     public async Task ReloadDatabasesAsync()
     {
@@ -754,6 +771,21 @@ public partial class QueryEditorHost : UserControl
 
         try
         {
+            // Multi-connection mode: populate from registry
+            if (_registry != null && _registry.ActiveConnections.Any())
+            {
+                _viewModel.ObjectExplorer.LoadFromRegistry();
+
+                // Update tabs with databases from their connection
+                foreach (var tab in _tabs)
+                {
+                    if (tab.DataContext is QueryTabViewModel vm && vm.TabConnectionString != null)
+                        _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                }
+                return;
+            }
+
+            // Legacy single-connection mode
             var dbs = await _db.GetDatabasesAsync();
             _cachedDatabases = new List<string>(dbs);
 
@@ -952,6 +984,8 @@ public partial class QueryEditorHost : UserControl
                 ConnectionUseWindowsAuth = vm.TabConnectionProfile?.UseWindowsAuth,
                 ConnectionProfileName = vm.TabConnectionProfile?.Name,
                 ConnectionProfileColor = vm.TabConnectionProfile?.Color,
+                // Registry connection ID (v2.2.0)
+                ConnectionId = vm.TabConnectionProfile?.Id,
             });
         }
 
@@ -994,8 +1028,43 @@ public partial class QueryEditorHost : UserControl
                         vm.TabTitle = tabState.QueryName;
                 }
 
-                // Restore per-tab connection (v1.6.0)
-                if (tabState.ConnectionServer != null)
+                // Restore per-tab connection — try registry first, fall back to legacy
+                var restored = false;
+                if (_registry != null && tabState.ConnectionId != null)
+                {
+                    var managed = _registry.GetById(tabState.ConnectionId);
+                    if (managed != null)
+                    {
+                        vm.TabConnectionProfile = managed.Config;
+                        if (managed.ResolvedConnectionString != null)
+                        {
+                            vm.TabConnectionString = managed.ResolvedConnectionString;
+                            _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                        }
+                        restored = true;
+                    }
+                    else if (tabState.ConnectionServer != null)
+                    {
+                        // ConnectionId not found — try matching by server/database/username
+                        var match = _registry.FindByServerAndDatabase(
+                            tabState.ConnectionServer,
+                            tabState.ConnectionDatabase ?? "",
+                            tabState.ConnectionUsername);
+                        if (match != null)
+                        {
+                            vm.TabConnectionProfile = match.Config;
+                            if (match.ResolvedConnectionString != null)
+                            {
+                                vm.TabConnectionString = match.ResolvedConnectionString;
+                                _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                            }
+                            restored = true;
+                        }
+                    }
+                }
+
+                // Legacy fallback: build connection string from saved fields
+                if (!restored && tabState.ConnectionServer != null)
                 {
                     var profile = new SavedConnection
                     {

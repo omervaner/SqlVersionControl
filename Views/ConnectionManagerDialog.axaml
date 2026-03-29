@@ -1,0 +1,163 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SqlVersionControl.ViewModels"
+        x:Class="SqlVersionControl.Views.ConnectionManagerDialog"
+        x:DataType="vm:ConnectionManagerViewModel"
+        Title="Manage Connections"
+        Width="700" Height="520"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        MinWidth="600" MinHeight="400">
+
+    <Grid ColumnDefinitions="240,*" Margin="0">
+        <!-- Left panel: connection list -->
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBackground}"
+                BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Search -->
+                <TextBox Grid.Row="0" Text="{Binding SearchText}" Watermark="Filter..."
+                         Margin="8" Padding="6,4" FontSize="12"/>
+
+                <!-- Connection list -->
+                <ListBox Grid.Row="1" x:Name="ConnectionList"
+                         ItemsSource="{Binding Connections}"
+                         SelectedItem="{Binding SelectedConnection}"
+                         Background="Transparent"
+                         Padding="4,0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,6">
+                                <!-- Color dot -->
+                                <Ellipse Grid.Column="0" Width="10" Height="10"
+                                         VerticalAlignment="Center" Margin="0,0,8,0"
+                                         Fill="{Binding Color, Converter={StaticResource HexToBrush}}"/>
+
+                                <!-- Name + server/db -->
+                                <StackPanel Grid.Column="1" Spacing="1">
+                                    <TextBlock Text="{Binding Config.Name, FallbackValue='Unnamed'}"
+                                               FontWeight="SemiBold" FontSize="12"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                    <TextBlock FontSize="10"
+                                               Foreground="{DynamicResource TextSecondary}">
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="{}{0} / {1}">
+                                                <Binding Path="Config.Server"/>
+                                                <Binding Path="Config.Database"/>
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <!-- Connected indicator -->
+                                <Ellipse Grid.Column="2" Width="6" Height="6"
+                                         Fill="#4caf50" VerticalAlignment="Center"
+                                         IsVisible="{Binding IsConnected}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Add / Delete buttons -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4" Margin="8">
+                    <Button Content="+ Add" Command="{Binding AddNewCommand}"
+                            Classes="btn-secondary" Padding="8,4" FontSize="11"/>
+                    <Button Content="Delete" Command="{Binding DeleteCommand}"
+                            Classes="btn-danger" Padding="8,4" FontSize="11"
+                            IsEnabled="{Binding SelectedConnection, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Right panel: edit form -->
+        <ScrollViewer Grid.Column="1" Padding="20,16">
+            <StackPanel IsVisible="{Binding IsEditing}">
+                <!-- Connection Name -->
+                <TextBlock Text="Connection Name" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <TextBox Text="{Binding EditName}" Watermark="e.g., PROD WMS, DEV Docker"
+                         Padding="6,4" FontSize="12"/>
+
+                <!-- Server -->
+                <TextBlock Text="Server" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <TextBox Text="{Binding EditServer}" Watermark="e.g., 10.0.0.15 or server\instance"
+                         Padding="6,4" FontSize="12"/>
+
+                <!-- Database -->
+                <TextBlock Text="Database" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <TextBox Text="{Binding EditDatabase}" Watermark="e.g., GratisWMS"
+                         Padding="6,4" FontSize="12"/>
+
+                <!-- Auth -->
+                <CheckBox Content="Use Windows Authentication" IsChecked="{Binding EditUseWindowsAuth}"
+                          Margin="0,12,0,0" FontSize="12"/>
+
+                <!-- Username (SQL auth) -->
+                <StackPanel IsVisible="{Binding !EditUseWindowsAuth}" Margin="0,8,0,0">
+                    <TextBlock Text="Username" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                    <TextBox Text="{Binding EditUsername}" Padding="6,4" FontSize="12"/>
+
+                    <TextBlock Text="Password" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                    <TextBox Text="{Binding EditPassword}" PasswordChar="●"
+                             Padding="6,4" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Environment -->
+                <TextBlock Text="Environment" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <ComboBox ItemsSource="{x:Static vm:ConnectionManagerViewModel.Environments}"
+                          SelectedItem="{Binding EditEnvironment}"
+                          HorizontalAlignment="Stretch" FontSize="12" Padding="6,4"/>
+
+                <!-- Trust Server Certificate -->
+                <CheckBox Content="Trust Server Certificate" IsChecked="{Binding EditTrustServerCertificate}"
+                          Margin="0,12,0,0" FontSize="12"/>
+
+                <!-- Connect On Startup -->
+                <CheckBox Content="Connect on startup" IsChecked="{Binding EditConnectOnStartup}"
+                          Margin="0,8,0,0" FontSize="12"/>
+
+                <!-- Color -->
+                <TextBlock Text="Color" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <StackPanel x:Name="ColorPicker" Orientation="Horizontal" Spacing="8"/>
+
+                <!-- Test / Status -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,16,0,0">
+                    <Button Content="Test Connection"
+                            Command="{Binding TestConnectionCommand}"
+                            IsEnabled="{Binding !IsTesting}"
+                            Classes="btn-secondary" Padding="10,5" FontSize="11"/>
+                    <Button Content="Connect" Command="{Binding ConnectCommand}"
+                            IsVisible="{Binding SelectedConnection, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            Classes="btn-primary" Padding="10,5" FontSize="11"/>
+                    <Button Content="Disconnect" Command="{Binding DisconnectCommand}"
+                            IsVisible="{Binding SelectedConnection.IsConnected}"
+                            Classes="btn-danger" Padding="10,5" FontSize="11"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding TestResult}" Margin="0,6,0,0" FontSize="11"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding TestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                <!-- Save / Cancel -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,20,0,0"
+                            HorizontalAlignment="Right">
+                    <Button Content="Cancel" Command="{Binding CancelEditCommand}"
+                            Classes="btn-secondary" Padding="14,6" FontSize="12"/>
+                    <Button Content="Save" Command="{Binding SaveCommand}"
+                            Classes="btn-primary" Padding="14,6" FontSize="12"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Empty state when not editing -->
+        <TextBlock Grid.Column="1" Text="Select a connection or click + Add"
+                   Foreground="{DynamicResource TextSecondary}" FontSize="12"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   IsVisible="{Binding !IsEditing}"/>
+    </Grid>
+</Window>

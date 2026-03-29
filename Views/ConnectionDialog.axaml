@@ -81,6 +81,13 @@
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
                     Padding="16,8" Margin="0,20,0,0"/>
+
+            <Button Content="Manage Connections..."
+                    Command="{Binding OpenManageConnectionsCommand}"
+                    Classes="btn-secondary"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    Padding="16,6" Margin="0,8,0,0" FontSize="11"/>
         </StackPanel>
     </StackPanel>
 </Window>

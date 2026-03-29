@@ -10,6 +10,7 @@ public partial class ConnectionViewModel : ViewModelBase
 {
     private readonly DatabaseService _db;
     private readonly SettingsService _settings;
+    private readonly ConnectionRegistry? _registry;
     private readonly Action<ConnectionSettings> _onConnected;
 
     [ObservableProperty]
@@ -65,16 +66,27 @@ public partial class ConnectionViewModel : ViewModelBase
     /// <summary>The SavedConnection resulting from the last successful connect (includes Name/Color).</summary>
     public SavedConnection? ResultConnection { get; private set; }
 
-    public ConnectionViewModel(DatabaseService db, SettingsService settings, Action<ConnectionSettings> onConnected)
+    /// <summary>Event to request opening the Connection Manager dialog.</summary>
+    public event Action? ManageConnectionsRequested;
+
+    public ConnectionViewModel(DatabaseService db, SettingsService settings, Action<ConnectionSettings> onConnected,
+        ConnectionRegistry? registry = null)
     {
         _db = db;
         _settings = settings;
         _onConnected = onConnected;
+        _registry = registry;
 
-        // Load recent connections
-        foreach (var conn in _settings.Settings.RecentConnections)
+        // Load connections from registry (preferred) or settings
+        if (_registry != null)
         {
-            RecentConnections.Add(conn);
+            foreach (var managed in _registry.Connections)
+                RecentConnections.Add(managed.Config);
+        }
+        else
+        {
+            foreach (var conn in _settings.Settings.RecentConnections)
+                RecentConnections.Add(conn);
         }
 
         // If there are recent connections, default to that mode and select the first one
@@ -106,6 +118,12 @@ public partial class ConnectionViewModel : ViewModelBase
         OnPropertyChanged(nameof(NeedsPassword));
         // Clear password when switching modes
         Password = "";
+    }
+
+    [RelayCommand]
+    private void OpenManageConnections()
+    {
+        ManageConnectionsRequested?.Invoke();
     }
 
     [RelayCommand]
@@ -170,17 +188,53 @@ public partial class ConnectionViewModel : ViewModelBase
                 PasswordStore.Save();
             }
 
-            // Save to recent connections (moves to top if already exists)
-            var saved = new SavedConnection
+            SavedConnection saved;
+            if (UseRecentConnection && SelectedConnection != null)
             {
-                Server = settings.Server,
-                Database = settings.Database,
-                Username = settings.Username,
-                UseWindowsAuth = settings.UseWindowsAuth,
-                Name = string.IsNullOrWhiteSpace(ConnectionName) ? null : ConnectionName.Trim(),
-                Color = ConnectionColor
-            };
-            _settings.AddRecentConnection(saved);
+                // Use existing connection (preserves Id, Environment, etc.)
+                saved = SelectedConnection;
+                // Update Name/Color if user changed them
+                saved.Name = string.IsNullOrWhiteSpace(ConnectionName) ? saved.Name : ConnectionName.Trim();
+                saved.Color = ConnectionColor;
+            }
+            else
+            {
+                // New connection
+                saved = new SavedConnection
+                {
+                    Server = settings.Server,
+                    Database = settings.Database,
+                    Username = settings.Username,
+                    UseWindowsAuth = settings.UseWindowsAuth,
+                    Name = string.IsNullOrWhiteSpace(ConnectionName) ? null : ConnectionName.Trim(),
+                    Color = ConnectionColor
+                };
+            }
+
+            // Register with registry if available
+            if (_registry != null)
+            {
+                var existing = _registry.GetById(saved.Id);
+                if (existing != null)
+                {
+                    _registry.Update(saved.Id, saved);
+                    existing.ResolvedConnectionString = settings.ConnectionString;
+                    existing.IsConnected = true;
+                    existing.ConnectedAt = DateTime.Now;
+                }
+                else
+                {
+                    var managed = _registry.Add(saved);
+                    managed.ResolvedConnectionString = settings.ConnectionString;
+                    managed.IsConnected = true;
+                    managed.ConnectedAt = DateTime.Now;
+                }
+            }
+            else
+            {
+                _settings.AddRecentConnection(saved);
+            }
+
             ResultConnection = saved;
             _onConnected(settings);
         }
