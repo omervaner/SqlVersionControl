@@ -65,11 +65,20 @@ public partial class MainWindow : Window
         var activityView = this.FindControl<ActivityView>("ActivityViewControl");
         activityView?.Initialize(_viewModel.DatabaseService);
 
+        // Initialize TraceView with registry
+        var traceView = this.FindControl<TraceView>("TraceViewControl");
+        traceView?.Initialize(_registry);
+
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings, _registry);
         if (qeHost != null)
             qeHost.ActiveTabChanged += () => { UpdateStatusBar(); };
+            qeHost.CaretPositionChanged += (line, col) =>
+            {
+                CursorPositionText.Text = $"Ln {line}, Col {col}";
+                CursorPositionText.IsVisible = QueryEditorTab.IsChecked == true;
+            };
 
         // Enable window dragging from title bar area (empty space not consumed by menus/buttons)
         TitleBarBorder.PointerPressed += (s, e) =>
@@ -472,6 +481,26 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Cmd+= / Cmd+- — font zoom
+        if (ctrl && (e.Key == Key.OemPlus || e.Key == Key.Add))
+        {
+            var newSize = Math.Min(_settings.Settings.FontSize + 1, 24);
+            _settings.Settings.FontSize = newSize;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
+            _settings.Save();
+            e.Handled = true;
+            return;
+        }
+        if (ctrl && (e.Key == Key.OemMinus || e.Key == Key.Subtract))
+        {
+            var newSize = Math.Max(_settings.Settings.FontSize - 1, 8);
+            _settings.Settings.FontSize = newSize;
+            ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
+            _settings.Save();
+            e.Handled = true;
+            return;
+        }
+
         if (!ctrl && e.Key != Key.Escape) return;
 
         switch (e.Key)
@@ -498,6 +527,19 @@ public partial class MainWindow : Window
 
             case Key.D5:
                 ActivityTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.D6:
+                TraceTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
+            case Key.T when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                // Cmd+Shift+T — toggle dark/light theme
+                _settings.Settings.UseDarkTheme = !_settings.Settings.UseDarkTheme;
+                ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
+                _settings.Save();
                 e.Handled = true;
                 break;
 
@@ -707,6 +749,21 @@ public partial class MainWindow : Window
                 _viewModel.ActivityConnectionProfile?.Name);
             if (actView != null)
                 _ = actView.InitializeConnectionAsync(dialog.Result.ConnectionString);
+
+            // Cleanup orphaned trace sessions from previous crashes
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var traceService = new TraceService();
+                    await traceService.CleanupOrphanedSessionsAsync(dialog.Result.ConnectionString);
+                }
+                catch { }
+            });
+
+            // Refresh trace view connections
+            var traceView = this.FindControl<TraceView>("TraceViewControl");
+            traceView?.RefreshConnections(_registry);
         }
         else
         {
@@ -1127,7 +1184,11 @@ public partial class MainWindow : Window
                 };
                 ConnectionStripe.Background = gradientBrush;
                 ConnectionStripe.IsVisible = true;
-                this.Title = $"Lookout — {displayText}";
+                var activeDb = this.FindControl<QueryEditorHost>("QueryEditorHostControl")
+                    ?.ActiveTabViewModel?.SelectedDatabase;
+                this.Title = !string.IsNullOrEmpty(activeDb)
+                    ? $"Lookout — {displayText} / {activeDb}"
+                    : $"Lookout — {displayText}";
             }
         }
         else
@@ -1147,6 +1208,7 @@ public partial class MainWindow : Window
         // Query status section — only visible on Query Editor tab
         QueryStatusSeparator.IsVisible = isQE;
         QueryStatusText.IsVisible = isQE;
+        CursorPositionText.IsVisible = isQE;
         if (!isQE) QueryFlashText.IsVisible = false;
 
         if (isQE)

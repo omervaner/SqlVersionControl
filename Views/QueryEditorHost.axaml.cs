@@ -51,6 +51,9 @@ public partial class QueryEditorHost : UserControl
     /// <summary>Fired when the active query tab changes (for status bar rebinding).</summary>
     public event Action? ActiveTabChanged;
 
+    /// <summary>Fired when cursor position changes in the active editor. (line, column)</summary>
+    public event Action<int, int>? CaretPositionChanged;
+
     public QueryEditorHost()
     {
         InitializeComponent();
@@ -128,6 +131,16 @@ public partial class QueryEditorHost : UserControl
             var vm = ActiveTabViewModel;
             if (vm?.StopQueryCommand.CanExecute(null) == true)
                 vm.StopQueryCommand.Execute(null);
+        };
+        ToolbarTraceButton.Click += (_, _) =>
+        {
+            var vm = ActiveTabViewModel;
+            if (vm == null) return;
+            var editor = GetActiveEditor();
+            vm.SelectedSqlText = editor?.SelectedText ?? "";
+            vm.SqlText = editor?.Text ?? "";
+            if (vm.RunWithTraceCommand.CanExecute(null))
+                _ = vm.RunWithTraceCommand.ExecuteAsync(null);
         };
         ToolbarDatabaseCombo.SelectionChanged += (_, _) =>
         {
@@ -448,6 +461,19 @@ public partial class QueryEditorHost : UserControl
         // Listen for changes on this VM
         vm.PropertyChanged -= OnActiveTabPropertyChanged;
         vm.PropertyChanged += OnActiveTabPropertyChanged;
+
+        // Wire caret position tracking on active editor
+        var activeTab = _tabs[_activeTabIndex];
+        activeTab.Editor.TextArea.Caret.PositionChanged += (_, _) =>
+        {
+            var line = activeTab.Editor.TextArea.Caret.Line;
+            var col = activeTab.Editor.TextArea.Caret.Column;
+            CaretPositionChanged?.Invoke(line, col);
+        };
+        // Fire immediately for current position
+        CaretPositionChanged?.Invoke(
+            activeTab.Editor.TextArea.Caret.Line,
+            activeTab.Editor.TextArea.Caret.Column);
     }
 
     private void OnActiveTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -467,6 +493,7 @@ public partial class QueryEditorHost : UserControl
         else if (e.PropertyName == nameof(QueryTabViewModel.Databases))
         {
             ToolbarDatabaseCombo.ItemsSource = vm.Databases;
+            ToolbarDatabaseCombo.SelectedItem = vm.SelectedDatabase;
         }
     }
 
@@ -590,6 +617,9 @@ public partial class QueryEditorHost : UserControl
                     await CloseTabAsync(idx);
             };
 
+            // Right-click context menu
+            tabBtn.ContextMenu = BuildTabContextMenu(idx);
+
             TabStrip.Children.Add(tabBtn);
         }
 
@@ -608,6 +638,68 @@ public partial class QueryEditorHost : UserControl
         ToolTip.SetTip(addBtn, "New Query (Ctrl+N)");
         addBtn.Click += (_, _) => AddNewTab();
         TabStrip.Children.Add(addBtn);
+    }
+
+    private ContextMenu BuildTabContextMenu(int tabIndex)
+    {
+        var menu = new ContextMenu();
+
+        var close = new MenuItem { Header = "Close" };
+        close.Click += async (_, _) => await CloseTabAsync(tabIndex);
+        menu.Items.Add(close);
+
+        var closeOthers = new MenuItem { Header = "Close Others" };
+        closeOthers.Click += async (_, _) =>
+        {
+            for (int i = _tabs.Count - 1; i >= 0; i--)
+            {
+                if (i != tabIndex) await CloseTabAsync(i);
+            }
+        };
+        menu.Items.Add(closeOthers);
+
+        var closeRight = new MenuItem { Header = "Close Tabs to the Right" };
+        closeRight.Click += async (_, _) =>
+        {
+            for (int i = _tabs.Count - 1; i > tabIndex; i--)
+                await CloseTabAsync(i);
+        };
+        menu.Items.Add(closeRight);
+
+        var closeAll = new MenuItem { Header = "Close All" };
+        closeAll.Click += async (_, _) =>
+        {
+            for (int i = _tabs.Count - 1; i >= 0; i--)
+                await CloseTabAsync(i);
+        };
+        menu.Items.Add(closeAll);
+
+        menu.Items.Add(new Separator());
+
+        var duplicate = new MenuItem { Header = "Duplicate Tab" };
+        duplicate.Click += (_, _) => DuplicateTab(tabIndex);
+        menu.Items.Add(duplicate);
+
+        return menu;
+    }
+
+    public void DuplicateTab(int sourceIndex)
+    {
+        if (sourceIndex < 0 || sourceIndex >= _tabs.Count) return;
+        var sourceVm = _tabs[sourceIndex].DataContext as QueryTabViewModel;
+        if (sourceVm == null) return;
+
+        AddNewTab(sourceVm.TabConnectionString, sourceVm.TabConnectionProfile);
+
+        // Copy SQL and database from source
+        var newTab = _tabs[^1];
+        var newVm = newTab.DataContext as QueryTabViewModel;
+        if (newVm != null)
+        {
+            newVm.SelectedDatabase = sourceVm.SelectedDatabase;
+            newTab.Editor.Text = _tabs[sourceIndex].Editor.Text;
+            newVm.SqlText = sourceVm.SqlText;
+        }
     }
 
     // ── Intellisense Schema Cache ─────────────────────────────────────
@@ -821,7 +913,7 @@ public partial class QueryEditorHost : UserControl
                     _serverCache[connectionString] = new CachedServerData();
                 _serverCache[connectionString].Databases = dbs;
             }
-            vm.SetDatabases(dbs);
+            vm.SetDatabases(dbs, vm.SelectedDatabase);
         }
         catch
         {

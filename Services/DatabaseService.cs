@@ -660,6 +660,129 @@ public class DatabaseService
         string connectionString, string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
         => await ExecuteQueryCoreAsync(BuildConnectionString(connectionString, database), sql, ct, timeoutSeconds);
 
+    /// <summary>
+    /// Execute a query with XE trace (Mode 1 — Quick Trace).
+    /// Uses a dedicated connection so SPID is guaranteed to match the XE filter.
+    /// The XE session is always cleaned up, even on failure or cancellation.
+    /// </summary>
+    public async Task<(List<QueryResult> Results, string Messages, List<SqlVersionControl.Models.TraceEvent> TraceEvents)>
+        ExecuteWithTraceAsync(string connectionString, string database, string sql,
+            CancellationToken ct, TraceService traceService, int timeoutSeconds = 120)
+    {
+        var dbConnStr = BuildConnectionString(connectionString, database);
+        var results = new List<QueryResult>();
+        var messages = new List<string>();
+        var traceEvents = new List<SqlVersionControl.Models.TraceEvent>();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // Dedicated connection for the query (stays open so SPID is stable)
+        using var queryConn = new SqlConnection(dbConnStr);
+        queryConn.InfoMessage += (_, e) => messages.Add(e.Message);
+        await queryConn.OpenAsync(ct);
+
+        // Get SPID from this connection
+        int spid;
+        using (var spidCmd = new SqlCommand("SELECT @@SPID", queryConn))
+            spid = Convert.ToInt32(await spidCmd.ExecuteScalarAsync(ct));
+
+        // Start XE session filtered to this SPID (uses a separate connection)
+        string? sessionName = null;
+        try
+        {
+            sessionName = await traceService.StartTraceAsync(connectionString, new SqlVersionControl.Models.TraceOptions
+            {
+                SpidFilter = spid,
+                CaptureStatements = true
+            });
+
+            // Execute the query on the dedicated connection
+            var batches = SplitOnGo(sql);
+            foreach (var batch in batches)
+            {
+                if (string.IsNullOrWhiteSpace(batch)) continue;
+                ct.ThrowIfCancellationRequested();
+
+                var batchSw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    using var cmd = new SqlCommand(batch, queryConn);
+                    cmd.CommandTimeout = timeoutSeconds;
+                    await using var reg = ct.Register(() =>
+                    {
+                        try { cmd.Cancel(); } catch { }
+                    });
+
+                    using var reader = await cmd.ExecuteReaderAsync(ct);
+                    do
+                    {
+                        var colCount = reader.FieldCount;
+                        if (colCount == 0) continue;
+
+                        var colNames = new string[colCount];
+                        var colTypes = new Type[colCount];
+                        for (int i = 0; i < colCount; i++)
+                        {
+                            colNames[i] = reader.GetName(i);
+                            colTypes[i] = reader.GetFieldType(i);
+                        }
+
+                        var rows = new List<object?[]>();
+                        while (await reader.ReadAsync(ct))
+                        {
+                            var row = new object?[colCount];
+                            for (int i = 0; i < colCount; i++)
+                                row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                            rows.Add(row);
+                        }
+
+                        results.Add(new QueryResult
+                        {
+                            ColumnNames = colNames,
+                            ColumnTypes = colTypes,
+                            Rows = rows,
+                            RowCount = rows.Count,
+                            ExecutionTimeMs = batchSw.ElapsedMilliseconds
+                        });
+                    } while (await reader.NextResultAsync(ct));
+
+                    if (reader.RecordsAffected >= 0)
+                        messages.Add($"({reader.RecordsAffected} rows affected)");
+                }
+                catch (OperationCanceledException)
+                {
+                    messages.Add("Query was cancelled by user.");
+                    throw;
+                }
+                catch (SqlException ex)
+                {
+                    var errorMsg = ex.LineNumber > 0
+                        ? $"Error (Line {ex.LineNumber}): {ex.Message}"
+                        : $"Error: {ex.Message}";
+                    messages.Add(errorMsg);
+                    results.Add(new QueryResult { Error = errorMsg });
+                }
+            }
+
+            sw.Stop();
+            messages.Insert(0, $"Total execution time: {sw.ElapsedMilliseconds}ms");
+
+            // Small delay to let XE flush the ring buffer
+            await Task.Delay(200, CancellationToken.None);
+
+            // Read trace events
+            traceEvents = await traceService.ReadEventsAsync(connectionString, sessionName);
+            messages.Add($"Trace captured {traceEvents.Count} statement(s)");
+        }
+        finally
+        {
+            // Always clean up the XE session
+            if (sessionName != null)
+                await traceService.StopTraceAsync(connectionString, sessionName);
+        }
+
+        return (results, string.Join(Environment.NewLine, messages), traceEvents);
+    }
+
     private async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryCoreAsync(
         string connStr, string sql, CancellationToken ct, int timeoutSeconds)
     {

@@ -85,6 +85,8 @@
                                      Classes="TabButton" Content="Exec Plan"/>
                         <RadioButton x:Name="ActivityTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Activity"/>
+                        <RadioButton x:Name="TraceTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Trace"/>
                         <!-- Settings (tab-styled button, separated) -->
                         <Border Width="1" Margin="8,6"
                                 Background="{DynamicResource BorderDefault}"/>
@@ -335,6 +337,9 @@
 
             <!-- Activity Monitor Tab -->
             <views:ActivityView IsVisible="{Binding #ActivityTab.IsChecked}" x:Name="ActivityViewControl"/>
+
+            <!-- Query Trace Tab -->
+            <views:TraceView IsVisible="{Binding #TraceTab.IsChecked}" x:Name="TraceViewControl"/>
         </Grid>
 
         <!-- Reconnection Overlay (z-order: on top of everything) -->
@@ -391,6 +396,11 @@
 
                 <!-- Query flash message (colored, fades after 3s) -->
                 <TextBlock x:Name="QueryFlashText" Grid.Column="5"
+                           Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
+
+                <!-- Cursor position (Ln/Col) -->
+                <TextBlock x:Name="CursorPositionText" Grid.Column="6"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
 

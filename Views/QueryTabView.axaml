@@ -162,6 +162,60 @@
                         </ScrollViewer>
                     </Border>
 
+                    <!-- Trace Results Panel -->
+                    <Grid x:Name="TracePanel" IsVisible="False">
+                        <Grid RowDefinitions="*,Auto">
+                            <!-- Trace events grid -->
+                            <DataGrid Grid.Row="0" x:Name="TraceGrid"
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      CanUserResizeColumns="True"
+                                      CanUserSortColumns="True"
+                                      ItemsSource="{Binding TraceEvents}"
+                                      SelectedItem="{Binding SelectedTraceEvent}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Width="40"
+                                        Binding="{Binding $parent[DataGridRow].GetIndex}"/>
+                                    <DataGridTextColumn Header="Statement" Width="*"
+                                        Binding="{Binding SqlTextPreview}"/>
+                                    <DataGridTextColumn Header="Duration" Width="85"
+                                        Binding="{Binding DurationDisplay}"/>
+                                    <DataGridTextColumn Header="CPU (ms)" Width="75"
+                                        Binding="{Binding CpuMs}"/>
+                                    <DataGridTextColumn Header="Reads" Width="75"
+                                        Binding="{Binding LogicalReads}"/>
+                                    <DataGridTextColumn Header="Rows" Width="65"
+                                        Binding="{Binding RowCount}"/>
+                                </DataGrid.Columns>
+                                <DataGrid.Styles>
+                                    <Style Selector="DataGridCell TextBlock">
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                                    </Style>
+                                    <Style Selector="DataGridRow">
+                                        <Setter Property="MinHeight" Value="0"/>
+                                    </Style>
+                                </DataGrid.Styles>
+                            </DataGrid>
+                            <!-- Selected trace event detail -->
+                            <Border Grid.Row="1" Height="100"
+                                    Background="{DynamicResource PanelHeaderBackground}"
+                                    BorderBrush="{DynamicResource BorderDefault}"
+                                    BorderThickness="0,1,0,0"
+                                    IsVisible="{Binding SelectedTraceEvent, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <ScrollViewer Padding="8,6">
+                                    <TextBlock Text="{Binding SelectedTraceEvent.SqlText}"
+                                               FontFamily="Consolas, Menlo, Monaco, monospace"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextPrimary}"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
                     <!-- Peek Definition panel (read-only editor with syntax highlighting) -->
                     <Grid x:Name="PeekPanel" IsVisible="False">
                         <Grid RowDefinitions="Auto,*">

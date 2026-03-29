@@ -1,7 +1,23 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.2.0 (March 30, 2026)
+## PROJECT STATUS: v2.3.0 (March 30, 2026)
+
+v2.3.0: Query Trace (XE-based profiler) + QoL batch.
+
+**v2.3.0 changes:**
+- Query Trace Mode 1 — Quick Trace (Ctrl+Shift+F5): run a query with XE tracing, see every internal statement with duration/CPU/reads in a Trace result tab
+- Query Trace Mode 3 — Capture (Ctrl+6): top-level Trace tab, Profiler replacement with filter setup, start/stop recording, searchable results grid with detail panel
+- TraceService: XE session lifecycle (create/start/read ring buffer/stop/cleanup), permission checking, orphaned session cleanup on startup
+- Toolbar "Trace" button next to Run/Stop
+- Status bar Ln/Col cursor position indicator
+- Cmd+=/- font zoom (persists to settings)
+- Cmd+Shift+T instant dark/light theme toggle
+- Window title shows active database ("Lookout — PROD WMS / GratisWMS")
+- Tab right-click context menu: Close, Close Others, Close Right, Close All, Duplicate Tab
+- Database dropdown preserves selection across tab switches and async loads
+- OE TreeView: horizontal scroll disabled, no layout shift on selection
+- Toolbar buttons tightened (22px height, MinHeight=0)
 
 v2.2.0: Connection Manager + multi-connection Object Explorer.
 

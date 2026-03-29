@@ -55,6 +55,7 @@
 
                 <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
                           Padding="10,4,4,4"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>
                         <!-- Compact spacing + two-way expand binding + filter visibility -->
@@ -65,9 +66,10 @@
                             <Setter Property="MinHeight" Value="0"/>
                         </Style>
 
-                        <!-- No separator on every item by default -->
+                        <!-- 2px left border on all items (transparent) to prevent layout shift on selection -->
                         <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
-                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
                         </Style>
 
                         <!-- Hover highlight -->
@@ -75,11 +77,10 @@
                             <Setter Property="Background" Value="{DynamicResource TreeHover}"/>
                         </Style>
 
-                        <!-- Selection highlight with 2px left accent -->
+                        <!-- Selection highlight with 2px left accent (thickness already set above) -->
                         <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
                             <Setter Property="Background" Value="{DynamicResource TreeSelected}"/>
                             <Setter Property="BorderBrush" Value="{DynamicResource TreeSelectedAccent}"/>
-                            <Setter Property="BorderThickness" Value="2,0,0,0"/>
                         </Style>
 
                         <!-- Brighter expand/collapse arrow -->
@@ -181,8 +182,8 @@
                         <TextBlock Text="Database:" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                                    VerticalAlignment="Center"/>
                         <ComboBox x:Name="ToolbarDatabaseCombo"
-                                  MinWidth="120" Height="24" FontSize="11"
-                                  Margin="0,2" Padding="6,0"
+                                  MinWidth="100" Height="22" MinHeight="0" FontSize="11"
+                                  Margin="0,0" Padding="4,0"
                                   BorderThickness="1"
                                   BorderBrush="{DynamicResource BorderDefault}"
                                   VerticalAlignment="Center"/>
@@ -190,16 +191,22 @@
                     <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="4,0,0,0">
                         <Button x:Name="ToolbarRunButton" Content="Run"
                                 Classes="btn-primary"
-                                Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                                Padding="10,0" FontSize="11" Height="22" MinHeight="0" MinWidth="50"
                                 VerticalContentAlignment="Center"
                                 HorizontalContentAlignment="Center"
                                 ToolTip.Tip="Execute query (F5)"/>
                         <Button x:Name="ToolbarStopButton" Content="Stop"
                                 Classes="btn-danger"
-                                Padding="12,0" FontSize="11" Height="24" MinHeight="0" MinWidth="60"
+                                Padding="10,0" FontSize="11" Height="22" MinHeight="0" MinWidth="50"
                                 VerticalContentAlignment="Center"
                                 HorizontalContentAlignment="Center"
                                 ToolTip.Tip="Cancel execution"/>
+                        <Button x:Name="ToolbarTraceButton" Content="Trace"
+                                Classes="btn-secondary"
+                                Padding="10,0" FontSize="11" Height="22" MinHeight="0" MinWidth="50"
+                                VerticalContentAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Run with trace (Ctrl+Shift+F5)"/>
                     </StackPanel>
 
                     <!-- Separator between Run/Stop and utility buttons -->

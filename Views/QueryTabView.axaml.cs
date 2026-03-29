@@ -181,6 +181,18 @@ public partial class QueryTabView : UserControl
             return true;
         }
 
+        // Ctrl+Shift+F5 = Run with Trace
+        if (e.Key == Key.F5 && ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
+            _viewModel.SqlText = SqlEditor.Text;
+
+            if (_viewModel.RunWithTraceCommand.CanExecute(null))
+                _ = _viewModel.RunWithTraceCommand.ExecuteAsync(null);
+
+            return true;
+        }
+
         if (e.Key == Key.F5 || (ctrl && e.Key == Key.Enter))
         {
             _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
@@ -1687,6 +1699,26 @@ public partial class QueryTabView : UserControl
         msgBtn.Click += (_, _) => SelectMessagesTab();
         ResultTabHeaders.Children.Add(msgBtn);
 
+        // Trace tab (only visible when trace events exist)
+        if (_viewModel.TraceEvents.Count > 0)
+        {
+            var traceBtn = new Button
+            {
+                Content = $"Trace ({_viewModel.TraceEvents.Count})",
+                Padding = new Thickness(10, 4),
+                Margin = new Thickness(0),
+                FontSize = 11,
+                Foreground = GetRowBrush("TextSecondary"),
+                Background = Brushes.Transparent,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                BorderBrush = Brushes.Transparent,
+                Tag = -2000 // Special trace marker
+            };
+            traceBtn.Click += (_, _) => SelectTraceTab();
+            ResultTabHeaders.Children.Add(traceBtn);
+        }
+
         // Auto-select first live result
         if (results.Count > 0)
         {
@@ -1784,6 +1816,7 @@ public partial class QueryTabView : UserControl
 
         _selectedTabIndex = index;
         MessagesPanel.IsVisible = false;
+        TracePanel.IsVisible = false;
         EmptyState.IsVisible = false;
 
         if (result.Error != null)
@@ -1903,14 +1936,26 @@ public partial class QueryTabView : UserControl
     }
 
     private const int MessagesTabTag = -1000;
+    private const int TraceTabTag = -2000;
 
     private void SelectMessagesTab()
     {
         _selectedTabIndex = MessagesTabTag;
         ResultsGrid.IsVisible = false;
         MessagesPanel.IsVisible = true;
+        TracePanel.IsVisible = false;
         EmptyState.IsVisible = false;
         UpdateTabHighlight(MessagesTabTag);
+    }
+
+    private void SelectTraceTab()
+    {
+        _selectedTabIndex = TraceTabTag;
+        ResultsGrid.IsVisible = false;
+        MessagesPanel.IsVisible = false;
+        TracePanel.IsVisible = true;
+        EmptyState.IsVisible = false;
+        UpdateTabHighlight(TraceTabTag);
     }
 
     private void UpdateTabHighlight(int selectedIndex)

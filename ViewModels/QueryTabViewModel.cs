@@ -21,6 +21,11 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private int _selectedResultIndex;
     [ObservableProperty] private string _messages = "";
     [ObservableProperty] private bool _isRunning;
+
+    // Trace support (Mode 1 — Quick Trace)
+    [ObservableProperty] private ObservableCollection<TraceEvent> _traceEvents = [];
+    [ObservableProperty] private TraceEvent? _selectedTraceEvent;
+    [ObservableProperty] private bool _isTracing;
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private string _tabTitle = "Query 1";
     [ObservableProperty] private string _queryStatusText = "";
@@ -179,8 +184,10 @@ public partial class QueryTabViewModel : ObservableObject
         Databases = new ObservableCollection<string>(databases);
         if (selectedDb != null && Databases.Contains(selectedDb))
             SelectedDatabase = selectedDb;
-        else if (SelectedDatabase == null && Databases.Contains("AAD"))
-            SelectedDatabase = "AAD";
+        else if (SelectedDatabase != null && Databases.Contains(SelectedDatabase))
+            { } // keep current selection
+        else if (Databases.Count > 0)
+            SelectedDatabase = Databases[0];
     }
 
     [RelayCommand]
@@ -293,6 +300,101 @@ public partial class QueryTabViewModel : ObservableObject
     private void StopQuery()
     {
         _cts?.Cancel();
+    }
+
+    // ── Trace Mode (Mode 1 — Quick Trace) ────────────────────────────
+
+    [RelayCommand]
+    private async Task RunWithTraceAsync()
+    {
+        if (IsRunning || string.IsNullOrEmpty(SelectedDatabase)) return;
+
+        var sql = !string.IsNullOrWhiteSpace(SelectedSqlText)
+            ? SelectedSqlText
+            : SqlText;
+
+        if (string.IsNullOrWhiteSpace(sql)) return;
+
+        if (IsEditMode)
+            ExitEditMode();
+
+        // Check permission first
+        var traceService = new TraceService();
+        var serverConnStr = TabConnectionString ?? _db.GetConnectionStringForDatabase("master");
+        if (!await traceService.HasTracePermissionAsync(serverConnStr))
+        {
+            Messages = "Trace requires ALTER ANY EVENT SESSION permission on the server.";
+            QueryFlash?.Invoke("\u2717 No trace permission", QueryStatusSeverity.Error);
+            return;
+        }
+
+        IsRunning = true;
+        IsTracing = true;
+        StatusText = "Tracing...";
+        QueryStatusText = "Tracing...";
+        Results.Clear();
+        TraceEvents.Clear();
+        Messages = "";
+        _cts = new CancellationTokenSource();
+        _lastExecutedSql = sql;
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var connStr = TabConnectionString ?? _db.GetConnectionStringForDatabase(SelectedDatabase!);
+            var (results, messages, traceEvents) = await _db.ExecuteWithTraceAsync(
+                TabConnectionString ?? connStr, SelectedDatabase!, sql, _cts.Token, traceService);
+            sw.Stop();
+
+            foreach (var r in results)
+            {
+                r.SourceSql = sql;
+                Results.Add(r);
+            }
+
+            foreach (var te in traceEvents)
+                TraceEvents.Add(te);
+
+            Messages = messages;
+
+            if (Results.Count > 0)
+                SelectedResultIndex = 0;
+
+            var totalRows = results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var elapsed = sw.ElapsedMilliseconds < 1000
+                ? $"{sw.ElapsedMilliseconds}ms"
+                : $"{sw.Elapsed.TotalSeconds:F1}s";
+            StatusText = $"{Results.Count} result(s), {totalRows:N0} rows, {TraceEvents.Count} traced";
+            QueryStatusText = $"{totalRows:N0} rows, {elapsed}, {TraceEvents.Count} traced";
+
+            QueryFlash?.Invoke(
+                $"\u2713 {totalRows:N0} rows, {TraceEvents.Count} traced",
+                QueryStatusSeverity.Success);
+
+            QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);
+        }
+        catch (OperationCanceledException)
+        {
+            sw.Stop();
+            StatusText = "Trace cancelled";
+            QueryStatusText = "";
+            QueryFlash?.Invoke("\u2298 Cancelled", QueryStatusSeverity.Warning);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Messages = $"Error: {ex.Message}";
+            StatusText = "Error";
+            QueryStatusText = "";
+            QueryFlash?.Invoke("\u2717 Error", QueryStatusSeverity.Error);
+        }
+        finally
+        {
+            IsRunning = false;
+            IsTracing = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
     }
 
     // ── Edit Mode Logic ─────────────────────────────────────────────
