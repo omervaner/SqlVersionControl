@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.4 (March 30, 2026)
+## PROJECT STATUS: v2.4.5 (March 30, 2026)
+
+v2.4.5: Fix macOS window position drift — all dialogs use CenterOwner instead of CenterScreen.
 
 v2.4.4: Live elapsed timer on status bar during query execution, connection dialog scrollable, password fix.
 
