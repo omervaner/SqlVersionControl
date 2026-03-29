@@ -1,3 +1,5 @@
+using Microsoft.Data.SqlClient;
+
 namespace SqlVersionControl.Models;
 
 public class ConnectionSettings
@@ -7,18 +9,32 @@ public class ConnectionSettings
     public string Username { get; set; } = "";
     public string Password { get; set; } = "";
     public bool UseWindowsAuth { get; set; }
-
-    private const string PoolingParams = "Connect Timeout=5;Pooling=true;Min Pool Size=0;Max Pool Size=10;";
+    public bool TrustServerCertificate { get; set; } = true;
 
     public string ConnectionString
     {
         get
         {
-            if (UseWindowsAuth)
+            var builder = new SqlConnectionStringBuilder
             {
-                return $"Server={Server};Database={Database};Integrated Security=True;TrustServerCertificate=True;{PoolingParams}";
+                DataSource = Server,
+                InitialCatalog = Database,
+                TrustServerCertificate = TrustServerCertificate,
+                ConnectTimeout = 5,
+                Pooling = true,
+                MinPoolSize = 0,
+                MaxPoolSize = 10
+            };
+
+            if (UseWindowsAuth)
+                builder.IntegratedSecurity = true;
+            else
+            {
+                builder.UserID = Username;
+                builder.Password = Password;
             }
-            return $"Server={Server};Database={Database};User Id={Username};Password={Password};TrustServerCertificate=True;{PoolingParams}";
+
+            return builder.ConnectionString;
         }
     }
 }

@@ -1221,7 +1221,7 @@ public partial class QueryTabView : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"CopyAsInsert crash: {ex}");
+            AppLogger.LogError("QueryTabView.CopyAsInsert", ex);
             if (_viewModel != null)
                 _viewModel.StatusText = $"Copy as INSERT failed: {ex.GetType().Name}: {ex.Message}";
         }
@@ -1254,7 +1254,7 @@ public partial class QueryTabView : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"CopySelectedRows crash: {ex}");
+            AppLogger.LogError("QueryTabView.CopySelectedRows", ex);
             if (_viewModel != null)
                 _viewModel.StatusText = $"Copy rows failed: {ex.GetType().Name}: {ex.Message}";
         }
@@ -1489,7 +1489,7 @@ public partial class QueryTabView : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Auto-expand results failed: {ex.Message}");
+            AppLogger.LogError("QueryTabView.AutoExpandResults", ex);
         }
     }
 
@@ -1532,7 +1532,7 @@ public partial class QueryTabView : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ToggleResultsPanel failed: {ex.Message}");
+            AppLogger.LogError("QueryTabView.ToggleResultsPanel", ex);
         }
     }
 
@@ -1557,7 +1557,7 @@ public partial class QueryTabView : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"RestoreResultsPanelState failed: {ex.Message}");
+            AppLogger.LogError("QueryTabView.RestoreResultsPanelState", ex);
         }
     }
 

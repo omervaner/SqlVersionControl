@@ -311,7 +311,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Jobs load error: {ex}");
+                    AppLogger.LogError("ObjectExplorer.LoadJobs", ex);
                     folderNode.Children.Add(new ObjectExplorerNode
                     {
                         Name = $"(Error: {ex.Message})",

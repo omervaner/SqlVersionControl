@@ -433,31 +433,37 @@ public partial class CompareViewModel : ViewModelBase
         return null;
     }
 
-    private const string PoolingParams = "Connect Timeout=5;Pooling=true;Min Pool Size=0;Max Pool Size=10;";
-
     private string BuildConnectionString(SavedConnection conn)
     {
-        if (conn.UseWindowsAuth)
+        var settings = new ConnectionSettings
         {
-            return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;{PoolingParams}";
+            Server = conn.Server,
+            Database = conn.Database,
+            UseWindowsAuth = conn.UseWindowsAuth
+        };
+
+        if (!conn.UseWindowsAuth)
+        {
+            settings.Username = conn.Username;
+
+            // Check global PasswordStore first (from initial login)
+            var globalPassword = PasswordStore.Get(conn.Server, conn.Database, conn.Username);
+            if (!string.IsNullOrEmpty(globalPassword))
+            {
+                settings.Password = globalPassword;
+            }
+            else
+            {
+                // Then check local passwords (from QuickConnectionDialog)
+                var key = $"{conn.Server}|{conn.Database}|{conn.Username}";
+                if (_passwords.TryGetValue(key, out var password))
+                    settings.Password = password;
+                else
+                    settings.UseWindowsAuth = true; // No password — fall back to Windows auth
+            }
         }
 
-        // For SQL auth, check global PasswordStore first (from initial login)
-        var globalPassword = PasswordStore.Get(conn.Server, conn.Database, conn.Username);
-        if (!string.IsNullOrEmpty(globalPassword))
-        {
-            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={globalPassword};TrustServerCertificate=True;{PoolingParams}";
-        }
-
-        // Then check local passwords (from QuickConnectionDialog)
-        var key = $"{conn.Server}|{conn.Database}|{conn.Username}";
-        if (_passwords.TryGetValue(key, out var password))
-        {
-            return $"Server={conn.Server};Database={conn.Database};User Id={conn.Username};Password={password};TrustServerCertificate=True;{PoolingParams}";
-        }
-
-        // No password available - connection will likely fail
-        return $"Server={conn.Server};Database={conn.Database};Integrated Security=True;TrustServerCertificate=True;{PoolingParams}";
+        return settings.ConnectionString;
     }
 
     private async Task<bool> TestConnectionAsync(string connectionString)
@@ -557,12 +563,12 @@ public partial class CompareViewModel : ViewModelBase
             if (IsSourceConnected)
             {
                 var sourceDb = SelectedSourceConnection!.Database;
-                sourceColumns = await new DatabaseService().GetTableStructureAsync(_sourceConnectionString, sourceDb);
+                sourceColumns = await DatabaseService.GetTableStructureAsync(_sourceConnectionString, sourceDb);
             }
             if (IsTargetConnected)
             {
                 var targetDb = SelectedTargetConnection!.Database;
-                targetColumns = await new DatabaseService().GetTableStructureAsync(_targetConnectionString, targetDb);
+                targetColumns = await DatabaseService.GetTableStructureAsync(_targetConnectionString, targetDb);
             }
         }
         catch (Exception ex)
@@ -948,7 +954,7 @@ public partial class CompareViewModel : ViewModelBase
             await conn.OpenAsync();
 
             // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
-            var deployScript = ConvertToCreateOrAlter(SourceCode);
+            var deployScript = DatabaseService.ConvertToCreateOrAlter(SourceCode);
 
             using var cmd = new SqlCommand(deployScript, conn);
             await cmd.ExecuteNonQueryAsync();
@@ -987,7 +993,7 @@ public partial class CompareViewModel : ViewModelBase
             await conn.OpenAsync();
 
             // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
-            var deployScript = ConvertToCreateOrAlter(TargetCode);
+            var deployScript = DatabaseService.ConvertToCreateOrAlter(TargetCode);
 
             using var cmd = new SqlCommand(deployScript, conn);
             await cmd.ExecuteNonQueryAsync();
@@ -1568,33 +1574,6 @@ public partial class CompareViewModel : ViewModelBase
             StatusMessage = $"Showing {showing} of {total} objects";
     }
 
-    /// <summary>
-    /// Converts CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER to CREATE OR ALTER
-    /// so deploy works whether object exists or not (SQL Server 2016+)
-    /// </summary>
-    private static string ConvertToCreateOrAlter(string definition)
-    {
-        if (string.IsNullOrEmpty(definition)) return definition;
-
-        // Skip if already has "OR ALTER"
-        if (System.Text.RegularExpressions.Regex.IsMatch(definition, @"CREATE\s+OR\s+ALTER",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-        {
-            return definition;
-        }
-
-        // Pattern matches CREATE PROCEDURE/PROC/FUNCTION/VIEW/TRIGGER anywhere in the string
-        // More flexible to handle leading whitespace, comments, etc.
-        var pattern = @"\bCREATE\s+(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b";
-        var replacement = "CREATE OR ALTER $1";
-
-        return System.Text.RegularExpressions.Regex.Replace(
-            definition,
-            pattern,
-            replacement,
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-    }
-
     public void UpdateSelectedCount()
     {
         SelectedCount = Objects.Count(o => o.IsSelected);
@@ -1666,7 +1645,7 @@ public partial class CompareViewModel : ViewModelBase
                         sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
                     }
 
-                    var deployScript = ConvertToCreateOrAlter(sourceCode);
+                    var deployScript = DatabaseService.ConvertToCreateOrAlter(sourceCode);
 
                     using var conn = new SqlConnection(_targetConnectionString);
                     await conn.OpenAsync();

@@ -54,6 +54,7 @@ public partial class ActivityView : UserControl
 
         // Wire step action buttons
         DeleteStepButton.Click += async (_, _) => await ConfirmAndDeleteStepAsync();
+        RemoveScheduleButton.Click += async (_, _) => await ConfirmAndRemoveScheduleAsync();
         OpenStepButton.Click += (_, _) => _viewModel.OpenStepInEditor(_viewModel.SelectedStep);
 
         // Wire schedule combo boxes
@@ -245,6 +246,17 @@ public partial class ActivityView : UserControl
         var confirmed = await ShowSimpleConfirmAsync($"Delete step '{step.StepName}'?", "Delete");
         if (confirmed)
             await _viewModel.DeleteStepAsync();
+    }
+
+    private async Task ConfirmAndRemoveScheduleAsync()
+    {
+        if (_viewModel?.SelectedJob == null) return;
+        var jobName = _viewModel.SelectedJob.JobName;
+
+        var confirmed = await ShowSimpleConfirmAsync(
+            $"Remove schedule from job '{jobName}'?\nThe job will no longer run automatically.", "Remove");
+        if (confirmed)
+            await _viewModel.RemoveScheduleAsync();
     }
 
     private async Task ConfirmAndToggleJobAsync()

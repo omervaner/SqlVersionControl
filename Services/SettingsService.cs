@@ -67,7 +67,7 @@ public class SettingsService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to save settings: {ex.Message}");
+            AppLogger.LogError("SettingsService.Save", ex);
         }
     }
 

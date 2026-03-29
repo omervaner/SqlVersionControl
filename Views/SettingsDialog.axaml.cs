@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
@@ -148,9 +149,20 @@ public partial class SettingsDialog : Window
         var folder = DataFolderTextBox.Text;
         s.DataFolderPath = folder == SettingsService.DefaultDataFolder ? null : folder;
 
-        // DDL Audit Source (empty string → null)
+        // DDL Audit Source (empty string → null, validated)
         var ddlDb = DdlAuditDatabaseTextBox.Text?.Trim();
         var ddlTable = DdlAuditTableTextBox.Text?.Trim();
+        var ddlIdentifierPattern = @"^[\w]+(?:\.[\w]+)*$";
+        if (!string.IsNullOrEmpty(ddlDb) && !Regex.IsMatch(ddlDb, ddlIdentifierPattern))
+        {
+            DdlAuditDatabaseTextBox.Focus();
+            return;
+        }
+        if (!string.IsNullOrEmpty(ddlTable) && !Regex.IsMatch(ddlTable, ddlIdentifierPattern))
+        {
+            DdlAuditTableTextBox.Focus();
+            return;
+        }
         s.DdlAuditDatabase = string.IsNullOrEmpty(ddlDb) ? null : ddlDb;
         s.DdlAuditTable = string.IsNullOrEmpty(ddlTable) ? null : ddlTable;
 

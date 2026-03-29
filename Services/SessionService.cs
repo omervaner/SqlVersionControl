@@ -26,8 +26,9 @@ public class SessionService
                 _data = JsonSerializer.Deserialize<SessionData>(json) ?? new SessionData();
             }
         }
-        catch
+        catch (Exception ex)
         {
+            AppLogger.LogError("SessionService.Load", ex);
             _data = new SessionData();
         }
     }
@@ -43,9 +44,9 @@ public class SessionService
             var json = JsonSerializer.Serialize(_data, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SessionPath, json);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort — don't crash on save failure
+            AppLogger.LogError("SessionService.Save", ex);
         }
     }
 

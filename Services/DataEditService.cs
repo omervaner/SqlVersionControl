@@ -312,6 +312,7 @@ public class DataEditService
         DateTimeOffset dto => $"'{dto:yyyy-MM-dd HH:mm:ss.fff zzz}'",
         bool b => b ? "1" : "0",
         byte[] bytes => $"0x{Convert.ToHexString(bytes)}",
-        _ => value.ToString() ?? "NULL"
+        decimal or float or double or int or long or short or byte or sbyte => value.ToString() ?? "NULL",
+        _ => $"/* unsupported: {value.GetType().Name} */"
     };
 }

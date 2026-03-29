@@ -209,6 +209,12 @@ public partial class MainWindowViewModel : ViewModelBase
         _autoSyncTimer.Start();
     }
 
+    public void StopAutoSyncTimer()
+    {
+        _autoSyncTimer?.Stop();
+        _autoSyncTimer = null;
+    }
+
     private async Task AutoSyncTickAsync()
     {
         if (!IsConnected || _autoSyncing || string.IsNullOrEmpty(SelectedDatabase))
@@ -369,6 +375,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Cancel any pending code search
         _codeSearchCts?.Cancel();
+        _codeSearchCts?.Dispose();
 
         if (string.IsNullOrWhiteSpace(value) || value.Length < 2 || string.IsNullOrEmpty(SelectedDatabase))
         {
@@ -718,7 +725,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         StatusMessage = "Executing rollback...";
-        var success = await _db.RollbackToVersionAsync(LeftVersion);
+        var (success, error) = await _db.RollbackToVersionAsync(LeftVersion);
 
         if (success)
         {
@@ -727,7 +734,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         else
         {
-            StatusMessage = "Rollback failed - check permissions";
+            StatusMessage = $"Rollback failed: {error ?? "unknown error"}";
         }
     }
 }

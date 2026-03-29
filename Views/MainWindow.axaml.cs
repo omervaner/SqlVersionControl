@@ -601,6 +601,11 @@ public partial class MainWindow : Window
     {
         _sleepDetector.Stop();
 
+        // Stop timers
+        _viewModel.StopAutoSyncTimer();
+        var activityView = this.FindControl<ActivityView>("ActivityViewControl");
+        activityView?.ViewModel?.Dispose();
+
         // Save session (tabs + query history)
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         host?.SaveSession();

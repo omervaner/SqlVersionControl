@@ -1,9 +1,38 @@
-# CheatTeam - SQL Version Control Tool
+# Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v1.9.0 (March 29, 2026)
+## PROJECT STATUS: v2.1.1 (March 29, 2026)
 
-v1.9.0: Index Analysis, editor QoL, keyboard shortcuts dialog, result tab pinning. See docs/ folder for full specs.
+v2.1.1: Security & code quality audit. See docs/SECURITY.md for full audit report.
+
+**v2.1.1 changes:**
+- Security: Connection string building now uses SqlConnectionStringBuilder (fixes injection via semicolons in passwords)
+- Security: TrustServerCertificate now configurable per-connection (default true, prep for public release)
+- Security: Single-quote escaping for DB_ID() in index analysis queries
+- Security: DDL audit table source bracket-escaped + Settings input validation
+- Quality: Application-level file logger (AppLogger) replaces all Console.WriteLine — writes to logs/app.log with 5MB rotation
+- Quality: RollbackToVersionAsync now returns actual error messages instead of generic "check permissions"
+- Quality: ConvertToCreateOrAlter deduplicated (single source of truth in DatabaseService)
+- Quality: ActivityViewModel implements IDisposable, disposed on app close
+- Quality: GetTableStructureAsync made static, no more orphan DatabaseService instances
+- Quality: CancellationTokenSource properly disposed before reassignment
+- Quality: Schedule removal now has confirmation dialog
+- Quality: AlterSequenceDialog shows warning about duplicate keys / skipped ranges
+- Quality: SPID re-fetched each refresh cycle (no more stale self-kill check)
+- Quality: PasswordStore uses ConcurrentDictionary for thread safety
+- Quality: FormatValue handles numeric types explicitly, unsupported types get /* comment */ fallback
+- Quality: Auto-sync timer stopped on app close
+
+**v2.1.0 changes:**
+- App renamed to "Lookout" — all user-facing surfaces updated, config folder auto-migrated
+- Quick Execute (Shift+Click) — click a proc name to open a new tab with ready-to-run EXEC template with typed parameters
+
+**v2.0.0 changes:**
+- Git Export (File → Export to Git / Settings → Export Now) — full snapshot export of all database objects as .sql files, change detection, cleanup of deleted objects, CHANGELOG.md generation, progress dialog with summary
+- Activity Monitor tab (Cmd+5) — real-time server monitoring with two sub-tabs:
+  - Sessions: sp_who replacement with DMV queries, blocking chain visualization, Kill Session with safety checks, auto-refresh, filters
+  - Jobs Dashboard: full SQL Agent job monitoring with color-coded status, human-readable schedules, inline job property editor (General/Steps/Schedule/History tabs), Start/Stop/Enable/Disable actions
+- AccentGreen theme resource added to both themes
 
 **v1.9.0 changes:**
 - Index Analysis dialog (Tools → Index Analysis) — three-tab DMV analysis: unused indexes, missing indexes, duplicate/overlapping indexes with DROP/CREATE script generation and CSV export
@@ -60,10 +89,10 @@ v1.7.0: Collapsible panels, Sequences in OE, Table Structure Compare, SQL Agent 
 ---
 
 ## Project Identity
-- **Project Name**: CheatTeam (SQL Version Control)
-- **Folder**: `/Users/omer/Documents/Projects/CheatTeam`
+- **Project Name**: Lookout
+- **Folder**: `/Users/omer/Documents/Projects/SqlVersionControl`
 - **Repository**: omervaner/SqlVersionControl
-- **Purpose**: Cross-platform desktop app for tracking DDL changes in SQL Server databases
+- **Purpose**: Cross-platform SQL Server desktop IDE
 
 ## What This App Does
 
@@ -106,7 +135,7 @@ Full .sql file persistence for query tabs:
 - **Recent Files**: File menu submenu with last 10 opened/saved queries.
 - **Tab titles**: Saved queries show their name instead of "Query N". Unsaved changes append " *" asterisk.
 - **Close tab integration**: "Save" button in the unsaved changes dialog now actually saves before closing.
-- **Storage**: `~/Library/Application Support/SqlVersionControl/queries/` (macOS) / `%APPDATA%/SqlVersionControl/queries/` (Windows)
+- **Storage**: `~/Library/Application Support/Lookout/queries/` (macOS) / `%APPDATA%/Lookout/queries/` (Windows)
 - **File format**: Plain `.sql` with metadata comment header (Name, Database, Created, Modified timestamps)
 - **Services**: `QueryFileService` handles all file I/O; `SettingsService` tracks recent query paths.
 
@@ -344,15 +373,15 @@ dotnet publish -c Release -r osx-arm64 --self-contained -f net9.0 -o publish/osx
 
 # 5. Velopack package (use DOTNET_ROLL_FORWARD on .NET 10 machines)
 DOTNET_ROLL_FORWARD=LatestMajor vpk pack \
-  --packId SqlVersionControl --packVersion X.Y.Z \
+  --packId Lookout --packVersion X.Y.Z \
   --packDir publish/osx-arm64 --mainExe SqlVersionControl \
   --icon AppIcon.icns --outputDir Releases
 
 # 6. Create GitHub release with assets (use gh CLI, NOT vpk upload)
 gh release create vX.Y.Z \
-  Releases/SqlVersionControl-X.Y.Z-osx-full.nupkg \
-  Releases/SqlVersionControl-osx-Portable.zip \
-  Releases/SqlVersionControl-osx-Setup.pkg \
+  Releases/Lookout-X.Y.Z-osx-full.nupkg \
+  Releases/Lookout-osx-Portable.zip \
+  Releases/Lookout-osx-Setup.pkg \
   Releases/RELEASES-osx \
   Releases/releases.osx.json \
   Releases/assets.osx.json \
@@ -365,7 +394,7 @@ gh release create vX.Y.Z \
 ```bash
 dotnet publish -c Release -r win-x64 --self-contained -f net9.0 -o publish/win-x64
 DOTNET_ROLL_FORWARD=LatestMajor vpk pack \
-  --packId SqlVersionControl --packVersion X.Y.Z \
+  --packId Lookout --packVersion X.Y.Z \
   --packDir publish/win-x64 --mainExe SqlVersionControl.exe \
   --icon Assets/AppIcon.ico --outputDir Releases
 ```
@@ -510,7 +539,7 @@ Syntax highlighting: `ThemeManager.cs` has both Dark and Light color sets. `Them
 
 ### Run the app
 ```bash
-cd /Users/omer/Documents/Projects/CheatTeam
+cd /Users/omer/Documents/Projects/SqlVersionControl
 dotnet run
 ```
 
@@ -561,10 +590,10 @@ dotnet run
 - Change DB: "Change DB" button in toolbar
 
 ### Data storage
-- Settings: `~/Library/Application Support/SqlVersionControl/settings.json` (macOS)
-- Passwords: `~/Library/Application Support/SqlVersionControl/credentials.json` (macOS) — encrypted at rest (DPAPI on Windows, AES on macOS)
-- Saved queries: `~/Library/Application Support/SqlVersionControl/queries/*.sql` (macOS) — plain .sql with metadata header
+- Settings: `~/Library/Application Support/Lookout/settings.json` (macOS)
+- Passwords: `~/Library/Application Support/Lookout/credentials.json` (macOS) — encrypted at rest (DPAPI on Windows, AES on macOS)
+- Saved queries: `~/Library/Application Support/Lookout/queries/*.sql` (macOS) — plain .sql with metadata header
 
 ---
-## END OF CheatTeam PROJECT DOCUMENTATION
+## END OF Lookout PROJECT DOCUMENTATION
 ---

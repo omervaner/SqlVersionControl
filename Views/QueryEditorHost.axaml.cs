@@ -205,7 +205,7 @@ public partial class QueryEditorHost : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ToggleObjectExplorer failed: {ex.Message}");
+            AppLogger.LogError("QueryEditorHost.ToggleObjectExplorer", ex);
         }
     }
 
@@ -236,7 +236,7 @@ public partial class QueryEditorHost : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"RestoreObjectExplorerState failed: {ex.Message}");
+            AppLogger.LogError("QueryEditorHost.RestoreObjectExplorerState", ex);
         }
     }
 

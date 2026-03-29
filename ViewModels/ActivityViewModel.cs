@@ -6,7 +6,7 @@ using SqlVersionControl.Services;
 
 namespace SqlVersionControl.ViewModels;
 
-public partial class ActivityViewModel : ViewModelBase
+public partial class ActivityViewModel : ViewModelBase, IDisposable
 {
     private readonly DatabaseService _db;
     private string? _connectionString;
@@ -225,6 +225,10 @@ public partial class ActivityViewModel : ViewModelBase
 
         try
         {
+            // Re-fetch SPID each cycle — connection pool may recycle our connection
+            try { _currentSpid = await _db.GetCurrentSpidAsync(_connectionString); }
+            catch { _currentSpid = -1; }
+
             if (IsSessionsTabActive)
                 await RefreshSessionsAsync();
             else

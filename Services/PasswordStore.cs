@@ -12,7 +12,7 @@ namespace SqlVersionControl.Services;
 /// </summary>
 public static class PasswordStore
 {
-    private static readonly Dictionary<string, string> _passwords = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _passwords = new();
     private static readonly string _credentialsPath = Path.Combine(
         SettingsService.DefaultDataFolder, "credentials.json");
 
@@ -57,7 +57,7 @@ public static class PasswordStore
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to save credentials: {ex.Message}");
+            AppLogger.LogError("PasswordStore.Save", ex);
         }
     }
 
@@ -85,7 +85,7 @@ public static class PasswordStore
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to load credentials: {ex.Message}");
+            AppLogger.LogError("PasswordStore.Load", ex);
         }
     }
 

@@ -19,6 +19,10 @@
             <TextBox x:Name="ValueBox" Watermark="Enter new value..."/>
         </StackPanel>
 
+        <TextBlock Grid.Row="3" Text="⚠ Changing the sequence value may cause duplicate key errors or skipped ranges."
+                   Foreground="{DynamicResource ButtonDanger}" FontSize="11" TextWrapping="Wrap"
+                   Margin="0,10,0,0"/>
+
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right"
                     Spacing="10" Margin="0,15,0,0">
             <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="15,8"/>

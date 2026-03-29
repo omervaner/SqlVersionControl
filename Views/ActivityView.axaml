@@ -348,8 +348,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                             <Button Content="Save Schedule" Classes="btn-primary" Padding="14,5" FontSize="11"
                                     Command="{Binding SaveScheduleCommand}"/>
-                            <Button Content="Remove Schedule" Classes="btn-secondary" Padding="10,5" FontSize="11"
-                                    Command="{Binding RemoveScheduleCommand}"
+                            <Button x:Name="RemoveScheduleButton" Content="Remove Schedule" Classes="btn-secondary" Padding="10,5" FontSize="11"
                                     IsVisible="{Binding HasSchedule}"/>
                         </StackPanel>
                     </StackPanel>

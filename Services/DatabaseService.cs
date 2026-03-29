@@ -215,7 +215,7 @@ public class DatabaseService
         return null;
     }
 
-    public async Task<bool> RollbackToVersionAsync(ObjectVersion version)
+    public async Task<(bool Success, string? Error)> RollbackToVersionAsync(ObjectVersion version)
     {
         try
         {
@@ -227,11 +227,11 @@ public class DatabaseService
 
             using var cmd = new SqlCommand(script, conn);
             await cmd.ExecuteNonQueryAsync();
-            return true;
+            return (true, null);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            return (false, ex.Message);
         }
     }
 
@@ -239,7 +239,7 @@ public class DatabaseService
     /// Converts CREATE PROCEDURE/FUNCTION/VIEW/TRIGGER to CREATE OR ALTER
     /// so deploy/rollback works whether object exists or not (SQL Server 2016+)
     /// </summary>
-    private static string ConvertToCreateOrAlter(string definition)
+    internal static string ConvertToCreateOrAlter(string definition)
     {
         if (string.IsNullOrEmpty(definition)) return definition;
 
@@ -428,6 +428,16 @@ public class DatabaseService
         return results;
     }
 
+    private static string SafeDdlTableRef(string ddlSource)
+    {
+        var parts = ddlSource.Split('.', 3);
+        if (parts.Length == 3)
+            return $"[{parts[0].Replace("]", "]]")}].[{parts[1].Replace("]", "]]")}].[{parts[2].Replace("]", "]]")}]";
+        if (parts.Length == 2)
+            return $"[{parts[0].Replace("]", "]]")}].dbo.[{parts[1].Replace("]", "]]")}]";
+        throw new ArgumentException("DDL audit source must be in Database.Schema.Table or Database.Table format");
+    }
+
     /// <summary>
     /// Syncs from DDL audit log to ObjectVersions table.
     /// ddlSource should be "DatabaseName.dbo.TableName" (fully qualified).
@@ -447,7 +457,7 @@ public class DatabaseService
 
         // Read new entries from DDL_Log (cross-database query)
         // Only include human changes (from SSMS), exclude automated/job changes
-        var ddlTable = ddlSource ?? "VMAuditDb.dbo.DDL_Log";
+        var ddlTable = SafeDdlTableRef(ddlSource ?? "VMAuditDb.dbo.DDL_Log");
         var readLogSql = $@"
             SELECT Id, DatabaseName, EventType, ObjectType, SchemaName, ObjectName,
                    CommandText, HostName, LoginName, IpAddress, ProgramName, CreatedOn
@@ -1559,7 +1569,7 @@ public class DatabaseService
 
     // ── Table structure for Compare Databases ──────────────────────────
 
-    public async Task<List<TableColumnInfo>> GetTableStructureAsync(string connectionString, string database)
+    public static async Task<List<TableColumnInfo>> GetTableStructureAsync(string connectionString, string database)
     {
         var results = new List<TableColumnInfo>();
         var safeDb = database.Replace("]", "]]");
@@ -1663,6 +1673,7 @@ public class DatabaseService
     public async Task<List<Dictionary<string, object?>>> GetUnusedIndexesAsync(string connectionString, string database)
     {
         var safeDb = database.Replace("]", "]]");
+        var safeDbStr = database.Replace("'", "''");
         var rows = new List<Dictionary<string, object?>>();
 
         using var conn = new SqlConnection(connectionString);
@@ -1698,7 +1709,7 @@ public class DatabaseService
             JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
             LEFT JOIN sys.dm_db_index_usage_stats us
                 ON us.object_id = i.object_id AND us.index_id = i.index_id
-                AND us.database_id = DB_ID('{safeDb}')
+                AND us.database_id = DB_ID('{safeDbStr}')
             LEFT JOIN (
                 SELECT object_id, index_id,
                        SUM(row_count) AS row_count,
@@ -1729,6 +1740,7 @@ public class DatabaseService
     public async Task<List<Dictionary<string, object?>>> GetMissingIndexesAsync(string connectionString, string database)
     {
         var safeDb = database.Replace("]", "]]");
+        var safeDbStr = database.Replace("'", "''");
         var rows = new List<Dictionary<string, object?>>();
 
         using var conn = new SqlConnection(connectionString);
@@ -1748,7 +1760,7 @@ public class DatabaseService
             FROM sys.dm_db_missing_index_details d
             JOIN sys.dm_db_missing_index_groups g ON d.index_handle = g.index_handle
             JOIN sys.dm_db_missing_index_group_stats gs ON g.index_group_handle = gs.group_handle
-            WHERE d.database_id = DB_ID('{safeDb}')
+            WHERE d.database_id = DB_ID('{safeDbStr}')
             ORDER BY [Score] DESC";
 
         using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 60 };

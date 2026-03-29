@@ -2,7 +2,7 @@
 
 A cross-platform SQL Server desktop IDE for teams that need more than SSMS but less than a full DevOps pipeline. Track DDL changes, write and run queries, compare databases across environments, visualize execution plans, and manage SQL Agent Jobs — all from one app.
 
-Built with [Avalonia UI](https://avaloniaui.net/) and .NET 9. Runs on macOS and Windows.
+Built with [Avalonia UI](https://avaloniaui.net/) and .NET. Runs on macOS and Windows.
 
 ---
 
@@ -49,18 +49,47 @@ Generate and visualize SQL Server estimated execution plans with human-readable 
 - **Warnings** — Surface plan warnings (implicit conversions, spills, etc.) in a dedicated panel.
 - **Missing indexes** — Suggestions with a "Copy CREATE INDEX" button.
 
-### SQL Agent Jobs
-Browse and manage SQL Server Agent Jobs directly from the Object Explorer.
+### Activity Monitor
+Real-time server monitoring with two sub-tabs (Cmd+5):
 
-- **Jobs folder** under each database, lazy-loaded from `msdb`. Shows job name, enabled/disabled status, and last run outcome (Success/Failed/Running).
-- **Context menu** — View Job Steps (shows step details with T-SQL), View History (last 10 runs with status, duration, and messages), Start Job (with confirmation dialog), and Refresh.
+- **Sessions** — sp_who replacement built on DMVs. Shows session ID, login, database, status, CPU, reads/writes, elapsed time, blocking chains, and the running SQL statement. Filter by database, status, or login. Kill sessions with a safety dialog (prevents self-kill via @@SPID check). Auto-refresh at configurable intervals.
+- **Jobs Dashboard** — Full SQL Agent job management. Color-coded status (running/succeeded/failed), human-readable schedule descriptions, and an inline property editor with General, Steps, Schedule, and History tabs. Start, stop, enable, and disable jobs — all with confirmation dialogs. Add/edit/delete job steps and schedules directly.
+
+SQL Agent Jobs also appear in the Object Explorer tree with context menus for quick access.
+
+### Git Export
+Export all database objects as `.sql` files to a local Git repository (File → Export to Git).
+
+- Full snapshot export of stored procedures, functions, views, and triggers organized by schema
+- Change detection — only writes files that actually changed
+- Cleanup of deleted objects (removes `.sql` files for dropped objects)
+- Auto-generated `CHANGELOG.md` with timestamps
+- Progress dialog with summary of adds/updates/deletes
+- Configurable export path in Settings
+
+### Index Analysis
+Three-tab DMV analysis dialog (Tools → Index Analysis):
+
+- **Unused Indexes** — Indexes with zero or low reads but high write overhead. Helps identify candidates for removal.
+- **Missing Indexes** — SQL Server's own suggestions based on query optimizer requests, ranked by impact score.
+- **Duplicate/Overlapping Indexes** — Finds indexes that cover the same columns, wasting space and slowing writes.
+
+Each tab supports DROP/CREATE script generation and CSV export.
+
+### Quick Execute
+**Shift+Click** any stored procedure name in the editor to instantly open a new tab with a ready-to-run execution template — `DECLARE` statements with proper types (precision, scale) and an `EXEC` block with named parameters. OUTPUT parameters are automatically marked.
 
 ### Other
-- **Dark and light themes** with live preview. All colors defined in a single theme file — change one value and the entire app updates.
+- **SQL Formatter** (Ctrl+Shift+F) — Format SQL queries with proper indentation and casing.
+- **Text Compare** (Tools → Text Compare) — Paste two blocks of text and diff them side-by-side.
+- **SQL Quoter** (Tools → SQL Quoter) — Paste a list of values, get a formatted `IN (...)` clause.
+- **Peek Definition** (Cmd+Click / Ctrl+Click) — Jump to the definition of a proc, view, or function referenced in your query.
+- **Dark and light themes** with live preview. Warm cream light theme, dark theme inspired by Ghostty.
 - **Encrypted credential storage** — Passwords encrypted at rest (DPAPI on Windows, AES on macOS). Survives app restarts.
 - **Sleep/wake recovery** — Detects when the machine wakes from sleep and reconnects gracefully.
 - **Session restore** — Query tabs, connections, and editor contents are saved on exit and restored on next launch.
 - **Auto-updates** — Powered by Velopack. The app checks for new releases on GitHub and updates itself.
+- **Application logging** — Errors logged to `logs/app.log` in the app data folder for troubleshooting.
 
 ---
 
@@ -79,7 +108,7 @@ The app supports auto-updates — once installed, it checks for new versions aut
 
 ## Build from Source
 
-Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
+Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later.
 
 ```bash
 git clone https://github.com/omervaner/SqlVersionControl.git
@@ -104,12 +133,13 @@ dotnet publish -c Release -r win-x64 --self-contained -o publish/win-x64
 | | |
 |---|---|
 | **UI Framework** | [Avalonia UI](https://avaloniaui.net/) 11.x |
-| **Runtime** | .NET 9 |
+| **Runtime** | .NET 9 / 10 |
 | **MVVM** | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) |
 | **SQL** | [Microsoft.Data.SqlClient](https://github.com/dotnet/SqlClient) |
 | **Diff Engine** | [DiffPlex](https://github.com/mmanela/diffplex) |
 | **Editor** | [AvaloniaEdit](https://github.com/AvaloniaUI/AvaloniaEdit) |
 | **Execution Plans** | [PlanViewer.Core](https://github.com/erikdarlingdata/PerformanceStudio) (MIT) |
 | **Auto-Update** | [Velopack](https://velopack.io/) |
+| **SQL Formatting** | [Hogimn.Sql.Formatter](https://github.com/nickosbatistas/SQL-Formatter) |
 | **Excel Export** | [ClosedXML](https://github.com/ClosedXML/ClosedXML) |
 
