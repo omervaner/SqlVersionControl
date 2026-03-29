@@ -10,6 +10,8 @@ public partial class SettingsDialog : Window
 {
     private readonly SettingsService _settings = null!;
     private readonly Action? _onThemePreview;
+    private readonly DatabaseService? _db;
+    private readonly string? _connectionString;
     private bool _originalDarkTheme;
     private int _originalFontSize;
     public bool SettingsChanged { get; private set; }
@@ -19,10 +21,13 @@ public partial class SettingsDialog : Window
         InitializeComponent();
     }
 
-    public SettingsDialog(SettingsService settings, Action? onThemePreview = null) : this()
+    public SettingsDialog(SettingsService settings, Action? onThemePreview = null,
+        DatabaseService? db = null, string? connectionString = null) : this()
     {
         _settings = settings;
         _onThemePreview = onThemePreview;
+        _db = db;
+        _connectionString = connectionString;
 
         // Store original values for cancel/revert
         _originalDarkTheme = settings.Settings.UseDarkTheme;
@@ -48,6 +53,7 @@ public partial class SettingsDialog : Window
         SaveButton.Click += (s, e) => SaveAndClose();
         BrowseFolderButton.Click += async (s, e) => await BrowseForFolderAsync();
         BrowseGitFolderButton.Click += async (s, e) => await BrowseForGitFolderAsync();
+        ExportNowButton.Click += async (s, e) => await ExportNowAsync();
     }
 
     private void PreviewTheme()
@@ -112,6 +118,7 @@ public partial class SettingsDialog : Window
 
         // Git Integration
         GitExportPathTextBox.Text = s.GitExportPath ?? "";
+        IncludeSystemDbsCheckBox.IsChecked = s.GitIncludeSystemDatabases;
 
         // Version
         VersionLabel.Text = AppVersion.DisplayString;
@@ -150,6 +157,7 @@ public partial class SettingsDialog : Window
         // Git Integration (empty string → null)
         var gitPath = GitExportPathTextBox.Text?.Trim();
         s.GitExportPath = string.IsNullOrEmpty(gitPath) ? null : gitPath;
+        s.GitIncludeSystemDatabases = IncludeSystemDbsCheckBox.IsChecked == true;
 
         _settings.Save();
 
@@ -188,5 +196,27 @@ public partial class SettingsDialog : Window
         {
             GitExportPathTextBox.Text = folders[0].Path.LocalPath;
         }
+    }
+
+    private async Task ExportNowAsync()
+    {
+        var exportPath = GitExportPathTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(exportPath))
+        {
+            // Flash the path field to indicate it's required
+            GitExportPathTextBox.Focus();
+            return;
+        }
+
+        if (_db == null || _connectionString == null)
+            return;
+
+        var includeSystem = IncludeSystemDbsCheckBox.IsChecked == true;
+
+        var dialog = new ExportProgressDialog();
+        // Show dialog and start export
+        var showTask = dialog.ShowDialog(this);
+        await dialog.RunExportAsync(_db, _connectionString, exportPath, includeSystem);
+        await showTask;
     }
 }

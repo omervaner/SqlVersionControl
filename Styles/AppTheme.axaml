@@ -46,6 +46,7 @@
     <SolidColorBrush x:Key="WordHighlight" Color="#5a4a1e"/>
     <SolidColorBrush x:Key="SelectedItemBackground" Color="#3a3d44"/>
     <SolidColorBrush x:Key="AccentBlue" Color="#83a5d6"/>
+    <SolidColorBrush x:Key="AccentGreen" Color="#8fbf6b"/>
     <SolidColorBrush x:Key="FocusBorder" Color="#88a1bb"/>
 
     <!-- === BUTTONS === -->

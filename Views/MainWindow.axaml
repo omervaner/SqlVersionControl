@@ -32,6 +32,8 @@
                             <Separator/>
                             <MenuItem x:Name="MenuChangeDb" Header="Change Connection..."/>
                             <Separator/>
+                            <MenuItem x:Name="MenuExportGit" Header="Export to Git..."/>
+                            <Separator/>
                             <MenuItem x:Name="MenuRecentFiles" Header="Recent Files"/>
                             <MenuItem x:Name="MenuQueryHistory" Header="Query History"/>
                             <Separator/>
@@ -80,6 +82,8 @@
                                      Classes="TabButton" Content="Compare"/>
                         <RadioButton x:Name="PlanTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Exec Plan"/>
+                        <RadioButton x:Name="ActivityTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Activity"/>
                         <!-- Settings (tab-styled button, separated) -->
                         <Border Width="1" Margin="8,6"
                                 Background="{DynamicResource BorderDefault}"/>
@@ -327,6 +331,9 @@
 
             <!-- Execution Plan Tab -->
             <views:PlanView IsVisible="{Binding #PlanTab.IsChecked}" x:Name="PlanViewControl"/>
+
+            <!-- Activity Monitor Tab -->
+            <views:ActivityView IsVisible="{Binding #ActivityTab.IsChecked}" x:Name="ActivityViewControl"/>
         </Grid>
 
         <!-- Reconnection Overlay (z-order: on top of everything) -->

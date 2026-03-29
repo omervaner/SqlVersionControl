@@ -496,19 +496,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
         if (columns.Count == 0) return;
 
-        var pkCols = columns.Where(c => c.IsPrimaryKey).Select(c => $"[{c.Name}]").ToList();
-        var colDefs = columns.Select(c =>
-        {
-            var typeFmt = Services.SqlTypeFormatter.Format(c.TypeName, c.MaxLength);
-            var nullable = c.IsNullable ? "NULL" : "NOT NULL";
-            return $"    [{c.Name}] {typeFmt} {nullable}";
-        });
-
-        var sql = $"CREATE TABLE [{schema}].[{node.Name}]\n(\n{string.Join(",\n", colDefs)}";
-        if (pkCols.Count > 0)
-            sql += $",\n    CONSTRAINT [PK_{node.Name}] PRIMARY KEY ({string.Join(", ", pkCols)})";
-        sql += "\n)";
-
+        var sql = DatabaseService.GenerateCreateTableScript(schema, node.Name, columns);
         InsertTextRequested?.Invoke(sql, false);
     }
 

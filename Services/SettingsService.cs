@@ -181,6 +181,7 @@ public class AppSettings
 
     // Git Integration
     public string? GitExportPath { get; set; }
+    public bool GitIncludeSystemDatabases { get; set; }
 
     public bool IsDdlAuditConfigured =>
         !string.IsNullOrWhiteSpace(DdlAuditDatabase) && !string.IsNullOrWhiteSpace(DdlAuditTable);

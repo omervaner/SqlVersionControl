@@ -1,0 +1,380 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SqlVersionControl.ViewModels"
+             x:Class="SqlVersionControl.Views.ActivityView"
+             x:DataType="vm:ActivityViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Row 0: Top Toolbar -->
+        <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="15,8">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                <!-- Connection selector -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                    <Ellipse x:Name="ActivityConnectionDot" Width="8" Height="8"
+                             VerticalAlignment="Center" Fill="{DynamicResource AccentBlue}"/>
+                    <Button x:Name="ActivityConnectionButton" Content="Connection"
+                            Classes="btn-secondary" Padding="8,4" FontSize="11"
+                            ToolTip.Tip="Change Activity connection" Cursor="Hand"/>
+                </StackPanel>
+
+                <!-- Sub-tabs -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="20,0,0,0">
+                    <RadioButton x:Name="SessionsSubTab" GroupName="ActivitySubTabs"
+                                 IsChecked="{Binding IsSessionsTabActive}"
+                                 Classes="TabButton" Content="Sessions" FontSize="12"/>
+                    <RadioButton x:Name="JobsSubTab" GroupName="ActivitySubTabs"
+                                 IsChecked="{Binding IsJobsTabActive}"
+                                 Classes="TabButton" Content="Jobs" FontSize="12"/>
+                </StackPanel>
+
+                <!-- Auto-refresh -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <CheckBox Content="Auto-refresh" IsChecked="{Binding AutoRefreshEnabled}" FontSize="11"/>
+                    <ComboBox x:Name="RefreshIntervalCombo" MinWidth="65" FontSize="11"
+                              IsEnabled="{Binding AutoRefreshEnabled}" SelectedIndex="2">
+                        <ComboBoxItem Content="1s" Tag="1"/>
+                        <ComboBoxItem Content="2s" Tag="2"/>
+                        <ComboBoxItem Content="5s" Tag="5"/>
+                        <ComboBoxItem Content="10s" Tag="10"/>
+                        <ComboBoxItem Content="30s" Tag="30"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Refresh button -->
+                <Button Grid.Column="4" Content="Refresh" Classes="btn-secondary"
+                        Command="{Binding RefreshCommand}" Padding="10,4" Margin="10,0,0,0"
+                        FontSize="11"/>
+
+                <!-- Loading indicator -->
+                <ProgressBar Grid.Column="5" IsIndeterminate="True" Width="60" Height="4"
+                             IsVisible="{Binding IsLoading}" Margin="10,0,0,0"
+                             Foreground="{DynamicResource AccentBlue}"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- SESSIONS TAB -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsSessionsTabActive}"
+              RowDefinitions="Auto,Auto,*">
+
+            <!-- Session Filters -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="15,6">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <CheckBox Content="Hide sleeping" IsChecked="{Binding HideSleeping}" FontSize="11"/>
+                    <TextBox Text="{Binding SessionSearchText}" Watermark="Search login, host, query..."
+                             Width="200" FontSize="11"/>
+                    <ComboBox ItemsSource="{Binding SessionDatabases}"
+                              SelectedItem="{Binding SessionDatabaseFilter}"
+                              MinWidth="120" FontSize="11"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Blocking chain warning -->
+            <Border Grid.Row="1" Background="{DynamicResource ButtonDanger}" Padding="10,4"
+                    IsVisible="{Binding HasBlockingChains}" Opacity="0.9">
+                <TextBlock Text="{Binding BlockingChainText}" FontSize="11"
+                           Foreground="White" TextTrimming="CharacterEllipsis"/>
+            </Border>
+
+            <!-- Sessions Grid -->
+            <DataGrid Grid.Row="2" x:Name="SessionsGrid"
+                      ItemsSource="{Binding Sessions}"
+                      SelectedItem="{Binding SelectedSession}"
+                      IsReadOnly="True"
+                      GridLinesVisibility="Horizontal"
+                      BorderThickness="0"
+                      CanUserResizeColumns="True"
+                      CanUserSortColumns="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="SPID" Binding="{Binding SessionId}" Width="55"/>
+                    <DataGridTextColumn Header="Login" Binding="{Binding Login}" Width="100"/>
+                    <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="100"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding RequestStatus}" Width="80"/>
+                    <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="80"/>
+                    <DataGridTextColumn Header="Wait Type" Binding="{Binding WaitType}" Width="90"/>
+                    <DataGridTextColumn Header="Blocking" Binding="{Binding BlockingSession}" Width="70"/>
+                    <DataGridTextColumn Header="CPU (ms)" Binding="{Binding CpuMs}" Width="70"/>
+                    <DataGridTextColumn Header="Elapsed" Binding="{Binding ElapsedDisplay}" Width="65"/>
+                    <DataGridTextColumn Header="Current Statement" Binding="{Binding CurrentStatementPreview}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- JOBS TAB -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsJobsTabActive}"
+              RowDefinitions="Auto,Auto,*,Auto,200">
+
+            <!-- Job Filters -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="15,6">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <TextBox Text="{Binding JobSearchText}" Watermark="Search job name..."
+                             Width="180" FontSize="11"/>
+                    <ComboBox x:Name="EnabledFilterCombo" MinWidth="110" FontSize="11"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="All"/>
+                        <ComboBoxItem Content="Enabled only"/>
+                        <ComboBoxItem Content="Disabled only"/>
+                    </ComboBox>
+                    <ComboBox x:Name="OutcomeFilterCombo" MinWidth="120" FontSize="11"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="All outcomes"/>
+                        <ComboBoxItem Content="Failed only"/>
+                        <ComboBoxItem Content="Succeeded only"/>
+                    </ComboBox>
+                    <ComboBox ItemsSource="{Binding JobCategories}"
+                              SelectedItem="{Binding JobCategoryFilter}"
+                              MinWidth="120" FontSize="11"/>
+                    <CheckBox Content="Running only" IsChecked="{Binding ShowOnlyRunning}" FontSize="11"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Job Action Buttons -->
+            <Border Grid.Row="1" Background="{DynamicResource ToolbarBackground}" Padding="15,4">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="StartJobButton" Content="Start" Classes="btn-secondary"
+                            Padding="10,3" FontSize="11" Cursor="Hand"/>
+                    <Button x:Name="StopJobButton" Content="Stop" Classes="btn-secondary"
+                            Padding="10,3" FontSize="11" Cursor="Hand"/>
+                    <Button x:Name="ToggleEnabledButton" Content="Enable/Disable" Classes="btn-secondary"
+                            Padding="10,3" FontSize="11" Cursor="Hand"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Jobs Grid -->
+            <DataGrid Grid.Row="2" x:Name="JobsGrid"
+                      ItemsSource="{Binding Jobs}"
+                      SelectedItem="{Binding SelectedJob}"
+                      IsReadOnly="True"
+                      GridLinesVisibility="Horizontal"
+                      BorderThickness="0"
+                      CanUserResizeColumns="True"
+                      CanUserSortColumns="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Job Name" Binding="{Binding JobName}" Width="*"/>
+                    <DataGridTextColumn Header="Enabled" Binding="{Binding EnabledDisplay}" Width="60"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding CurrentStatus}" Width="75"/>
+                    <DataGridTextColumn Header="Last Outcome" Binding="{Binding LastRunOutcome}" Width="100"/>
+                    <DataGridTextColumn Header="Last Run" Binding="{Binding LastRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="120"/>
+                    <DataGridTextColumn Header="Duration" Binding="{Binding LastDurationDisplay}" Width="70"/>
+                    <DataGridTextColumn Header="Next Run" Binding="{Binding NextRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="120"/>
+                    <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
+                    <DataGridTextColumn Header="Schedule" Binding="{Binding Schedule}" Width="150"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Row="3" Height="3" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource BorderDefault}"
+                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                          IsVisible="{Binding IsJobDetailVisible}"/>
+
+            <!-- Job Detail Panel -->
+            <Grid Grid.Row="4" IsVisible="{Binding IsJobDetailVisible}"
+                  RowDefinitions="Auto,*">
+
+                <!-- Detail sub-tabs + unsaved indicator -->
+                <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="10,4">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                            <RadioButton GroupName="JobDetailTabs"
+                                         IsChecked="{Binding IsJobGeneralTabActive}"
+                                         Classes="TabButton" Content="General" FontSize="11"/>
+                            <RadioButton GroupName="JobDetailTabs"
+                                         IsChecked="{Binding IsJobStepsTabActive}"
+                                         Classes="TabButton" Content="Steps" FontSize="11"/>
+                            <RadioButton GroupName="JobDetailTabs"
+                                         IsChecked="{Binding IsJobScheduleTabActive}"
+                                         Classes="TabButton" Content="Schedule" FontSize="11"/>
+                            <RadioButton GroupName="JobDetailTabs"
+                                         IsChecked="{Binding IsJobHistoryTabActive}"
+                                         Classes="TabButton" Content="History" FontSize="11"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="● unsaved" FontSize="10"
+                                   Foreground="{DynamicResource ButtonDanger}"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding HasUnsavedChanges}"/>
+                    </Grid>
+                </Border>
+
+                <!-- ═══ GENERAL TAB ═══ -->
+                <ScrollViewer Grid.Row="1" IsVisible="{Binding IsJobGeneralTabActive}"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="10" Margin="15,10">
+                        <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding EditJobName}" FontSize="11"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Description" FontSize="11"
+                                       VerticalAlignment="Top" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EditJobDescription}"
+                                     FontSize="11" AcceptsReturn="True" TextWrapping="Wrap"
+                                     Height="50"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Enabled" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <CheckBox Grid.Row="2" Grid.Column="1" IsChecked="{Binding EditJobEnabled}" FontSize="11"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Category" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AllCategories}"
+                                      SelectedItem="{Binding EditJobCategory}" MinWidth="200" FontSize="11"/>
+
+                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <Button Content="Save" Classes="btn-primary" Padding="14,5" FontSize="11"
+                                        Command="{Binding SaveJobGeneralCommand}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ═══ STEPS TAB ═══ -->
+                <Grid Grid.Row="1" IsVisible="{Binding IsJobStepsTabActive}"
+                      RowDefinitions="*,Auto,Auto">
+                    <!-- Steps grid -->
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding JobSteps}"
+                              SelectedItem="{Binding SelectedStep}"
+                              IsReadOnly="True" GridLinesVisibility="Horizontal"
+                              BorderThickness="0" CanUserResizeColumns="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding StepId}" Width="35"/>
+                            <DataGridTextColumn Header="Step Name" Binding="{Binding StepName}" Width="*"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Subsystem}" Width="70"/>
+                            <DataGridTextColumn Header="On Success" Binding="{Binding OnSuccessAction}" Width="110"/>
+                            <DataGridTextColumn Header="On Failure" Binding="{Binding OnFailureAction}" Width="110"/>
+                            <DataGridTextColumn Header="Command" Binding="{Binding CommandPreview}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Step command editor -->
+                    <TextBox Grid.Row="1" Text="{Binding EditStepCommand}"
+                             FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             Height="80" Margin="0,2,0,0"
+                             Watermark="Select a step to edit its command..."/>
+
+                    <!-- Step action buttons -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,4">
+                        <Button Content="Save Step" Classes="btn-primary" Padding="10,4" FontSize="11"
+                                Command="{Binding SaveStepCommand}"/>
+                        <Button Content="Add Step" Classes="btn-secondary" Padding="10,4" FontSize="11"
+                                Command="{Binding AddStepCommand}"/>
+                        <Button x:Name="DeleteStepButton" Content="Delete Step" Classes="btn-secondary"
+                                Padding="10,4" FontSize="11"/>
+                        <Button x:Name="OpenStepButton" Content="Open in Editor" Classes="btn-secondary"
+                                Padding="10,4" FontSize="11"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ═══ SCHEDULE TAB ═══ -->
+                <ScrollViewer Grid.Row="1" IsVisible="{Binding IsJobScheduleTabActive}"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="10" Margin="15,10">
+                        <!-- Preview -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Preview:" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextSecondary}"/>
+                            <TextBlock Text="{Binding SchedulePreview}" FontSize="11"
+                                       Foreground="{DynamicResource AccentBlue}"/>
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                            <!-- Frequency type -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Frequency" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="FreqTypeCombo"
+                                      MinWidth="200" FontSize="11" SelectedIndex="0">
+                                <ComboBoxItem Content="Daily" Tag="4"/>
+                                <ComboBoxItem Content="Weekly" Tag="8"/>
+                                <ComboBoxItem Content="Monthly" Tag="16"/>
+                                <ComboBoxItem Content="Once" Tag="1"/>
+                                <ComboBoxItem Content="When SQL Agent starts" Tag="64"/>
+                                <ComboBoxItem Content="When CPU is idle" Tag="128"/>
+                            </ComboBox>
+
+                            <!-- Interval (Daily: every N days, Monthly: day N) -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Interval" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Every" FontSize="11" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding EditFreqInterval}" Minimum="1" Maximum="365"
+                                               Width="80" FontSize="11" FormatString="0"/>
+                                <TextBlock Text="day(s)" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Weekly day checkboxes -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Days" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <CheckBox Content="Sun" IsChecked="{Binding SchedSun}" FontSize="10"/>
+                                <CheckBox Content="Mon" IsChecked="{Binding SchedMon}" FontSize="10"/>
+                                <CheckBox Content="Tue" IsChecked="{Binding SchedTue}" FontSize="10"/>
+                                <CheckBox Content="Wed" IsChecked="{Binding SchedWed}" FontSize="10"/>
+                                <CheckBox Content="Thu" IsChecked="{Binding SchedThu}" FontSize="10"/>
+                                <CheckBox Content="Fri" IsChecked="{Binding SchedFri}" FontSize="10"/>
+                                <CheckBox Content="Sat" IsChecked="{Binding SchedSat}" FontSize="10"/>
+                            </StackPanel>
+
+                            <!-- Subday frequency -->
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Recurrence" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <ComboBox x:Name="SubdayTypeCombo" MinWidth="130" FontSize="11" SelectedIndex="0">
+                                    <ComboBoxItem Content="Once at time" Tag="1"/>
+                                    <ComboBoxItem Content="Every N minutes" Tag="4"/>
+                                    <ComboBoxItem Content="Every N hours" Tag="8"/>
+                                </ComboBox>
+                                <NumericUpDown Value="{Binding EditFreqSubdayInterval}" Minimum="1" Maximum="60"
+                                               Width="70" FontSize="11" FormatString="0"/>
+                            </StackPanel>
+
+                            <!-- Start time -->
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Start time" FontSize="11"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                <NumericUpDown Value="{Binding EditActiveStartHour}" Minimum="0" Maximum="23"
+                                               Width="65" FontSize="11" FormatString="00"/>
+                                <TextBlock Text=":" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding EditActiveStartMinute}" Minimum="0" Maximum="59"
+                                               Width="65" FontSize="11" FormatString="00"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Schedule buttons -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                            <Button Content="Save Schedule" Classes="btn-primary" Padding="14,5" FontSize="11"
+                                    Command="{Binding SaveScheduleCommand}"/>
+                            <Button Content="Remove Schedule" Classes="btn-secondary" Padding="10,5" FontSize="11"
+                                    Command="{Binding RemoveScheduleCommand}"
+                                    IsVisible="{Binding HasSchedule}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ═══ HISTORY TAB ═══ -->
+                <DataGrid Grid.Row="1" x:Name="JobHistoryGrid"
+                          ItemsSource="{Binding JobHistory}"
+                          IsReadOnly="True" GridLinesVisibility="Horizontal"
+                          BorderThickness="0" CanUserResizeColumns="True"
+                          IsVisible="{Binding IsJobHistoryTabActive}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Date" Binding="{Binding RunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="130"/>
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding RunStatusDisplay}" Width="80"/>
+                        <DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="70"/>
+                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="3" Background="{DynamicResource PanelHeaderBackground}" Padding="10,3">
+            <TextBlock Text="{Binding StatusMessage}" FontSize="11"
+                       Foreground="{DynamicResource TextSecondary}"/>
+        </Border>
+    </Grid>
+</UserControl>

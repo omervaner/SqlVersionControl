@@ -108,7 +108,7 @@
 
             <StackPanel Spacing="8">
                 <TextBlock Text="Export Path" FontWeight="SemiBold"/>
-                <TextBlock Text="When set, object definitions are exported as .sql files to this folder on sync."
+                <TextBlock Text="Export all object definitions as .sql files to this folder."
                            FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox x:Name="GitExportPathTextBox" Grid.Column="0"
@@ -116,6 +116,11 @@
                     <Button x:Name="BrowseGitFolderButton" Grid.Column="1"
                             Content="Browse..." Padding="10,5"/>
                 </Grid>
+                <CheckBox x:Name="IncludeSystemDbsCheckBox" Content="Include system databases"
+                          Margin="0,4,0,0"/>
+                <Button x:Name="ExportNowButton" Content="Export Now"
+                        Classes="btn-primary" Padding="16,8" HorizontalAlignment="Left"
+                        Margin="0,4,0,0"/>
             </StackPanel>
 
         </StackPanel>

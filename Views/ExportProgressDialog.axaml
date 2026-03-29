@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SqlVersionControl.Views.ExportProgressDialog"
+        Title="Git Export"
+        Width="460" Height="320"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid RowDefinitions="*,Auto" Margin="24">
+        <!-- Progress state -->
+        <StackPanel x:Name="ProgressPanel" Spacing="12" VerticalAlignment="Center">
+            <TextBlock x:Name="ProgressTitle" Text="Exporting..." FontSize="16" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Foreground="{DynamicResource TextBright}"/>
+            <TextBlock x:Name="ProgressMessage" Text="Connecting..."
+                       HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+            <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100"
+                         Height="6" Margin="20,8"/>
+            <TextBlock x:Name="ProgressDetail" Text=""
+                       FontSize="11" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextSecondary}"/>
+        </StackPanel>
+
+        <!-- Summary state (hidden initially) -->
+        <StackPanel x:Name="SummaryPanel" Spacing="10" VerticalAlignment="Center" IsVisible="False">
+            <TextBlock x:Name="SummaryTitle" Text="Export Complete" FontSize="16" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Foreground="{DynamicResource TextBright}"/>
+            <Border Background="{DynamicResource PanelHeaderBackground}" CornerRadius="6" Padding="16,12" Margin="0,4">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="SummaryServer" FontSize="12" Foreground="{DynamicResource TextSecondary}"/>
+                    <TextBlock x:Name="SummaryDatabases" FontSize="12" Foreground="{DynamicResource TextSecondary}"/>
+                    <TextBlock x:Name="SummaryDuration" FontSize="12" Foreground="{DynamicResource TextSecondary}"/>
+                    <Border Height="1" Background="{DynamicResource BorderDefault}" Margin="0,4"/>
+                    <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
+                        <TextBlock x:Name="SummaryAdded" FontSize="13" Foreground="{DynamicResource AccentGreen}"/>
+                        <TextBlock x:Name="SummaryModified" FontSize="13" Foreground="{DynamicResource AccentBlue}"/>
+                        <TextBlock x:Name="SummaryDeleted" FontSize="13" Foreground="{DynamicResource ButtonDanger}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <TextBlock x:Name="SummaryErrors" FontSize="11" Foreground="{DynamicResource ButtonDanger}"
+                       TextWrapping="Wrap" IsVisible="False"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
+            <Button x:Name="OpenFolderButton" Content="Open Folder"
+                    Classes="btn-secondary" Padding="16,8" IsVisible="False"/>
+            <Button x:Name="CloseButton" Content="Cancel"
+                    Classes="btn-secondary" Padding="16,8"/>
+        </StackPanel>
+    </Grid>
+</Window>

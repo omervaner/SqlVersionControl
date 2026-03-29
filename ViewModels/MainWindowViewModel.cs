@@ -51,6 +51,16 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private SavedConnection? _planConnectionProfile;
 
+    // --- Activity view owns its connection ---
+    [ObservableProperty]
+    private string _activityConnectionDisplay = "Disconnected";
+
+    [ObservableProperty]
+    private string _activityConnectionColor = "#88a1bb";
+
+    [ObservableProperty]
+    private SavedConnection? _activityConnectionProfile;
+
     [ObservableProperty]
     private bool _isQueryEditorActive;
 
@@ -153,6 +163,9 @@ public partial class MainWindowViewModel : ViewModelBase
         PlanConnectionDisplay = display;
         PlanConnectionColor = color;
         PlanConnectionProfile = profile;
+        ActivityConnectionDisplay = display;
+        ActivityConnectionColor = color;
+        ActivityConnectionProfile = profile;
 
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
@@ -173,6 +186,19 @@ public partial class MainWindowViewModel : ViewModelBase
         HistoryConnectionProfile = profile;
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
+    }
+
+    /// <summary>
+    /// Change the Activity view's connection independently.
+    /// </summary>
+    public void SetActivityConnection(ConnectionSettings settings, SavedConnection? profile)
+    {
+        var login = settings.UseWindowsAuth ? "Windows" : settings.Username;
+        ActivityConnectionDisplay = profile?.Name != null
+            ? $"{profile.Name} / {settings.Database} ({login})"
+            : $"{settings.Server} / {settings.Database} ({login})";
+        ActivityConnectionColor = profile?.Color ?? "#88a1bb";
+        ActivityConnectionProfile = profile;
     }
 
     private void StartAutoSyncTimer()

@@ -55,6 +55,10 @@ public partial class MainWindow : Window
         var planView = this.FindControl<PlanView>("PlanViewControl");
         planView?.Initialize(_viewModel.DatabaseService, _viewModel);
 
+        // Initialize ActivityView with shared services
+        var activityView = this.FindControl<ActivityView>("ActivityViewControl");
+        activityView?.Initialize(_viewModel.DatabaseService);
+
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         qeHost?.Initialize(_viewModel.DatabaseService, _viewModel, _sessionService, _settings);
@@ -76,6 +80,23 @@ public partial class MainWindow : Window
 
         // Wire up History connection button
         HistoryConnectionButton.Click += async (s, e) => await ChangeHistoryConnectionAsync();
+
+        // Wire up Activity connection button
+        var actView = this.FindControl<ActivityView>("ActivityViewControl");
+        if (actView != null)
+        {
+            actView.FindControl<Button>("ActivityConnectionButton")!.Click += async (s, e) =>
+                await ChangeActivityConnectionAsync();
+            // Wire "Open in Editor" from Activity view
+            if (actView.ViewModel != null)
+            {
+                actView.ViewModel.OpenInEditorRequested += script =>
+                {
+                    var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    host?.OpenScriptInNewTab(script);
+                };
+            }
+        }
 
         // Wire up retry button on reconnect overlay
         RetryButton.Click += async (s, e) => await ReconnectAsync();
@@ -102,6 +123,7 @@ public partial class MainWindow : Window
         VersionHistoryTab.Click += (_, _) => UpdateStatusBar();
         CompareTab.Click += (_, _) => UpdateStatusBar();
         PlanTab.Click += (_, _) => UpdateStatusBar();
+        ActivityTab.Click += (_, _) => UpdateStatusBar();
 
         // Wire update bar buttons
         UpdateNowButton.Click += OnUpdateNowClicked;
@@ -123,6 +145,7 @@ public partial class MainWindow : Window
         MenuSave.Click += async (_, _) => await OnMenuSaveAsync();
         MenuSaveAs.Click += async (_, _) => await OnMenuSaveAsAsync();
         MenuChangeDb.Click += async (_, _) => await OnMenuChangeDatabaseAsync();
+        MenuExportGit.Click += async (_, _) => await ExportToGitAsync();
         MenuExit.Click += (_, _) => Close();
 
         // Populate Recent Files and Query History submenus
@@ -451,6 +474,11 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.D5:
+                ActivityTab.IsChecked = true;
+                e.Handled = true;
+                break;
+
             case Key.B:
             {
                 var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
@@ -627,9 +655,18 @@ public partial class MainWindow : Window
             host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
 
             UpdateStatusBar();
+            UpdateHistoryConnectionDot();
 
             // Load databases into Query Editor Host
             if (host != null) _ = host.ReloadDatabasesAsync();
+
+            // Initialize Activity view with this connection
+            var actView = this.FindControl<ActivityView>("ActivityViewControl");
+            actView?.UpdateConnectionDot(
+                _viewModel.ActivityConnectionColor,
+                _viewModel.ActivityConnectionProfile?.Name);
+            if (actView != null)
+                _ = actView.InitializeConnectionAsync(dialog.Result.ConnectionString);
         }
         else
         {
@@ -639,8 +676,37 @@ public partial class MainWindow : Window
 
     private async Task ShowSettingsDialogAsync()
     {
-        var dialog = new SettingsDialog(_settings, RefreshDiffViews);
+        var connStr = GetActiveConnectionString();
+        var dialog = new SettingsDialog(_settings, RefreshDiffViews,
+            _viewModel.DatabaseService, connStr);
         await dialog.ShowDialog(this);
+    }
+
+    private async Task ExportToGitAsync()
+    {
+        var exportPath = _settings.Settings.GitExportPath;
+        if (string.IsNullOrEmpty(exportPath))
+        {
+            // No export path configured — open Settings dialog instead
+            await ShowSettingsDialogAsync();
+            return;
+        }
+
+        var connStr = GetActiveConnectionString();
+        if (connStr == null)
+            return;
+
+        var dialog = new ExportProgressDialog();
+        var showTask = dialog.ShowDialog(this);
+        await dialog.RunExportAsync(_viewModel.DatabaseService, connStr, exportPath,
+            _settings.Settings.GitIncludeSystemDatabases);
+        await showTask;
+    }
+
+    private string? GetActiveConnectionString()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        return host?.ActiveTabViewModel?.TabConnectionString;
     }
 
     private void FormatSqlInEditor()
@@ -743,6 +809,26 @@ public partial class MainWindow : Window
         HistoryConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(color);
         var profile = _viewModel.HistoryConnectionProfile;
         HistoryConnectionButton.Content = profile?.Name ?? "Connection";
+    }
+
+    private async Task ChangeActivityConnectionAsync()
+    {
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Result != null)
+        {
+            _viewModel.SetActivityConnection(dialog.Result, dialog.ResultConnection);
+            UpdateStatusBar();
+
+            // Update Activity view's connection dot and initialize
+            var actView = this.FindControl<ActivityView>("ActivityViewControl");
+            actView?.UpdateConnectionDot(
+                _viewModel.ActivityConnectionColor,
+                _viewModel.ActivityConnectionProfile?.Name);
+            if (actView != null)
+                await actView.InitializeConnectionAsync(dialog.Result.ConnectionString);
+        }
     }
 
     private async void OnWokeFromSleep()
@@ -854,6 +940,7 @@ public partial class MainWindow : Window
         var isHistory = VersionHistoryTab.IsChecked == true;
         var isCompare = CompareTab.IsChecked == true;
         var isPlan = PlanTab.IsChecked == true;
+        var isActivity = ActivityTab.IsChecked == true;
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         var activeTabVm = host?.ActiveTabViewModel;
 
@@ -877,6 +964,11 @@ public partial class MainWindow : Window
             {
                 displayColor = _viewModel.PlanConnectionColor;
                 displayText = _viewModel.PlanConnectionDisplay;
+            }
+            else if (isActivity)
+            {
+                displayColor = _viewModel.ActivityConnectionColor;
+                displayText = _viewModel.ActivityConnectionDisplay;
             }
             else
             {
