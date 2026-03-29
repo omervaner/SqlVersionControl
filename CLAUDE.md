@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.5 (March 30, 2026)
+## PROJECT STATUS: v2.4.6 (March 30, 2026)
+
+v2.4.6: OE connection context menu (New Query, Disconnect), reconnect prompt on F5, session tab color preservation.
 
 v2.4.5: Fix macOS window position drift — all dialogs use CenterOwner instead of CenterScreen.
 
