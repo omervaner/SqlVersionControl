@@ -74,6 +74,9 @@ public partial class MainWindow : Window
         // Wire up settings button
         SettingsButton.Click += async (s, e) => await ShowSettingsDialogAsync();
 
+        // Wire up History connection button
+        HistoryConnectionButton.Click += async (s, e) => await ChangeHistoryConnectionAsync();
+
         // Wire up retry button on reconnect overlay
         RetryButton.Click += async (s, e) => await ReconnectAsync();
 
@@ -119,6 +122,7 @@ public partial class MainWindow : Window
         MenuOpenFile.Click += async (_, _) => await OnMenuOpenFileAsync();
         MenuSave.Click += async (_, _) => await OnMenuSaveAsync();
         MenuSaveAs.Click += async (_, _) => await OnMenuSaveAsAsync();
+        MenuChangeDb.Click += async (_, _) => await OnMenuChangeDatabaseAsync();
         MenuExit.Click += (_, _) => Close();
 
         // Populate Recent Files and Query History submenus
@@ -133,19 +137,6 @@ public partial class MainWindow : Window
         MenuPaste.Click += (_, _) => GetActiveEditor()?.Paste();
         MenuFind.Click += (_, _) => OpenSearchPanel(false);
         MenuReplace.Click += (_, _) => OpenSearchPanel(true);
-
-        // Query menu
-        MenuRun.Click += (_, _) =>
-        {
-            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-            host?.RunActiveQuery();
-        };
-        MenuStop.Click += (_, _) =>
-        {
-            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-            host?.StopActiveQuery();
-        };
-        MenuChangeDb.Click += async (_, _) => await OnMenuChangeDatabaseAsync();
 
         // Help menu
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
@@ -617,10 +608,32 @@ public partial class MainWindow : Window
             host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
 
             UpdateStatusBar();
+            UpdateHistoryConnectionDot();
 
             // Reload databases into Query Editor Host
             if (host != null) _ = host.ReloadDatabasesAsync();
         }
+    }
+
+    private async Task ChangeHistoryConnectionAsync()
+    {
+        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Result != null)
+        {
+            _viewModel.SetHistoryConnection(dialog.Result, dialog.ResultConnection);
+            UpdateStatusBar();
+            UpdateHistoryConnectionDot();
+        }
+    }
+
+    private void UpdateHistoryConnectionDot()
+    {
+        var color = Avalonia.Media.Color.Parse(_viewModel.HistoryConnectionColor);
+        HistoryConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(color);
+        var profile = _viewModel.HistoryConnectionProfile;
+        HistoryConnectionButton.Content = profile?.Name ?? "Connection";
     }
 
     private async void OnWokeFromSleep()
@@ -729,24 +742,59 @@ public partial class MainWindow : Window
     private void UpdateStatusBar()
     {
         var isQE = QueryEditorTab.IsChecked == true;
+        var isHistory = VersionHistoryTab.IsChecked == true;
+        var isCompare = CompareTab.IsChecked == true;
+        var isPlan = PlanTab.IsChecked == true;
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         var activeTabVm = host?.ActiveTabViewModel;
 
-        // Connection indicator — on QE tab, use active tab's connection if set
+        // Each view owns its connection — status bar mirrors the active view
         if (_viewModel.IsConnected)
         {
-            var displayColor = isQE && activeTabVm?.TabConnectionProfile != null
-                ? activeTabVm.TabConnectionColor
-                : _viewModel.ConnectionColor;
-            var displayText = isQE && activeTabVm?.TabConnectionProfile != null
-                ? activeTabVm.TabConnectionDisplay
-                : _viewModel.ConnectionDisplay;
+            string displayColor;
+            string displayText;
+
+            if (isQE && activeTabVm?.TabConnectionProfile != null)
+            {
+                displayColor = activeTabVm.TabConnectionColor;
+                displayText = activeTabVm.TabConnectionDisplay;
+            }
+            else if (isHistory)
+            {
+                displayColor = _viewModel.HistoryConnectionColor;
+                displayText = _viewModel.HistoryConnectionDisplay;
+            }
+            else if (isPlan)
+            {
+                displayColor = _viewModel.PlanConnectionColor;
+                displayText = _viewModel.PlanConnectionDisplay;
+            }
+            else
+            {
+                displayColor = _viewModel.ConnectionColor;
+                displayText = _viewModel.ConnectionDisplay;
+            }
 
             var color = Avalonia.Media.Color.Parse(displayColor);
-            var brush = new Avalonia.Media.SolidColorBrush(color);
-            ConnectionDot.Fill = brush;
+            var solidBrush = new Avalonia.Media.SolidColorBrush(color);
+            ConnectionDot.Fill = solidBrush;
             ConnectionText.Text = displayText;
-            ConnectionStripe.Background = brush;
+
+            // Gradient fade at both horizontal ends
+            var transparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);
+            var gradientBrush = new Avalonia.Media.LinearGradientBrush
+            {
+                StartPoint = new Avalonia.RelativePoint(0, 0.5, Avalonia.RelativeUnit.Relative),
+                EndPoint = new Avalonia.RelativePoint(1, 0.5, Avalonia.RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new Avalonia.Media.GradientStop(transparent, 0.0),
+                    new Avalonia.Media.GradientStop(color, 0.15),
+                    new Avalonia.Media.GradientStop(color, 0.85),
+                    new Avalonia.Media.GradientStop(transparent, 1.0),
+                }
+            };
+            ConnectionStripe.Background = gradientBrush;
             ConnectionStripe.IsVisible = true;
 
             // Update window title

@@ -17,69 +17,71 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Title Bar: Menu + Color Stripe + Tab Row -->
         <Border Grid.Row="0" x:Name="TitleBarBorder" Background="{DynamicResource TitleBarBackground}">
-            <Grid RowDefinitions="Auto,Auto,Auto">
-                <!-- Menu Bar -->
-                <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
-                      Margin="80,0,0,0">
-                    <MenuItem Header="_File">
-                        <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuOpenFile" Header="Open File..." InputGesture="Ctrl+O"/>
-                        <MenuItem x:Name="MenuSave" Header="Save" InputGesture="Ctrl+S"/>
-                        <MenuItem x:Name="MenuSaveAs" Header="Save As..." InputGesture="Ctrl+Shift+S"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuRecentFiles" Header="Recent Files"/>
-                        <MenuItem x:Name="MenuQueryHistory" Header="Query History"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuExit" Header="Exit"/>
-                    </MenuItem>
-                    <MenuItem Header="_Edit">
-                        <MenuItem x:Name="MenuUndo" Header="Undo" InputGesture="Ctrl+Z"/>
-                        <MenuItem x:Name="MenuRedo" Header="Redo" InputGesture="Ctrl+Y"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuCut" Header="Cut" InputGesture="Ctrl+X"/>
-                        <MenuItem x:Name="MenuCopy" Header="Copy" InputGesture="Ctrl+C"/>
-                        <MenuItem x:Name="MenuPaste" Header="Paste" InputGesture="Ctrl+V"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuFind" Header="Find..." InputGesture="Ctrl+F"/>
-                        <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
-                    </MenuItem>
-                    <MenuItem Header="_Query">
-                        <MenuItem x:Name="MenuRun" Header="Run" InputGesture="F5"/>
-                        <MenuItem x:Name="MenuStop" Header="Stop"/>
-                        <Separator/>
-                        <MenuItem x:Name="MenuChangeDb" Header="Change Connection..."/>
-                    </MenuItem>
-                    <MenuItem Header="_Help">
-                        <MenuItem x:Name="MenuAbout" Header="About..."/>
-                        <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
-                    </MenuItem>
-                </Menu>
+            <Grid RowDefinitions="Auto,Auto">
+                <!-- Menu Bar + View Tabs (merged single row) -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                    <!-- Menus (left) -->
+                    <Menu Grid.Column="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
+                          Margin="80,0,0,0">
+                        <MenuItem Header="_File">
+                            <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuOpenFile" Header="Open File..." InputGesture="Ctrl+O"/>
+                            <MenuItem x:Name="MenuSave" Header="Save" InputGesture="Ctrl+S"/>
+                            <MenuItem x:Name="MenuSaveAs" Header="Save As..." InputGesture="Ctrl+Shift+S"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuChangeDb" Header="Change Connection..."/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuRecentFiles" Header="Recent Files"/>
+                            <MenuItem x:Name="MenuQueryHistory" Header="Query History"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuExit" Header="Exit"/>
+                        </MenuItem>
+                        <MenuItem Header="_Edit">
+                            <MenuItem x:Name="MenuUndo" Header="Undo" InputGesture="Ctrl+Z"/>
+                            <MenuItem x:Name="MenuRedo" Header="Redo" InputGesture="Ctrl+Y"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuCut" Header="Cut" InputGesture="Ctrl+X"/>
+                            <MenuItem x:Name="MenuCopy" Header="Copy" InputGesture="Ctrl+C"/>
+                            <MenuItem x:Name="MenuPaste" Header="Paste" InputGesture="Ctrl+V"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuFind" Header="Find..." InputGesture="Ctrl+F"/>
+                            <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
+                        </MenuItem>
+                        <MenuItem Header="_Help">
+                            <MenuItem x:Name="MenuAbout" Header="About..."/>
+                            <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
+                        </MenuItem>
+                    </Menu>
+
+                    <!-- Flexible space (Column 1 is star-sized) -->
+
+                    <!-- View Tabs + Settings (right-aligned) -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
+                        <RadioButton x:Name="QueryEditorTab" GroupName="Tabs" IsChecked="True"
+                                     Classes="TabButton" Content="Editor"/>
+                        <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="History"/>
+                        <RadioButton x:Name="CompareTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Compare"/>
+                        <RadioButton x:Name="PlanTab" GroupName="Tabs"
+                                     Classes="TabButton" Content="Exec Plan"/>
+                        <!-- Settings (tab-styled button, separated) -->
+                        <Border Width="1" Margin="8,6"
+                                Background="{DynamicResource BorderDefault}"/>
+                        <Button x:Name="SettingsButton"
+                                Background="Transparent" Foreground="{DynamicResource TextSecondary}"
+                                Padding="16,6" Margin="0"
+                                FontSize="12"
+                                ToolTip.Tip="Settings"
+                                Cursor="Hand"
+                                Content="Settings"/>
+                    </StackPanel>
+                </Grid>
 
                 <!-- Connection Color Stripe -->
                 <Border Grid.Row="1" x:Name="ConnectionStripe" Height="3"
                         Background="{DynamicResource ConnectionStripeColor}" IsVisible="False"/>
-
-                <!-- App Tab Row -->
-                <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="80,0,0,0">
-                        <RadioButton x:Name="QueryEditorTab" GroupName="Tabs" IsChecked="True"
-                                     Classes="TabButton" Content="Query Editor"/>
-                        <RadioButton x:Name="VersionHistoryTab" GroupName="Tabs"
-                                     Classes="TabButton" Content="Version History"/>
-                        <RadioButton x:Name="CompareTab" GroupName="Tabs"
-                                     Classes="TabButton" Content="Compare Databases"/>
-                        <RadioButton x:Name="PlanTab" GroupName="Tabs"
-                                     Classes="TabButton" Content="Execution Plan"/>
-                    </StackPanel>
-                    <Button x:Name="SettingsButton" Grid.Column="1"
-                            Background="Transparent" Foreground="{DynamicResource TextSecondary}"
-                            Padding="10,4" Margin="0,0,10,0"
-                            ToolTip.Tip="Settings"
-                            Cursor="Hand">
-                        <TextBlock Text="&#x2699;" FontSize="16"/>
-                    </Button>
-                </Grid>
             </Grid>
         </Border>
 
@@ -113,22 +115,31 @@
             <Grid IsVisible="{Binding #VersionHistoryTab.IsChecked}" RowDefinitions="Auto,*,Auto">
                 <!-- Top Toolbar -->
                 <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="15,10">
-                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+                        <!-- Connection selector for History view -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                            <Ellipse x:Name="HistoryConnectionDot" Width="8" Height="8"
+                                     VerticalAlignment="Center" Fill="{DynamicResource AccentBlue}"/>
+                            <Button x:Name="HistoryConnectionButton" Content="Connection"
+                                    Classes="btn-secondary" Padding="8,4" FontSize="11"
+                                    ToolTip.Tip="Change History connection" Cursor="Hand"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="15,0,0,0">
                             <TextBlock Text="Database:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding Databases}"
                                       SelectedItem="{Binding SelectedDatabase}"
                                       MinWidth="150"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="20,0,0,0">
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" Margin="20,0,0,0">
                             <TextBox x:Name="VersionHistorySearchBox"
                                      Text="{Binding SearchText}"
                                      Watermark="Search objects..."
                                      Width="200"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="10">
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10">
                             <Button Content="Sync" Classes="btn-primary"
                                     Command="{Binding SyncCommand}"
                                     ToolTip.Tip="Sync new changes from DDL log"/>
@@ -140,7 +151,7 @@
                                     IsVisible="{Binding SelectedObject, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                         </StackPanel>
 
-                        <TextBlock Grid.Column="4" Text="{Binding StatusMessage}"
+                        <TextBlock Grid.Column="5" Text="{Binding StatusMessage}"
                                    Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="20,0,0,0"/>
                     </Grid>
                 </Border>
@@ -390,6 +401,9 @@
         </Style>
         <Style Selector="RadioButton.TabButton:pointerover">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        </Style>
+        <Style Selector="Button#SettingsButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
         </Style>
         <Style Selector="Button#SettingsButton:pointerover">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>

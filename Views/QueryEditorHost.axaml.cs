@@ -502,6 +502,19 @@ public partial class QueryEditorHost : UserControl
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             });
 
+            // Connection color dot
+            if (vm?.TabConnectionProfile != null)
+            {
+                var dotColor = Avalonia.Media.Color.Parse(vm.TabConnectionColor);
+                headerPanel.Children.Add(new Avalonia.Controls.Shapes.Ellipse
+                {
+                    Width = 6,
+                    Height = 6,
+                    Fill = new Avalonia.Media.SolidColorBrush(dotColor),
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                });
+            }
+
             // Close button (×)
             var closeBtn = new Button
             {

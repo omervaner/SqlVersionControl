@@ -31,6 +31,26 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _connectionColor = "#88a1bb";
 
+    // --- History view owns its connection ---
+    [ObservableProperty]
+    private string _historyConnectionDisplay = "Disconnected";
+
+    [ObservableProperty]
+    private string _historyConnectionColor = "#88a1bb";
+
+    [ObservableProperty]
+    private SavedConnection? _historyConnectionProfile;
+
+    // --- Plan view owns its connection ---
+    [ObservableProperty]
+    private string _planConnectionDisplay = "Disconnected";
+
+    [ObservableProperty]
+    private string _planConnectionColor = "#88a1bb";
+
+    [ObservableProperty]
+    private SavedConnection? _planConnectionProfile;
+
     [ObservableProperty]
     private bool _isQueryEditorActive;
 
@@ -118,13 +138,41 @@ public partial class MainWindowViewModel : ViewModelBase
         IsConnected = true;
         StatusMessage = $"Connected to {settings.Server}/{settings.Database} - loading...";
         var login = settings.UseWindowsAuth ? "Windows" : settings.Username;
-        ConnectionDisplay = profile?.Name != null
+        var display = profile?.Name != null
             ? $"{profile.Name} / {settings.Database} ({login})"
             : $"{settings.Server} / {settings.Database} ({login})";
-        ConnectionColor = profile?.Color ?? "#88a1bb";
+        var color = profile?.Color ?? "#88a1bb";
+
+        ConnectionDisplay = display;
+        ConnectionColor = color;
+
+        // Stamp History and Plan with this connection (they remember it independently)
+        HistoryConnectionDisplay = display;
+        HistoryConnectionColor = color;
+        HistoryConnectionProfile = profile;
+        PlanConnectionDisplay = display;
+        PlanConnectionColor = color;
+        PlanConnectionProfile = profile;
+
         SelectedDatabase = settings.Database;
         _ = LoadDataAsync();
         StartAutoSyncTimer();
+    }
+
+    /// <summary>
+    /// Change the History view's connection independently.
+    /// </summary>
+    public void SetHistoryConnection(ConnectionSettings settings, SavedConnection? profile)
+    {
+        _db.SetConnection(settings);
+        var login = settings.UseWindowsAuth ? "Windows" : settings.Username;
+        HistoryConnectionDisplay = profile?.Name != null
+            ? $"{profile.Name} / {settings.Database} ({login})"
+            : $"{settings.Server} / {settings.Database} ({login})";
+        HistoryConnectionColor = profile?.Color ?? "#88a1bb";
+        HistoryConnectionProfile = profile;
+        SelectedDatabase = settings.Database;
+        _ = LoadDataAsync();
     }
 
     private void StartAutoSyncTimer()
