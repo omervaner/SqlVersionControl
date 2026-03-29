@@ -1,9 +1,16 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.1.1 (March 29, 2026)
+## PROJECT STATUS: v2.1.2 (March 29, 2026)
 
-v2.1.1: Security & code quality audit. See docs/SECURITY.md for full audit report.
+v2.1.2: UX blocking states fixed — reconnect overlay dismissable, scan/deploy cancellable.
+
+**v2.1.2 changes:**
+- Reconnect overlay: Dismiss button + Escape key, background retry every 10s, offline status bar (grey dot, desaturated stripe, "(offline)" suffix)
+- Compare scan: Cancel button with CancellationToken, shows partial results on cancel
+- Batch deploy: Cancel button, per-object progress ("Deploying 3/17: usp_GetStock..."), explicit 30s CommandTimeout on all deploy commands
+- Git Export cancel: verified already working (CTS wired to Cancel button)
+- Window title updated to "Lookout" in all states
 
 **v2.1.1 changes:**
 - Security: Connection string building now uses SqlConnectionStringBuilder (fixes injection via semicolons in passwords)

@@ -108,7 +108,11 @@
                     <Border Grid.Row="1" Padding="10,5" Background="{DynamicResource ScanProgressBackground}"
                             IsVisible="{Binding IsScanning}">
                         <StackPanel Spacing="5">
-                            <TextBlock Text="{Binding ScanProgressText}" FontSize="10" Foreground="{DynamicResource WarningSeverityWarning}"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding ScanProgressText}" FontSize="10" Foreground="{DynamicResource WarningSeverityWarning}" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Cancel" Command="{Binding CancelScanCommand}"
+                                        Classes="btn-secondary" Padding="8,2" FontSize="10" Cursor="Hand"/>
+                            </Grid>
                             <ProgressBar Value="{Binding ScanProgress}" Minimum="0" Maximum="100" Height="8"/>
                         </StackPanel>
                     </Border>
@@ -417,6 +421,10 @@
                             <TextBlock Text="Selected"/>
                         </StackPanel>
                     </Button>
+                    <Button Command="{Binding CancelDeployCommand}"
+                            IsVisible="{Binding IsDeploying}"
+                            Classes="btn-secondary" Padding="12,6" Margin="0,0,10,0"
+                            Content="Cancel Deploy" Cursor="Hand"/>
                 </Panel>
 
                 <Button Grid.Column="4" Content="Deploy to Target 1"

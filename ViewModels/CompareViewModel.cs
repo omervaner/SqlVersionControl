@@ -18,6 +18,10 @@ public partial class CompareViewModel : ViewModelBase
     // Table structure comparison
     private List<TableCompareResult> _tableCompareResults = new();
 
+    // Scan/deploy cancellation
+    private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _deployCts;
+
     // Store passwords temporarily for non-Windows auth (not persisted to disk)
     private readonly Dictionary<string, string> _passwords = new();
 
@@ -173,6 +177,9 @@ public partial class CompareViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isScanning;
+
+    [ObservableProperty]
+    private bool _isDeploying;
 
     [ObservableProperty]
     private double _scanProgress;
@@ -713,9 +720,26 @@ public partial class CompareViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void CancelScan()
+    {
+        _scanCts?.Cancel();
+    }
+
+    [RelayCommand]
+    private void CancelDeploy()
+    {
+        _deployCts?.Cancel();
+    }
+
     private async Task ScanForDifferencesAsync()
     {
         if (!IsSourceConnected || !IsTargetConnected) return;
+
+        _scanCts?.Cancel();
+        _scanCts?.Dispose();
+        _scanCts = new CancellationTokenSource();
+        var token = _scanCts.Token;
 
         IsScanning = true;
         ScanProgress = 0;
@@ -735,35 +759,46 @@ public partial class CompareViewModel : ViewModelBase
         // Parallel scan with bounded concurrency
         var semaphore = new SemaphoreSlim(5);
 
-        var tasks = objectsToScan.Select(async obj =>
+        try
         {
-            await semaphore.WaitAsync();
-            try
+            var tasks = objectsToScan.Select(async obj =>
             {
-                obj.SourceDefinition = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
-                obj.TargetDefinition = await GetDefinitionAsync(_targetConnectionString, obj.SchemaName, obj.ObjectName);
-                obj.HasBeenCompared = true;
-
-                var sourceNorm = NormalizeForComparison(obj.SourceDefinition);
-                var targetNorm = NormalizeForComparison(obj.TargetDefinition);
-                obj.Status = sourceNorm == targetNorm ? "Identical" : "Modified";
-
-                var c = Interlocked.Increment(ref current);
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                await semaphore.WaitAsync(token);
+                try
                 {
-                    ScanProgressText = $"Scanning {c}/{total}: {obj.ObjectName}";
-                    ScanProgress = (double)c / total * 100;
-                });
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
+                    token.ThrowIfCancellationRequested();
 
-        await Task.WhenAll(tasks);
+                    obj.SourceDefinition = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                    obj.TargetDefinition = await GetDefinitionAsync(_targetConnectionString, obj.SchemaName, obj.ObjectName);
+                    obj.HasBeenCompared = true;
 
-        // Count results
+                    var sourceNorm = NormalizeForComparison(obj.SourceDefinition);
+                    var targetNorm = NormalizeForComparison(obj.TargetDefinition);
+                    obj.Status = sourceNorm == targetNorm ? "Identical" : "Modified";
+
+                    var c = Interlocked.Increment(ref current);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        ScanProgressText = $"Scanning {c}/{total}: {obj.ObjectName}";
+                        ScanProgress = (double)c / total * 100;
+                    });
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = $"Scan cancelled ({current}/{total} objects compared)";
+        }
+
+        // Count results from whatever was compared (full or partial)
+        ModifiedCount = 0;
+        IdenticalCount = 0;
         foreach (var obj in _allObjects.Where(o => o.HasBeenCompared))
         {
             if (obj.Status == "Identical")
@@ -776,7 +811,9 @@ public partial class CompareViewModel : ViewModelBase
         ScanProgressText = "";
         OnPropertyChanged(nameof(HasSummary));
         FilterObjects();
-        StatusMessage = $"Scan complete: {ModifiedCount} modified, {SourceOnlyCount} source only, {TargetOnlyCount} target only";
+
+        if (!token.IsCancellationRequested)
+            StatusMessage = $"Scan complete: {ModifiedCount} modified, {SourceOnlyCount} source only, {TargetOnlyCount} target only";
     }
 
     private string NormalizeForComparison(string? code)
@@ -956,7 +993,7 @@ public partial class CompareViewModel : ViewModelBase
             // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
             var deployScript = DatabaseService.ConvertToCreateOrAlter(SourceCode);
 
-            using var cmd = new SqlCommand(deployScript, conn);
+            using var cmd = new SqlCommand(deployScript, conn) { CommandTimeout = 30 };
             await cmd.ExecuteNonQueryAsync();
 
             StatusMessage = $"Deployed {SelectedObject.FullName} to {SelectedTargetConnection?.Server}";
@@ -995,7 +1032,7 @@ public partial class CompareViewModel : ViewModelBase
             // Convert CREATE to CREATE OR ALTER so it works whether object exists or not
             var deployScript = DatabaseService.ConvertToCreateOrAlter(TargetCode);
 
-            using var cmd = new SqlCommand(deployScript, conn);
+            using var cmd = new SqlCommand(deployScript, conn) { CommandTimeout = 30 };
             await cmd.ExecuteNonQueryAsync();
 
             StatusMessage = $"Deployed {SelectedObject.FullName} to {SelectedTarget2Connection?.Server}";
@@ -1624,50 +1661,73 @@ public partial class CompareViewModel : ViewModelBase
             if (!confirmed) return;
         }
 
-        StatusMessage = $"Deploying {selectedObjects.Count} {(IsTableCompareMode ? "tables" : "objects")}...";
+        _deployCts?.Cancel();
+        _deployCts?.Dispose();
+        _deployCts = new CancellationTokenSource();
+        var token = _deployCts.Token;
+
+        IsDeploying = true;
+        var total = selectedObjects.Count;
         var successCount = 0;
         var failCount = 0;
 
-        foreach (var obj in selectedObjects)
+        try
         {
-            try
+            for (int i = 0; i < selectedObjects.Count; i++)
             {
-                if (IsTableCompareMode)
+                token.ThrowIfCancellationRequested();
+
+                var obj = selectedObjects[i];
+                StatusMessage = $"Deploying {i + 1}/{total}: {obj.ObjectName}...";
+
+                try
                 {
-                    await DeployTableAsync(obj, showStatus: false);
-                }
-                else
-                {
-                    // Get definition if not cached
-                    var sourceCode = obj.SourceDefinition;
-                    if (string.IsNullOrEmpty(sourceCode))
+                    if (IsTableCompareMode)
                     {
-                        sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                        await DeployTableAsync(obj, showStatus: false);
+                    }
+                    else
+                    {
+                        // Get definition if not cached
+                        var sourceCode = obj.SourceDefinition;
+                        if (string.IsNullOrEmpty(sourceCode))
+                        {
+                            sourceCode = await GetDefinitionAsync(_sourceConnectionString, obj.SchemaName, obj.ObjectName);
+                        }
+
+                        var deployScript = DatabaseService.ConvertToCreateOrAlter(sourceCode);
+
+                        using var conn = new SqlConnection(_targetConnectionString);
+                        await conn.OpenAsync(token);
+                        using var cmd = new SqlCommand(deployScript, conn) { CommandTimeout = 30 };
+                        await cmd.ExecuteNonQueryAsync(token);
                     }
 
-                    var deployScript = DatabaseService.ConvertToCreateOrAlter(sourceCode);
-
-                    using var conn = new SqlConnection(_targetConnectionString);
-                    await conn.OpenAsync();
-                    using var cmd = new SqlCommand(deployScript, conn);
-                    await cmd.ExecuteNonQueryAsync();
+                    obj.IsSelected = false;
+                    successCount++;
                 }
-
-                obj.IsSelected = false;
-                successCount++;
-            }
-            catch
-            {
-                failCount++;
+                catch (OperationCanceledException) { throw; }
+                catch
+                {
+                    failCount++;
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = $"Deploy cancelled — {successCount} succeeded, {failCount} failed, {total - successCount - failCount} skipped";
+        }
 
+        IsDeploying = false;
         UpdateSelectedCount();
 
-        if (failCount == 0)
-            StatusMessage = $"Successfully deployed {successCount} {(IsTableCompareMode ? "tables" : "objects")} to {targetDesc}";
-        else
-            StatusMessage = $"Deployed {successCount}, {failCount} failed";
+        if (!token.IsCancellationRequested)
+        {
+            if (failCount == 0)
+                StatusMessage = $"Successfully deployed {successCount} {(IsTableCompareMode ? "tables" : "objects")} to {targetDesc}";
+            else
+                StatusMessage = $"Deployed {successCount}, {failCount} failed";
+        }
 
         // Refresh to update states
         await LoadObjectsAsync();

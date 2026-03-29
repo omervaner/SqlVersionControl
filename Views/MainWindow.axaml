@@ -345,10 +345,16 @@
                            HorizontalAlignment="Center"/>
                 <ProgressBar x:Name="ReconnectProgress" IsIndeterminate="True"
                              Width="250" Foreground="{DynamicResource AccentBlue}"/>
-                <Button x:Name="RetryButton" Content="Click to Retry"
-                        Classes="btn-secondary" Padding="20,8"
-                        HorizontalAlignment="Center" IsVisible="False"
-                        Cursor="Hand"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+                    <Button x:Name="RetryButton" Content="Retry"
+                            Classes="btn-secondary" Padding="20,8"
+                            IsVisible="False" Cursor="Hand"/>
+                    <Button x:Name="DismissButton" Content="Dismiss"
+                            Classes="btn-secondary" Padding="20,8"
+                            Cursor="Hand"/>
+                </StackPanel>
+                <TextBlock Text="Press Escape to dismiss" Foreground="{DynamicResource TextDisabled}"
+                           FontSize="11" HorizontalAlignment="Center"/>
             </StackPanel>
         </Panel>
 

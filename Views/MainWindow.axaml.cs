@@ -18,6 +18,9 @@ public partial class MainWindow : Window
     private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
     private UpdateService? _updateService;
+    private bool _isOffline;
+    private string? _lastConnectionColor;
+    private string? _lastConnectionDisplay;
 
     public SettingsService AppSettings => _settings;
 
@@ -98,8 +101,9 @@ public partial class MainWindow : Window
             }
         }
 
-        // Wire up retry button on reconnect overlay
-        RetryButton.Click += async (s, e) => await ReconnectAsync();
+        // Wire up reconnect overlay buttons
+        RetryButton.Click += async (_, _) => await ReconnectAsync();
+        DismissButton.Click += (_, _) => DismissReconnectOverlay();
 
         // Wire menu items
         WireMenuItems();
@@ -359,6 +363,14 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        // Escape dismisses reconnect overlay
+        if (e.Key == Key.Escape && ReconnectOverlay.IsVisible)
+        {
+            DismissReconnectOverlay();
+            e.Handled = true;
+            return;
+        }
+
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
 
@@ -848,21 +860,24 @@ public partial class MainWindow : Window
         ReconnectText.Text = "Reconnecting...";
         ReconnectProgress.IsVisible = true;
         RetryButton.IsVisible = false;
+        DismissButton.IsVisible = true;
 
         SqlConnection.ClearAllPools();
 
         for (int i = 1; i <= 3; i++)
         {
+            // If user dismissed the overlay, continue reconnecting in background
+            if (!ReconnectOverlay.IsVisible)
+            {
+                await BackgroundReconnectAsync();
+                return;
+            }
+
             ReconnectText.Text = $"Reconnecting... (attempt {i}/3)";
 
             if (await _viewModel.DatabaseService.TestConnectionAsync())
             {
-                ReconnectOverlay.IsVisible = false;
-                _viewModel.StatusMessage = "Reconnected after sleep";
-
-                // Clear per-server caches — tabs will re-validate on next query
-                var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
-                host?.ClearServerCaches();
+                OnReconnected();
                 return;
             }
 
@@ -870,9 +885,64 @@ public partial class MainWindow : Window
                 await Task.Delay(2000);
         }
 
-        ReconnectText.Text = "Connection lost";
-        ReconnectProgress.IsVisible = false;
-        RetryButton.IsVisible = true;
+        // All 3 foreground attempts failed — show retry, keep dismiss available
+        if (ReconnectOverlay.IsVisible)
+        {
+            ReconnectText.Text = "Connection lost";
+            ReconnectProgress.IsVisible = false;
+            RetryButton.IsVisible = true;
+        }
+        else
+        {
+            // User dismissed during attempts — continue in background
+            await BackgroundReconnectAsync();
+        }
+    }
+
+    private void DismissReconnectOverlay()
+    {
+        ReconnectOverlay.IsVisible = false;
+        _isOffline = true;
+        UpdateStatusBar();
+        _viewModel.StatusMessage = "Working offline — reconnecting in background";
+    }
+
+    private async Task BackgroundReconnectAsync()
+    {
+        _isOffline = true;
+        UpdateStatusBar();
+
+        // Retry every 10 seconds in the background until success
+        while (_isOffline)
+        {
+            await Task.Delay(10000);
+            if (!_isOffline) return; // Already reconnected or app closing
+
+            try
+            {
+                if (await _viewModel.DatabaseService.TestConnectionAsync())
+                {
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(OnReconnected);
+                    return;
+                }
+            }
+            catch
+            {
+                // Keep retrying
+            }
+        }
+    }
+
+    private void OnReconnected()
+    {
+        _isOffline = false;
+        ReconnectOverlay.IsVisible = false;
+        _viewModel.StatusMessage = "Reconnected";
+        UpdateStatusBar();
+
+        // Clear per-server caches — tabs will re-validate on next query
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        host?.ClearServerCaches();
     }
 
     private static void OpenUrl(string url)
@@ -982,29 +1052,60 @@ public partial class MainWindow : Window
             }
 
             var color = Avalonia.Media.Color.Parse(displayColor);
-            var solidBrush = new Avalonia.Media.SolidColorBrush(color);
-            ConnectionDot.Fill = solidBrush;
-            ConnectionText.Text = displayText;
 
-            // Gradient fade at both horizontal ends
-            var transparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);
-            var gradientBrush = new Avalonia.Media.LinearGradientBrush
+            // Save last known connection info for offline state
+            _lastConnectionColor = displayColor;
+            _lastConnectionDisplay = displayText;
+
+            if (_isOffline)
             {
-                StartPoint = new Avalonia.RelativePoint(0, 0.5, Avalonia.RelativeUnit.Relative),
-                EndPoint = new Avalonia.RelativePoint(1, 0.5, Avalonia.RelativeUnit.Relative),
-                GradientStops =
-                {
-                    new Avalonia.Media.GradientStop(transparent, 0.0),
-                    new Avalonia.Media.GradientStop(color, 0.15),
-                    new Avalonia.Media.GradientStop(color, 0.85),
-                    new Avalonia.Media.GradientStop(transparent, 1.0),
-                }
-            };
-            ConnectionStripe.Background = gradientBrush;
-            ConnectionStripe.IsVisible = true;
+                // Desaturated: grey dot, dimmed stripe at 20% opacity, "(offline)" suffix
+                var grey = Avalonia.Media.Color.FromRgb(128, 128, 128);
+                ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(grey);
+                ConnectionText.Text = $"{displayText} (offline)";
 
-            // Update window title
-            this.Title = $"SQL Version Control — {displayText}";
+                var dimColor = Avalonia.Media.Color.FromArgb(50, color.R, color.G, color.B);
+                var dimTransparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);
+                var gradientBrush = new Avalonia.Media.LinearGradientBrush
+                {
+                    StartPoint = new Avalonia.RelativePoint(0, 0.5, Avalonia.RelativeUnit.Relative),
+                    EndPoint = new Avalonia.RelativePoint(1, 0.5, Avalonia.RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new Avalonia.Media.GradientStop(dimTransparent, 0.0),
+                        new Avalonia.Media.GradientStop(dimColor, 0.15),
+                        new Avalonia.Media.GradientStop(dimColor, 0.85),
+                        new Avalonia.Media.GradientStop(dimTransparent, 1.0),
+                    }
+                };
+                ConnectionStripe.Background = gradientBrush;
+                ConnectionStripe.IsVisible = true;
+                this.Title = $"Lookout — {displayText} (offline)";
+            }
+            else
+            {
+                var solidBrush = new Avalonia.Media.SolidColorBrush(color);
+                ConnectionDot.Fill = solidBrush;
+                ConnectionText.Text = displayText;
+
+                // Gradient fade at both horizontal ends
+                var transparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);
+                var gradientBrush = new Avalonia.Media.LinearGradientBrush
+                {
+                    StartPoint = new Avalonia.RelativePoint(0, 0.5, Avalonia.RelativeUnit.Relative),
+                    EndPoint = new Avalonia.RelativePoint(1, 0.5, Avalonia.RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new Avalonia.Media.GradientStop(transparent, 0.0),
+                        new Avalonia.Media.GradientStop(color, 0.15),
+                        new Avalonia.Media.GradientStop(color, 0.85),
+                        new Avalonia.Media.GradientStop(transparent, 1.0),
+                    }
+                };
+                ConnectionStripe.Background = gradientBrush;
+                ConnectionStripe.IsVisible = true;
+                this.Title = $"Lookout — {displayText}";
+            }
         }
         else
         {
@@ -1014,7 +1115,7 @@ public partial class MainWindow : Window
                 ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(231, 76, 60));
             ConnectionText.Text = "Disconnected";
             ConnectionStripe.IsVisible = false;
-            this.Title = "SQL Version Control";
+            this.Title = "Lookout";
         }
 
         // Quick-switch buttons
