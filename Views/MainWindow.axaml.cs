@@ -572,6 +572,19 @@ public partial class MainWindow : Window
                 break;
 
             case Key.Escape when !ctrl:
+                // Cancel running query on Query Editor tab
+                if (QueryEditorTab.IsChecked == true)
+                {
+                    var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    var activeTab = qeHost?.ActiveTabViewModel;
+                    if (activeTab?.IsRunning == true)
+                    {
+                        activeTab.StopQueryCommand.Execute(null);
+                        e.Handled = true;
+                        break;
+                    }
+                }
+
                 if (_viewModel.IsDependencyMode)
                 {
                     _viewModel.BackFromDependenciesCommand.Execute(null);
