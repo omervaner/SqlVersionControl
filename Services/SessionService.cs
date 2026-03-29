@@ -75,9 +75,9 @@ public class SessionService
             RowCount = rowCount
         });
 
-        // Cap at 10
-        if (_data.QueryHistory.Count > 10)
-            _data.QueryHistory.RemoveRange(10, _data.QueryHistory.Count - 10);
+        // Cap at 200
+        if (_data.QueryHistory.Count > 200)
+            _data.QueryHistory.RemoveRange(200, _data.QueryHistory.Count - 200);
 
         Save();
     }

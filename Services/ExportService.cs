@@ -70,6 +70,16 @@ public static class ExportService
         var sb = new StringBuilder();
         var columnList = string.Join(", ", columnNames.Select(c => $"[{c}]"));
 
+        // Header comment with row count and NULL warning
+        sb.AppendLine($"-- {rows.Count} row{(rows.Count == 1 ? "" : "s")} from [{schema}].[{table}]");
+        var nullColumns = columnNames
+            .Where((name, i) => rows.Any(r => i < r.Length && r[i] == null))
+            .Select(n => $"[{n}]")
+            .ToList();
+        if (nullColumns.Count > 0)
+            sb.AppendLine($"-- \u26a0 {nullColumns.Count} column{(nullColumns.Count == 1 ? "" : "s")} contain NULLs: {string.Join(", ", nullColumns)}");
+        sb.AppendLine();
+
         foreach (var row in rows)
         {
             sb.Append($"INSERT INTO [{schema}].[{table}] ({columnList})\nVALUES (");

@@ -129,7 +129,9 @@
                               GridLinesVisibility="All"
                               BorderThickness="0"
                               CanUserResizeColumns="True"
-                              CanUserSortColumns="True">
+                              CanUserSortColumns="True"
+                              CanUserReorderColumns="True"
+                              FrozenColumnCount="0">
                         <DataGrid.Styles>
                             <Style Selector="DataGridCell">
                                 <Setter Property="MinHeight" Value="0"/>

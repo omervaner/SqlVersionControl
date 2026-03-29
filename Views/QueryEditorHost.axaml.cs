@@ -88,8 +88,11 @@ public partial class QueryEditorHost : UserControl
         // Refresh query tab strip on theme change
         ThemeManager.ThemeChanged += RefreshTheme;
 
-        // Wire history button
-        QueryHistoryButton.Click += OnHistoryButtonClicked;
+        // Wire history button (toggle panel)
+        QueryHistoryButton.Click += (_, _) => ToggleHistoryPanel();
+        HistoryCloseButton.Click += (_, _) => ToggleHistoryPanel();
+        HistorySearchBox.TextChanged += (_, _) => RefreshHistoryGrid();
+        HistoryGrid.DoubleTapped += OnHistoryGridDoubleTapped;
 
         // Wire autocomplete toggle
         AutocompleteToggleButton.Click += OnAutocompleteToggleClicked;
@@ -545,6 +548,14 @@ public partial class QueryEditorHost : UserControl
             closeBtn.Click += async (_, _) => await CloseTabAsync(idx);
             headerPanel.Children.Add(closeBtn);
 
+            // Colored bottom border for connection environment
+            IBrush? bottomBorder = null;
+            if (vm?.TabConnectionProfile != null)
+            {
+                var borderColor = Avalonia.Media.Color.Parse(vm.TabConnectionColor);
+                bottomBorder = new Avalonia.Media.SolidColorBrush(borderColor);
+            }
+
             var tabBtn = new Button
             {
                 Content = headerPanel,
@@ -552,7 +563,8 @@ public partial class QueryEditorHost : UserControl
                 Foreground = isActive ? activeFg : normalFg,
                 Padding = new Thickness(10, 4),
                 Cursor = new Cursor(StandardCursorType.Hand),
-                BorderThickness = new Thickness(0)
+                BorderThickness = bottomBorder != null ? new Thickness(0, 0, 0, 2) : new Thickness(0),
+                BorderBrush = bottomBorder
             };
             tabBtn.Click += (_, _) => SwitchToTab(idx);
 
@@ -1066,60 +1078,50 @@ public partial class QueryEditorHost : UserControl
     /// <summary>Whether autocomplete is currently enabled (checked by QueryTabView).</summary>
     public bool IsAutocompleteEnabled => GetSettingsService()?.Settings.AutocompleteEnabled ?? true;
 
-    // ── Query History ────────────────────────────────────────────────
+    // ── Query History Panel ─────────────────────────────────────────
 
-    private void OnHistoryButtonClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void ToggleHistoryPanel()
+    {
+        var visible = !HistoryPanel.IsVisible;
+        HistoryPanel.IsVisible = visible;
+        HistorySplitter.IsVisible = visible;
+        if (visible) RefreshHistoryGrid();
+    }
+
+    private void RefreshHistoryGrid()
     {
         if (_sessionService == null) return;
 
         var history = _sessionService.GetQueryHistory();
-        var menu = new MenuFlyout();
+        var filter = HistorySearchBox.Text?.Trim() ?? "";
 
-        if (history.Count == 0)
+        var items = history
+            .Where(h => string.IsNullOrEmpty(filter)
+                || h.SqlText.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || (h.Database?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true))
+            .Select(h => new HistoryDisplayItem(h))
+            .ToList();
+
+        HistoryGrid.ItemsSource = items;
+    }
+
+    private void OnHistoryGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (HistoryGrid.SelectedItem is not HistoryDisplayItem item) return;
+
+        AddNewTab();
+        if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
         {
-            var empty = new MenuItem { Header = "(no history)", IsEnabled = false };
-            menu.Items.Add(empty);
-        }
-        else
-        {
-            foreach (var entry in history)
+            var tab = _tabs[_activeTabIndex];
+            var vm = tab.DataContext as QueryTabViewModel;
+            if (vm != null)
             {
-                var truncated = entry.SqlText.ReplaceLineEndings(" ");
-                if (truncated.Length > 80)
-                    truncated = truncated[..77] + "...";
-
-                var timeAgo = FormatTimeAgo(entry.ExecutedAt);
-                var dbLabel = entry.Database ?? "";
-
-                var item = new MenuItem
-                {
-                    Header = truncated
-                };
-                ToolTip.SetTip(item, $"{entry.SqlText}\n\n{dbLabel} — {timeAgo} — {entry.RowCount:N0} rows");
-
-                var sql = entry.SqlText;
-                var db = entry.Database;
-                item.Click += (_, _) =>
-                {
-                    AddNewTab();
-                    if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
-                    {
-                        var tab = _tabs[_activeTabIndex];
-                        var vm = tab.DataContext as QueryTabViewModel;
-                        if (vm != null)
-                        {
-                            tab.Editor.Text = sql;
-                            vm.SetInitialText(sql);
-                            if (db != null && vm.Databases.Contains(db))
-                                vm.SelectedDatabase = db;
-                        }
-                    }
-                };
-                menu.Items.Add(item);
+                tab.Editor.Text = item.Entry.SqlText;
+                vm.SetInitialText(item.Entry.SqlText);
+                if (item.Entry.Database != null && vm.Databases.Contains(item.Entry.Database))
+                    vm.SelectedDatabase = item.Entry.Database;
             }
         }
-
-        menu.ShowAt(QueryHistoryButton, true);
     }
 
     private static string FormatTimeAgo(DateTime when)
@@ -1514,6 +1516,16 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(CreateMenuItem("Reset to 0", () => explorer.RequestResetSequence(node)));
                 break;
 
+            case ObjectExplorerNodeType.Trigger:
+                menu.Items.Add(CreateMenuItem("View Definition", () => _ = explorer.ViewDefinitionAsync(node)));
+                menu.Items.Add(new Separator());
+                var isDisabled = node.TypeInfo.Contains("Disabled");
+                menu.Items.Add(CreateMenuItem(isDisabled ? "Enable Trigger" : "Disable Trigger",
+                    () => explorer.ToggleTrigger(node, isDisabled)));
+                menu.Items.Add(CreateMenuItem("Script as ALTER", () => _ = explorer.ScriptAsAlterAsync(node)));
+                menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
+                break;
+
             case ObjectExplorerNodeType.Job:
                 menu.Items.Add(CreateMenuItem("View Job Steps", () => _ = explorer.ViewJobStepsAsync(node)));
                 menu.Items.Add(CreateMenuItem("View History", () => _ = explorer.ViewJobHistoryAsync(node)));
@@ -1591,10 +1603,49 @@ public partial class QueryEditorHost : UserControl
                 explorer.InsertColumnName(node);
                 e.Handled = true;
                 break;
+            case ObjectExplorerNodeType.Trigger:
+                _ = explorer.ViewDefinitionAsync(node);
+                e.Handled = true;
+                break;
             case ObjectExplorerNodeType.Sequence:
                 explorer.SelectSequenceValue(node);
                 e.Handled = true;
                 break;
+        }
+    }
+}
+
+public class HistoryDisplayItem
+{
+    public HistoryEntry Entry { get; }
+
+    public HistoryDisplayItem(HistoryEntry entry)
+    {
+        Entry = entry;
+    }
+
+    public string TruncatedSql
+    {
+        get
+        {
+            var s = Entry.SqlText.ReplaceLineEndings(" ");
+            return s.Length > 120 ? s[..117] + "..." : s;
+        }
+    }
+
+    public string? Database => Entry.Database;
+    public int RowCount => Entry.RowCount;
+
+    public string TimeAgo
+    {
+        get
+        {
+            var span = DateTime.Now - Entry.ExecutedAt;
+            if (span.TotalMinutes < 1) return "just now";
+            if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+            if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+            if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+            return Entry.ExecutedAt.ToString("MMM d");
         }
     }
 }

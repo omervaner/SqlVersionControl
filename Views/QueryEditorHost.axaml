@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SqlVersionControl.ViewModels"
              xmlns:models="using:SqlVersionControl.Models"
+             xmlns:views="using:SqlVersionControl.Views"
              x:Class="SqlVersionControl.Views.QueryEditorHost"
              x:DataType="vm:QueryEditorHostViewModel">
 
@@ -53,7 +54,7 @@
                 </Border>
 
                 <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
-                          Padding="20,4,4,4"
+                          Padding="10,4,4,4"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>
                         <!-- Compact spacing + two-way expand binding + filter visibility -->
@@ -246,8 +247,65 @@
                 </Grid>
             </Border>
 
-            <!-- Tab Content -->
-            <Panel Grid.Row="1" x:Name="TabContentPanel"/>
+            <!-- Tab Content + History Panel -->
+            <Grid Grid.Row="1" RowDefinitions="*,Auto,Auto">
+                <Panel Grid.Row="0" x:Name="TabContentPanel"/>
+
+                <!-- History Panel (hidden by default) -->
+                <GridSplitter Grid.Row="1" x:Name="HistorySplitter" Height="4"
+                              Background="{DynamicResource BorderDefault}"
+                              IsVisible="False"/>
+                <Border Grid.Row="2" x:Name="HistoryPanel" IsVisible="False"
+                        Height="200" Background="{DynamicResource SidebarBackground}"
+                        BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0">
+                    <Grid RowDefinitions="Auto,*">
+                        <!-- Header -->
+                        <Border Grid.Row="0" Padding="8,4" Background="{DynamicResource PanelHeaderBackground}">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Text="Query History" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center"/>
+                                <TextBox x:Name="HistorySearchBox" Grid.Column="1"
+                                         Watermark="Search history..." FontSize="11"
+                                         Margin="12,0" Height="24" Padding="6,0"
+                                         BorderThickness="1" BorderBrush="{DynamicResource BorderDefault}"/>
+                                <Button x:Name="HistoryCloseButton" Grid.Column="2"
+                                        Content="×" Background="Transparent"
+                                        Foreground="{DynamicResource TextSecondary}"
+                                        Padding="6,0" BorderThickness="0" Cursor="Hand"
+                                        FontSize="14" MinWidth="0" MinHeight="0"
+                                        ToolTip.Tip="Close history panel"/>
+                            </Grid>
+                        </Border>
+                        <!-- History List -->
+                        <DataGrid x:Name="HistoryGrid" Grid.Row="1"
+                                  x:DataType="views:HistoryDisplayItem"
+                                  IsReadOnly="True" SelectionMode="Single"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  BorderThickness="0" CanUserResizeColumns="True"
+                                  CanUserSortColumns="True" AutoGenerateColumns="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="SQL" Width="*"
+                                                    Binding="{Binding TruncatedSql}"/>
+                                <DataGridTextColumn Header="Database" Width="120"
+                                                    Binding="{Binding Database}"/>
+                                <DataGridTextColumn Header="Rows" Width="60"
+                                                    Binding="{Binding RowCount}"/>
+                                <DataGridTextColumn Header="When" Width="100"
+                                                    Binding="{Binding TimeAgo}"/>
+                            </DataGrid.Columns>
+                            <DataGrid.Styles>
+                                <Style Selector="DataGridCell TextBlock">
+                                    <Setter Property="FontSize" Value="11"/>
+                                    <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
+                                </Style>
+                                <Style Selector="DataGridRow">
+                                    <Setter Property="MinHeight" Value="0"/>
+                                </Style>
+                            </DataGrid.Styles>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

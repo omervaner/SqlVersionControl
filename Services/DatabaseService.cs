@@ -900,6 +900,36 @@ public class DatabaseService
         return results;
     }
 
+    public async Task<List<(string Schema, string Name, string ParentTable, bool IsEnabled)>> GetTriggersAsync(string database)
+        => await GetTriggersAsync(_connectionString, database);
+
+    public async Task<List<(string Schema, string Name, string ParentTable, bool IsEnabled)>> GetTriggersAsync(
+        string connectionString, string database)
+    {
+        var results = new List<(string, string, string, bool)>();
+        var safeDb = database.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT s.name, t.name, OBJECT_NAME(t.parent_id, DB_ID('{database.Replace("'", "''")}')), t.is_disabled
+            FROM [{safeDb}].sys.triggers t
+            JOIN [{safeDb}].sys.objects o ON t.parent_id = o.object_id
+            JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+            WHERE t.parent_class = 1
+            ORDER BY s.name, t.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add((reader.GetString(0), reader.GetString(1),
+                          reader.IsDBNull(2) ? "" : reader.GetString(2),
+                          !reader.GetBoolean(3))); // is_disabled → IsEnabled (inverted)
+
+        return results;
+    }
+
     public async Task AlterSequenceRestartAsync(string connectionString, string database, string schema, string name, long restartValue)
     {
         var safeDb = database.Replace("]", "]]");

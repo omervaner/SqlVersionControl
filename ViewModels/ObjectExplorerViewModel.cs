@@ -160,7 +160,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     await LoadFolderChildrenAsync(node);
                     break;
                 case ObjectExplorerNodeType.Table:
-                    await LoadColumnsAsync(node);
+                    await LoadTableChildrenAsync(node);
                     break;
             }
         }
@@ -293,6 +293,14 @@ public partial class ObjectExplorerViewModel : ObservableObject
                 await AddChildrenInBatchesAsync(folderNode, seqNodes);
                 break;
 
+            case "Columns":
+                await LoadColumnsAsync(folderNode);
+                break;
+
+            case "Triggers":
+                await LoadTableTriggersAsync(folderNode);
+                break;
+
             case "Jobs":
                 try
                 {
@@ -369,26 +377,85 @@ public partial class ObjectExplorerViewModel : ObservableObject
         }
     }
 
-    private async Task LoadColumnsAsync(ObjectExplorerNode tableNode)
+    private Task LoadTableChildrenAsync(ObjectExplorerNode tableNode)
     {
+        // Columns folder
+        var columnsFolder = WireNode(new ObjectExplorerNode
+        {
+            Name = "Columns",
+            DatabaseName = tableNode.DatabaseName,
+            Schema = tableNode.Schema,
+            ParentTableName = tableNode.Name,
+            NodeType = ObjectExplorerNodeType.Folder,
+            Children = [ObjectExplorerNode.CreateDummy()]
+        });
+        tableNode.Children.Add(columnsFolder);
+
+        // Triggers folder
+        var triggersFolder = WireNode(new ObjectExplorerNode
+        {
+            Name = "Triggers",
+            DatabaseName = tableNode.DatabaseName,
+            Schema = tableNode.Schema,
+            ParentTableName = tableNode.Name,
+            NodeType = ObjectExplorerNodeType.Folder,
+            Children = [ObjectExplorerNode.CreateDummy()]
+        });
+        tableNode.Children.Add(triggersFolder);
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadColumnsAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var tableName = folderNode.ParentTableName;
+
         var columns = _activeConnectionString != null
-            ? await _db.GetColumnsAsync(_activeConnectionString, tableNode.DatabaseName, tableNode.Schema, tableNode.Name)
-            : await _db.GetColumnsAsync(tableNode.DatabaseName, tableNode.Schema, tableNode.Name);
+            ? await _db.GetColumnsAsync(_activeConnectionString, db, schema, tableName)
+            : await _db.GetColumnsAsync(db, schema, tableName);
 
         foreach (var (name, typeName, maxLength, isNullable, isPk) in columns)
         {
             var typeInfo = FormatColumnType(typeName, maxLength);
 
-            tableNode.Children.Add(new ObjectExplorerNode
+            folderNode.Children.Add(new ObjectExplorerNode
             {
                 Name = name,
-                DatabaseName = tableNode.DatabaseName,
-                Schema = tableNode.Schema,
+                DatabaseName = db,
+                Schema = schema,
                 NodeType = ObjectExplorerNodeType.Column,
                 TypeInfo = typeInfo,
                 IsPrimaryKey = isPk,
                 IsNullable = isNullable,
-                ParentTableName = tableNode.Name
+                ParentTableName = tableName
+            });
+        }
+    }
+
+    private async Task LoadTableTriggersAsync(ObjectExplorerNode folderNode)
+    {
+        var db = folderNode.DatabaseName;
+        var schema = folderNode.Schema;
+        var tableName = folderNode.ParentTableName;
+
+        var triggers = _activeConnectionString != null
+            ? await _db.GetTriggersAsync(_activeConnectionString, db)
+            : await _db.GetTriggersAsync(db);
+
+        var tableTrigs = triggers.Where(t =>
+            t.ParentTable.Equals(tableName, StringComparison.OrdinalIgnoreCase) &&
+            t.Schema.Equals(schema, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var t in tableTrigs)
+        {
+            folderNode.Children.Add(new ObjectExplorerNode
+            {
+                Name = t.Name, Schema = t.Schema, DatabaseName = db,
+                ParentTableName = t.ParentTable,
+                NodeType = ObjectExplorerNodeType.Trigger,
+                TypeInfo = t.IsEnabled ? "" : "Disabled"
             });
         }
     }
@@ -456,10 +523,20 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ObjectExplorerNodeType.View => "VIEW",
             ObjectExplorerNodeType.Proc => "PROCEDURE",
             ObjectExplorerNodeType.Function => "FUNCTION",
+            ObjectExplorerNodeType.Trigger => "TRIGGER",
             _ => "OBJECT"
         };
         var sql = $"DROP {objectType} IF EXISTS [{schema}].[{node.Name}]";
         InsertTextRequested?.Invoke(sql, false);
+    }
+
+    public void ToggleTrigger(ObjectExplorerNode node, bool enable)
+    {
+        var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+        var parentTable = node.ParentTableName;
+        var action = enable ? "ENABLE" : "DISABLE";
+        var sql = $"{action} TRIGGER [{schema}].[{node.Name}] ON [{schema}].[{parentTable}]";
+        InsertTextRequested?.Invoke(sql, true);
     }
 
     /// <summary>Generate INSERT template with all columns and placeholder values.</summary>

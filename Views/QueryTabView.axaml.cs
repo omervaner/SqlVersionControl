@@ -107,6 +107,12 @@ public partial class QueryTabView : UserControl
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.KeyDown += OnResultsGridKeyDown;
 
+        // Column header right-click for freeze/unfreeze
+        ResultsGrid.AddHandler(PointerReleasedEvent, OnColumnHeaderPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Prevent column header double-click from triggering cell edit mode
+        ResultsGrid.AddHandler(Avalonia.Input.Gestures.DoubleTappedEvent, OnColumnHeaderDoubleTapped, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         // Wire results collapse button + double-click results tab bar to toggle
         ResultsCollapseButton.Click += (_, _) => ToggleResultsPanel();
         ResultsTabBar.DoubleTapped += (_, _) => ToggleResultsPanel();
@@ -1818,6 +1824,7 @@ public partial class QueryTabView : UserControl
     {
         ResultsGrid.Columns.Clear();
         ResultsGrid.AutoGenerateColumns = false;
+        ResultsGrid.FrozenColumnCount = 0;
 
         for (int i = 0; i < result.ColumnNames.Length; i++)
         {
@@ -1832,6 +1839,67 @@ public partial class QueryTabView : UserControl
                 IsReadOnly = !isEditMode,
             });
         }
+    }
+
+    private void OnColumnHeaderDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // If double-click originated from a column header, consume it so
+        // the DataGrid doesn't enter cell edit mode
+        var source = e.Source as Avalonia.Visual;
+        while (source != null && source is not Avalonia.Controls.DataGridColumnHeader && source != ResultsGrid)
+            source = source.GetVisualParent() as Avalonia.Visual;
+
+        if (source is Avalonia.Controls.DataGridColumnHeader)
+            e.Handled = true;
+    }
+
+    private void OnColumnHeaderPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right) return;
+
+        // Walk up the visual tree to find the DataGridColumnHeader
+        var source = e.Source as Avalonia.Visual;
+        while (source != null && source is not Avalonia.Controls.DataGridColumnHeader)
+            source = source.GetVisualParent() as Avalonia.Visual;
+
+        if (source is not Avalonia.Controls.DataGridColumnHeader header) return;
+
+        var headerText = header.Content?.ToString() ?? "";
+        var colIndex = -1;
+        for (int i = 0; i < ResultsGrid.Columns.Count; i++)
+        {
+            if (ResultsGrid.Columns[i].Header?.ToString() == headerText)
+            { colIndex = i; break; }
+        }
+        if (colIndex < 0) return;
+
+        var colName = headerText;
+        var isFrozen = colIndex < ResultsGrid.FrozenColumnCount;
+
+        var menu = new ContextMenu();
+
+        var freezeItem = new MenuItem
+        {
+            Header = isFrozen ? $"Unfreeze \"{colName}\"" : $"Freeze \"{colName}\""
+        };
+        freezeItem.Click += (_, _) =>
+        {
+            if (isFrozen)
+                ResultsGrid.FrozenColumnCount = colIndex; // Unfreeze this and all after
+            else
+                ResultsGrid.FrozenColumnCount = colIndex + 1; // Freeze up to and including this
+        };
+        menu.Items.Add(freezeItem);
+
+        if (ResultsGrid.FrozenColumnCount > 0)
+        {
+            var unfreezeAll = new MenuItem { Header = "Unfreeze All" };
+            unfreezeAll.Click += (_, _) => ResultsGrid.FrozenColumnCount = 0;
+            menu.Items.Add(unfreezeAll);
+        }
+
+        menu.Open(header);
+        e.Handled = true;
     }
 
     private const int MessagesTabTag = -1000;

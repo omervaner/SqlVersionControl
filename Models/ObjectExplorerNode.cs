@@ -13,7 +13,8 @@ public enum ObjectExplorerNodeType
     Function,
     Column,
     Sequence,
-    Job
+    Job,
+    Trigger
 }
 
 public partial class ObjectExplorerNode : ObservableObject
@@ -66,7 +67,7 @@ public partial class ObjectExplorerNode : ObservableObject
             => string.IsNullOrEmpty(Schema) || Schema == "dbo"
                 ? Name
                 : $"{Schema}.{Name}",
-        ObjectExplorerNodeType.Job
+        ObjectExplorerNodeType.Job or ObjectExplorerNodeType.Trigger
             => string.IsNullOrEmpty(TypeInfo) ? Name : $"{Name} ({TypeInfo})",
         _ => Name
     };
@@ -97,6 +98,7 @@ public partial class ObjectExplorerNode : ObservableObject
         ObjectExplorerNodeType.Function => "#e67e22",
         ObjectExplorerNodeType.Sequence => "#16a085",
         ObjectExplorerNodeType.Job => "#e74c3c",
+        ObjectExplorerNodeType.Trigger => "#d35400",
         ObjectExplorerNodeType.Column when IsPrimaryKey => "#f1c40f",
         ObjectExplorerNodeType.Column => "#888888",
         ObjectExplorerNodeType.Folder => FolderIconColor,
@@ -108,12 +110,14 @@ public partial class ObjectExplorerNode : ObservableObject
     /// </summary>
     private string FolderIconColor => Name switch
     {
+        "Columns" => "#888888",
         "Tables" => "#2a6e4e",
         "Views" => "#2980b9",
         "Stored Procedures" => "#8e44ad",
         "Functions" => "#e67e22",
         "Sequences" => "#16a085",
         "Jobs" => "#e74c3c",
+        "Triggers" => "#d35400",
         _ => "#aaaaaa"
     };
 

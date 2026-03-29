@@ -210,3 +210,65 @@ The app already handles the unconfigured state gracefully — `GetDdlSource()` r
 1. A `SetupWizard` dialog/view with the two-path flow
 2. A "first run" flag in settings (`HasCompletedSetup: bool`)
 3. Friendly empty states on Version History and Git Export when unconfigured
+
+---
+
+## QoL Ideas (From Codebase Audit)
+
+### 5. Query Tab Bottom-Border Coloring
+**Current state:** Colored dots (6px) on query tabs show which connection they belong to. With 5+ tabs across 3 environments, dots aren't scannable enough.
+
+**Idea:** A thin colored bottom-border on the entire tab — like VS Code's tab decorations or Chrome's tab groups. "All the red-bottomed tabs are PROD, blue ones are DEV." The color is already stored per-tab (`TabConnectionColor`) — this is pure XAML, no logic changes.
+
+### 6. Run on Multiple Connections
+**Idea:** You have a hotfix script that needs to run on DEV, then TEST, then PROD. Right now you open 3 tabs, paste the same script, F5 each one. A "Run on..." button (or Cmd+Shift+Enter) that executes the active tab's SQL against a list of checked connections would save real time during deployments.
+
+**Safety:** This is dangerous, so it needs the environment-aware confirmation dialog from the Connection Manager. Show each target with its environment tag, require explicit checkboxes, PROD connections get the scary red confirmation. Maybe even execute sequentially with a pause between environments so you can verify DEV worked before hitting PROD.
+
+### 7. Searchable Query History
+**Current state:** `SessionService` stores the last 10 queries in a File menu dropdown. No search, no filtering, cap too low.
+
+**Idea:** A searchable history panel (Cmd+E or a dedicated view) with timestamp, database, connection name, row count, and the full SQL text. Search by keyword — "what was that query I ran last Tuesday against the inventory table?" Bump the cap from 10 to 100+. If it grows beyond what JSON handles well, move to a SQLite file in the app data folder. Each entry is clickable — opens in a new tab with the same database pre-selected.
+
+### 8. Triggers in Object Explorer
+**Current state:** OE loads tables, views, procs, functions, sequences, and jobs. Triggers are tracked by the DDL system (ObjectVersions stores them) but aren't browsable in the tree.
+
+**Idea:** Add a "Triggers" folder under each database in OE. Show trigger name, parent table, enabled/disabled status. Right-click → View Definition, Script as ALTER/DROP, Enable/Disable. The data is already in `sys.triggers` / `sys.sql_modules`. For a version control tool, not being able to browse the objects you're tracking is a gap.
+
+### 9. Find All References (Editor)
+**Current state:** Peek Definition (Cmd+Click) shows one object's definition. Dependency Explorer shows what an object uses/is used by. But there's no way to ask "where is this column or table used across all procs?" from the editor.
+
+**Idea:** Right-click a word in the editor → "Find All References" (or Cmd+Shift+F12 like VS/VS Code). Runs `SearchObjectDefinitionsAsync` (already exists) for the selected word against `sys.sql_modules`. Results appear in a panel — object name, line number, the matching line with the word highlighted. Click a result → opens the definition with cursor at that line. The infrastructure is fully built — this is just a new UI gesture wired to the existing code search.
+
+### 10. Freeze/Pin Columns in Result Grid
+**Current state:** SELECT * from a wide table, scroll right, lose the PK column. No way to freeze columns.
+
+**Idea:** Right-click a column header → "Freeze Column" pins it to the left. Avalonia DataGrid supports `FrozenColumnCount` natively. Default: freeze 0 columns. When the user freezes one, set `FrozenColumnCount = N` where N is the column's display index + 1. A small pin/snowflake icon on frozen column headers. Right-click → "Unfreeze" to reset.
+
+### 11. SQL Snippets / Abbreviation Expansion
+**Idea:** Type `sel` + Tab → expands to `SELECT TOP 100 * FROM |` with cursor positioned after FROM. Type `ins` + Tab → `INSERT INTO | () VALUES ()`. Type `decl` + Tab → `DECLARE @| INT = NULL`.
+
+A JSON file in the app data folder with abbreviation → expansion pairs and a `$cursor` marker for cursor position:
+```json
+{
+  "sel": "SELECT TOP 100 * FROM $cursor",
+  "ins": "INSERT INTO $cursor () VALUES ()",
+  "decl": "DECLARE @$cursor INT = NULL",
+  "iff": "IF EXISTS (SELECT 1 FROM $cursor)\nBEGIN\n\nEND",
+  "cte": "WITH CTE AS (\n    SELECT $cursor\n)\nSELECT * FROM CTE"
+}
+```
+
+User-editable — power users add their own. The expansion triggers on Tab when the cursor is immediately after a known abbreviation. No conflict with intellisense because intellisense triggers on typing, snippets trigger on Tab after a complete abbreviation.
+
+### 12. Copy as INSERT — NULL Warning Header
+**Current state:** Copy as INSERT generates `INSERT INTO ... VALUES (...)` with inline `NULL` for null values. If pasted into a table with NOT NULL constraints and no defaults, it fails on the wrong row with no obvious reason.
+
+**Idea:** Add a comment header to the generated INSERT output:
+```sql
+-- 3 rows from [dbo].[Employees]
+-- ⚠ 2 columns contain NULLs: [ManagerId], [EndDate]
+INSERT INTO [dbo].[Employees] ...
+```
+
+Small change, saves real debugging time when deploying data between environments.
