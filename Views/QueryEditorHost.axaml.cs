@@ -110,7 +110,11 @@ public partial class QueryEditorHost : UserControl
         ToolbarRunButton.Click += (_, _) =>
         {
             var vm = ActiveTabViewModel;
-            if (vm?.RunQueryCommand.CanExecute(null) == true)
+            if (vm == null) return;
+            var editor = GetActiveEditor();
+            vm.SelectedSqlText = editor?.SelectedText ?? "";
+            vm.SqlText = editor?.Text ?? "";
+            if (vm.RunQueryCommand.CanExecute(null))
                 _ = vm.RunQueryCommand.ExecuteAsync(null);
         };
         ToolbarStopButton.Click += (_, _) =>
