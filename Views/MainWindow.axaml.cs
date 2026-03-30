@@ -29,6 +29,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Extend into title bar on macOS only (traffic light integration)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            ExtendClientAreaToDecorationsHint = true;
+            ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.PreferSystemChrome;
+            ExtendClientAreaTitleBarHeightHint = 28;
+        }
+
         _settings = new SettingsService();
         _registry = new ConnectionRegistry(_settings);
         _registry.Load();

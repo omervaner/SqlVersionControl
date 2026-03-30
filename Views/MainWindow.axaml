@@ -10,10 +10,7 @@
         x:DataType="vm:MainWindowViewModel"
         Title="Lookout"
         Width="1200" Height="700"
-        WindowStartupLocation="CenterScreen"
-        ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaChromeHints="PreferSystemChrome"
-        ExtendClientAreaTitleBarHeightHint="28">
+        WindowStartupLocation="CenterScreen">
 
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
         <!-- Title Bar: Menu + Color Stripe + Tab Row -->

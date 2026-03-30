@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.8 (March 31, 2026)
+## PROJECT STATUS: v2.4.9 (March 31, 2026)
+
+v2.4.9: Extended title bar (traffic lights) macOS-only — fixes Windows title bar buttons being cut off.
 
 v2.4.8: Fix crash on long-running queries — elapsed timer was updating UI from thread pool thread.
 
