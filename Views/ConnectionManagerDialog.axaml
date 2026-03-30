@@ -132,10 +132,10 @@
                             IsEnabled="{Binding !IsTesting}"
                             Classes="btn-secondary" Padding="10,5" FontSize="11"/>
                     <Button Content="Connect" Command="{Binding ConnectCommand}"
-                            IsVisible="{Binding SelectedConnection, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            IsEnabled="{Binding CanConnect}"
                             Classes="btn-primary" Padding="10,5" FontSize="11"/>
                     <Button Content="Disconnect" Command="{Binding DisconnectCommand}"
-                            IsVisible="{Binding SelectedConnection.IsConnected}"
+                            IsEnabled="{Binding CanDisconnect}"
                             Classes="btn-danger" Padding="10,5" FontSize="11"/>
                 </StackPanel>
 

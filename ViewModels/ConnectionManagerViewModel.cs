@@ -67,6 +67,16 @@ public partial class ConnectionManagerViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isTesting;
 
+    // Computed enable/disable for Connect and Disconnect buttons
+    public bool CanConnect => SelectedConnection == null || !SelectedConnection.IsConnected;
+    public bool CanDisconnect => SelectedConnection != null && SelectedConnection.IsConnected;
+
+    private void RefreshButtonStates()
+    {
+        OnPropertyChanged(nameof(CanConnect));
+        OnPropertyChanged(nameof(CanDisconnect));
+    }
+
     public static readonly string[] Environments =
         ["Dev", "Test", "Staging", "Production", "Other", "Unknown"];
 
@@ -100,6 +110,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
         IsEditing = true;
         IsNewConnection = false;
         TestResult = "";
+        RefreshButtonStates();
     }
 
     private void LoadFormFromConnection(SavedConnection config)
@@ -136,6 +147,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
 
         IsEditing = true;
         IsNewConnection = true;
+        RefreshButtonStates();
     }
 
     [RelayCommand]
@@ -201,6 +213,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
 
         TestResult = "Saved.";
         TestSuccess = true;
+        RefreshButtonStates();
     }
 
     [RelayCommand]
@@ -284,7 +297,12 @@ public partial class ConnectionManagerViewModel : ViewModelBase
     [RelayCommand]
     private async Task ConnectAsync()
     {
-        if (SelectedConnection == null) return;
+        // Auto-save if new or unsaved
+        if (IsNewConnection || SelectedConnection == null)
+        {
+            Save();
+            if (SelectedConnection == null) return; // Save failed (validation)
+        }
 
         var (success, error) = await _registry.ConnectAsync(SelectedConnection.Id);
         if (success)
@@ -297,6 +315,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
             TestResult = $"Failed: {error}";
             TestSuccess = false;
         }
+        RefreshButtonStates();
     }
 
     [RelayCommand]
@@ -306,5 +325,6 @@ public partial class ConnectionManagerViewModel : ViewModelBase
         _registry.Disconnect(SelectedConnection.Id);
         TestResult = "Disconnected.";
         TestSuccess = false;
+        RefreshButtonStates();
     }
 }
