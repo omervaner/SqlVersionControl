@@ -40,8 +40,15 @@ public partial class ObjectExplorerNode : ObservableObject
     [ObservableProperty] private int _childCount;
     [ObservableProperty] private bool _isVisibleInFilter = true;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private long _rowCount = -1; // -1 = not loaded
 
     partial void OnChildCountChanged(int value) => OnPropertyChanged(nameof(DisplayName));
+    partial void OnRowCountChanged(long value)
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(ShowRowCount));
+        OnPropertyChanged(nameof(FormattedRowCount));
+    }
     partial void OnTypeInfoChanged(string value)
     {
         OnPropertyChanged(nameof(DisplayName));
@@ -66,7 +73,7 @@ public partial class ObjectExplorerNode : ObservableObject
 
     public string DisplayName => NodeType switch
     {
-        ObjectExplorerNodeType.Connection => Name,
+        ObjectExplorerNodeType.Connection => ConnectionDisplayName,
         ObjectExplorerNodeType.Column or ObjectExplorerNodeType.Parameter => Name,
         ObjectExplorerNodeType.Folder => ChildCount > 0 ? $"{Name} ({ChildCount})" : Name,
         ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
@@ -80,6 +87,103 @@ public partial class ObjectExplorerNode : ObservableObject
         _ => Name
     };
 
+    // ── Row count display (right-aligned in tree, separate from DisplayName) ──
+
+    public bool ShowRowCount => NodeType == ObjectExplorerNodeType.Table && RowCount >= 0;
+
+    public string FormattedRowCount => FormatRowCount(RowCount);
+
+    private static string FormatRowCount(long count) => count switch
+    {
+        < 0 => "",
+        < 1_000 => count.ToString(),
+        < 1_000_000 => $"{count / 1_000.0:F1}K",
+        < 1_000_000_000 => $"{count / 1_000_000.0:F1}M",
+        _ => $"{count / 1_000_000_000.0:F1}B"
+    };
+
+    // ── Badge system (colored letter badges for OE nodes) ──
+
+    public string BadgeLetter => NodeType switch
+    {
+        ObjectExplorerNodeType.Connection => "S",
+        ObjectExplorerNodeType.Database => "", // uses cylinder icon instead
+        ObjectExplorerNodeType.Table => "T",
+        ObjectExplorerNodeType.View => "V",
+        ObjectExplorerNodeType.Proc => "P",
+        ObjectExplorerNodeType.Function => "\u0192", // ƒ
+        ObjectExplorerNodeType.Sequence => "#",
+        ObjectExplorerNodeType.Job => "J",
+        ObjectExplorerNodeType.Trigger => "\u26a1", // ⚡
+        ObjectExplorerNodeType.Column when IsPrimaryKey => "\u25cf", // ●
+        ObjectExplorerNodeType.Column => "\u25cb", // ○
+        ObjectExplorerNodeType.Parameter => "\u25c7", // ◇
+        ObjectExplorerNodeType.Folder when IsCategoryFolder => FolderBadgeLetter,
+        _ => ""
+    };
+
+    private string FolderBadgeLetter => Name switch
+    {
+        "Tables" => "T",
+        "Views" => "V",
+        "Stored Procedures" => "P",
+        "Functions" => "\u0192", // ƒ
+        "Sequences" => "#",
+        "Types" => "\u03a9", // Ω
+        "Database Triggers" => "\u26a1", // ⚡
+        "Jobs" => "J",
+        "Triggers" => "\u26a1", // ⚡
+        _ => ""
+    };
+
+    /// <summary>Whether this node renders as a badge (rounded rect) vs inline character.</summary>
+    public bool HasBadge => NodeType is ObjectExplorerNodeType.Connection
+        or ObjectExplorerNodeType.Database
+        or ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
+        or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
+        or ObjectExplorerNodeType.Sequence or ObjectExplorerNodeType.Job
+        or ObjectExplorerNodeType.Trigger
+        || (NodeType == ObjectExplorerNodeType.Folder && IsCategoryFolder && !string.IsNullOrEmpty(FolderBadgeLetter));
+
+    /// <summary>Badge background opacity: folders bolder (0.15), objects subtler (0.08), connections solid (1.0).</summary>
+    public double BadgeOpacity => NodeType switch
+    {
+        ObjectExplorerNodeType.Connection => 1.0,
+        ObjectExplorerNodeType.Folder when IsCategoryFolder => 0.15,
+        _ => 0.08
+    };
+
+    /// <summary>Badge letter foreground: white for connection nodes (solid bg), IconColor for others.</summary>
+    public string BadgeLetterColor => NodeType == ObjectExplorerNodeType.Connection ? "#ffffff" : IconColor;
+
+    /// <summary>Badge width.</summary>
+    public double BadgeWidth => 18;
+
+    // ── Connection node display split ──
+
+    public string ConnectionDisplayName
+    {
+        get
+        {
+            if (NodeType != ObjectExplorerNodeType.Connection) return Name;
+            var parenIdx = Name.LastIndexOf('(');
+            return parenIdx > 0 ? Name[..parenIdx].Trim() : Name;
+        }
+    }
+
+    public string ConnectionServerHint
+    {
+        get
+        {
+            if (NodeType != ObjectExplorerNodeType.Connection) return "";
+            var parenIdx = Name.LastIndexOf('(');
+            return parenIdx > 0 ? Name[parenIdx..] : "";
+        }
+    }
+
+    public bool IsConnectionNode => NodeType == ObjectExplorerNodeType.Connection;
+    public bool IsDatabaseNode => NodeType == ObjectExplorerNodeType.Database;
+
     // Computed helpers for template binding
     public bool IsColumn => NodeType is ObjectExplorerNodeType.Column or ObjectExplorerNodeType.Parameter;
     public bool HasTypeInfo => !string.IsNullOrEmpty(TypeInfo);
@@ -90,29 +194,19 @@ public partial class ObjectExplorerNode : ObservableObject
     public bool IsCategoryFolder { get; set; }
     public double DisplayFontSize => NodeType is ObjectExplorerNodeType.Connection or ObjectExplorerNodeType.Database ? 13 : 12;
     public string NullabilityText => IsNullable ? "NULL" : "NOT NULL";
-
-    public string Icon => NodeType switch
-    {
-        ObjectExplorerNodeType.Column when IsPrimaryKey => "\u25cf", // ●
-        ObjectExplorerNodeType.Column => "\u25cb",                   // ○
-        ObjectExplorerNodeType.Parameter => "\u25c7",                // ◇
-        _ => "\u25cf"                                                // ●
-    };
-
-    public bool IsConnectionNode => NodeType == ObjectExplorerNodeType.Connection;
     public double DisplayFontWeight => NodeType is ObjectExplorerNodeType.Connection ? 700 : IsBold ? 600 : 400;
 
     public string IconColor => NodeType switch
     {
         ObjectExplorerNodeType.Connection => ConnectionColor ?? "#aaaaaa",
-        ObjectExplorerNodeType.Database => "#aaaaaa",
-        ObjectExplorerNodeType.Table => "#2a6e4e",
-        ObjectExplorerNodeType.View => "#2980b9",
-        ObjectExplorerNodeType.Proc => "#8e44ad",
-        ObjectExplorerNodeType.Function => "#e67e22",
-        ObjectExplorerNodeType.Sequence => "#16a085",
-        ObjectExplorerNodeType.Job => "#e74c3c",
-        ObjectExplorerNodeType.Trigger => "#d35400",
+        ObjectExplorerNodeType.Database => "#888888",
+        ObjectExplorerNodeType.Table => "#3d8b5e",
+        ObjectExplorerNodeType.View => "#4a8fc0",
+        ObjectExplorerNodeType.Proc => "#9a6aaf",
+        ObjectExplorerNodeType.Function => "#cc8a3a",
+        ObjectExplorerNodeType.Sequence => "#20a080",
+        ObjectExplorerNodeType.Job => "#cc4f45",
+        ObjectExplorerNodeType.Trigger => "#cc5f2e",
         ObjectExplorerNodeType.Column when IsPrimaryKey => "#f1c40f",
         ObjectExplorerNodeType.Column => "#888888",
         ObjectExplorerNodeType.Parameter => "#9b59b6",
@@ -121,24 +215,24 @@ public partial class ObjectExplorerNode : ObservableObject
     };
 
     /// <summary>
-    /// Folder color matches its children type.
+    /// Folder color matches its children type — bolder shade for folder badges.
     /// </summary>
     private string FolderIconColor => Name switch
     {
         "Columns" => "#888888",
-        "Tables" => "#2a6e4e",
-        "Views" => "#2980b9",
-        "Stored Procedures" => "#8e44ad",
-        "Functions" => "#e67e22",
-        "Sequences" => "#16a085",
-        "Jobs" => "#e74c3c",
-        "Triggers" => "#d35400",
+        "Tables" => "#4caf7a",
+        "Views" => "#5ba3d9",
+        "Stored Procedures" => "#b07cc7",
+        "Functions" => "#e6a04e",
+        "Sequences" => "#2dbf9a",
+        "Jobs" => "#e8645a",
+        "Triggers" => "#cc5f2e",
         "Parameters" => "#9b59b6",
-        "Indexes" => "#2980b9",
-        "Keys" => "#e74c3c",
+        "Indexes" => "#5ba3d9",
+        "Keys" => "#e8645a",
         "Constraints" => "#f39c12",
-        "Types" => "#16a085",
-        "Database Triggers" => "#d35400",
+        "Types" => "#2dbf9a",
+        "Database Triggers" => "#e8723a",
         _ => "#aaaaaa"
     };
 

@@ -947,6 +947,151 @@ public class DatabaseService
         return results;
     }
 
+    public async Task<Dictionary<string, long>> GetTableRowCountsAsync(string database)
+        => await GetTableRowCountsAsync(_connectionString, database);
+
+    public async Task<Dictionary<string, long>> GetTableRowCountsAsync(string connectionString, string database)
+    {
+        var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var connStr = BuildConnectionString(connectionString, database);
+        using var conn = new SqlConnection(connStr);
+        await conn.OpenAsync();
+
+        var sql = @"
+            SELECT s.name + '.' + t.name, SUM(p.row_count)
+            FROM sys.tables t
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            JOIN sys.dm_db_partition_stats p ON t.object_id = p.object_id AND p.index_id IN (0, 1)
+            GROUP BY s.name, t.name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            result[reader.GetString(0)] = reader.GetInt64(1);
+
+        return result;
+    }
+
+    public async Task<Dictionary<string, int>> GetObjectCountsAsync(string connectionString, string database)
+    {
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var connStr = BuildConnectionString(connectionString, database);
+        using var conn = new SqlConnection(connStr);
+        await conn.OpenAsync();
+
+        var sql = @"
+            SELECT
+                CASE o.type
+                    WHEN 'U'  THEN 'Tables'
+                    WHEN 'V'  THEN 'Views'
+                    WHEN 'P'  THEN 'Stored Procedures'
+                    WHEN 'FN' THEN 'Functions'
+                    WHEN 'IF' THEN 'Functions'
+                    WHEN 'TF' THEN 'Functions'
+                    WHEN 'TR' THEN 'Triggers'
+                END AS Category,
+                COUNT(*) AS Cnt
+            FROM sys.objects o
+            WHERE o.is_ms_shipped = 0 AND o.type IN ('U','V','P','FN','IF','TF','TR')
+            GROUP BY CASE o.type
+                    WHEN 'U'  THEN 'Tables'
+                    WHEN 'V'  THEN 'Views'
+                    WHEN 'P'  THEN 'Stored Procedures'
+                    WHEN 'FN' THEN 'Functions'
+                    WHEN 'IF' THEN 'Functions'
+                    WHEN 'TF' THEN 'Functions'
+                    WHEN 'TR' THEN 'Triggers'
+                END";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var cat = reader.GetString(0);
+            var cnt = reader.GetInt32(1);
+            if (result.ContainsKey(cat)) result[cat] += cnt;
+            else result[cat] = cnt;
+        }
+
+        // Sequences
+        try
+        {
+            using var seqCmd = new SqlCommand("SELECT COUNT(*) FROM sys.sequences WHERE is_ms_shipped = 0", conn);
+            result["Sequences"] = (int)(await seqCmd.ExecuteScalarAsync() ?? 0);
+        }
+        catch { }
+
+        // Jobs
+        try
+        {
+            using var jobCmd = new SqlCommand("SELECT COUNT(*) FROM msdb.dbo.sysjobs", conn);
+            result["Jobs"] = (int)(await jobCmd.ExecuteScalarAsync() ?? 0);
+        }
+        catch { }
+
+        // User-defined types
+        try
+        {
+            using var typeCmd = new SqlCommand("SELECT COUNT(*) FROM sys.types WHERE is_user_defined = 1", conn);
+            result["Types"] = (int)(await typeCmd.ExecuteScalarAsync() ?? 0);
+        }
+        catch { }
+
+        // Database triggers
+        try
+        {
+            using var dtCmd = new SqlCommand("SELECT COUNT(*) FROM sys.triggers WHERE parent_class = 0", conn);
+            result["Database Triggers"] = (int)(await dtCmd.ExecuteScalarAsync() ?? 0);
+        }
+        catch { }
+
+        return result;
+    }
+
+    public record TableProperties(
+        long RowCount, double DataSizeMB, double IndexSizeMB,
+        DateTime CreateDate, DateTime? ModifyDate,
+        int ColumnCount, int IndexCount);
+
+    public async Task<TableProperties?> GetTablePropertiesAsync(
+        string connectionString, string database, string schema, string tableName)
+    {
+        var connStr = BuildConnectionString(connectionString, database);
+        using var conn = new SqlConnection(connStr);
+        await conn.OpenAsync();
+
+        var sql = @"
+            SELECT
+                SUM(p.row_count),
+                SUM(CASE WHEN a.type = 1 THEN a.total_pages END) * 8.0 / 1024,
+                SUM(CASE WHEN a.type = 2 THEN a.total_pages END) * 8.0 / 1024,
+                t.create_date, t.modify_date,
+                (SELECT COUNT(*) FROM sys.columns c WHERE c.object_id = t.object_id),
+                (SELECT COUNT(*) FROM sys.indexes i WHERE i.object_id = t.object_id AND i.index_id > 0)
+            FROM sys.tables t
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            LEFT JOIN sys.dm_db_partition_stats p ON t.object_id = p.object_id AND p.index_id IN (0, 1)
+            LEFT JOIN sys.allocation_units a ON p.partition_id = a.container_id
+            WHERE s.name = @schema AND t.name = @table
+            GROUP BY t.object_id, t.create_date, t.modify_date";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", tableName);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+
+        return new TableProperties(
+            RowCount: reader.IsDBNull(0) ? 0 : reader.GetInt64(0),
+            DataSizeMB: reader.IsDBNull(1) ? 0 : Math.Round(Convert.ToDouble(reader.GetValue(1)), 2),
+            IndexSizeMB: reader.IsDBNull(2) ? 0 : Math.Round(Convert.ToDouble(reader.GetValue(2)), 2),
+            CreateDate: reader.GetDateTime(3),
+            ModifyDate: reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+            ColumnCount: reader.GetInt32(5),
+            IndexCount: reader.GetInt32(6));
+    }
+
     public async Task<List<(string Schema, string Name)>> GetViewsAsync(string database)
         => await GetViewsAsync(_connectionString, database);
 

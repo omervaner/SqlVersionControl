@@ -421,6 +421,26 @@ public partial class ObjectExplorerViewModel : ObservableObject
             }, dbNode));
         }
 
+        // Fire-and-forget: fetch object counts for all category folders
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var connStr = ResolveConnectionString(dbNode);
+                if (connStr == null) return;
+                var counts = await _db.GetObjectCountsAsync(connStr, dbNode.DatabaseName);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    foreach (var folder in dbNode.Children)
+                    {
+                        if (counts.TryGetValue(folder.Name, out var count))
+                            folder.ChildCount = count;
+                    }
+                });
+            }
+            catch { /* best effort */ }
+        });
+
         return Task.CompletedTask;
     }
 
@@ -442,8 +462,29 @@ public partial class ObjectExplorerViewModel : ObservableObject
                     Name = t.Name, Schema = t.Schema, DatabaseName = db,
                     NodeType = ObjectExplorerNodeType.Table,
                     Children = [ObjectExplorerNode.CreateDummy()]
-                }, folderNode));
+                }, folderNode)).ToList();
                 await AddChildrenInBatchesAsync(folderNode, tableNodes);
+
+                // Fire-and-forget: fetch row counts from metadata (instant, no table scans)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var effectiveConn = connStr ?? _activeConnectionString;
+                        if (effectiveConn == null) return;
+                        var counts = await _db.GetTableRowCountsAsync(effectiveConn, db);
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            foreach (var node in tableNodes)
+                            {
+                                var key = $"{(string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema)}.{node.Name}";
+                                if (counts.TryGetValue(key, out var count))
+                                    node.RowCount = count;
+                            }
+                        });
+                    }
+                    catch (Exception ex) { AppLogger.Log($"Row count fetch failed: {ex.Message}"); }
+                });
                 break;
 
             case "Views":

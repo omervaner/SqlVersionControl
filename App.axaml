@@ -21,6 +21,7 @@
             <conv:BoolToFontWeightConverter x:Key="BoolToFontWeight"/>
             <conv:ColumnStatusToColorConverter x:Key="ColumnStatusToColorConverter"/>
             <conv:HexToBrushConverter x:Key="HexToBrush"/>
+            <conv:BadgeBackgroundConverter x:Key="BadgeBackground"/>
         </ResourceDictionary>
     </Application.Resources>
 

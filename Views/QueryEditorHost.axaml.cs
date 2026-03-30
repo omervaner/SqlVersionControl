@@ -374,6 +374,7 @@ public partial class QueryEditorHost : UserControl
         tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
         tabView.QuickExecuteRequested += OnQuickExecuteRequested;
         tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
+        tabView.FilterByValueRequested += sql => OpenScriptInNewTab(sql);
         tabView.FormatSqlRequested += FormatSqlInEditor;
         tabView.QuickQuoteRequested += () => QuickQuoteSelection(nPrefix: false);
         tabView.ShowDependenciesRequested += OnShowDependenciesFromEditor;
@@ -1864,6 +1865,8 @@ public partial class QueryEditorHost : UserControl
                 menu.Items.Add(CreateMenuItem("Script as INSERT", () => _ = explorer.ScriptAsInsertAsync(node)));
                 menu.Items.Add(CreateMenuItem("Script as DROP", () => explorer.ScriptAsDrop(node)));
                 menu.Items.Add(CreateMenuItem("Script as ALTER (add column)", () => explorer.ScriptAsAlterTable(node)));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Properties", () => _ = ShowTablePropertiesAsync(node)));
                 break;
 
             case ObjectExplorerNodeType.View:
@@ -1933,6 +1936,21 @@ public partial class QueryEditorHost : UserControl
                 break;
 
             case ObjectExplorerNodeType.Database:
+                menu.Items.Add(CreateMenuItem("New Query", () =>
+                {
+                    var connStr = _registry?.GetConnectionString(node.ConnectionId!);
+                    var managed = _registry?.GetById(node.ConnectionId!);
+                    if (connStr != null)
+                    {
+                        AddNewTab(connStr, managed?.Config);
+                        if (ActiveTabViewModel != null)
+                            ActiveTabViewModel.SelectedDatabase = node.DatabaseName;
+                    }
+                }));
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("Refresh", () => explorer.RefreshNode(node)));
+                break;
+
             case ObjectExplorerNodeType.Folder:
                 menu.Items.Add(CreateMenuItem("Refresh", () => explorer.RefreshNode(node)));
                 break;
@@ -1942,6 +1960,49 @@ public partial class QueryEditorHost : UserControl
         }
 
         menu.ShowAt(target, true);
+    }
+
+    private async Task ShowTablePropertiesAsync(ObjectExplorerNode node)
+    {
+        try
+        {
+            if (_db == null) return;
+            var connStr = _registry?.GetConnectionString(node.ConnectionId!);
+            if (connStr == null) return;
+
+            var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
+            var props = await _db.GetTablePropertiesAsync(connStr, node.DatabaseName, schema, node.Name);
+            if (props == null) return;
+
+            var text = $"Table:        [{schema}].[{node.Name}]\n" +
+                       $"Database:     {node.DatabaseName}\n\n" +
+                       $"Rows:         {props.RowCount:N0}\n" +
+                       $"Data Size:    {props.DataSizeMB:F2} MB\n" +
+                       $"Index Size:   {props.IndexSizeMB:F2} MB\n" +
+                       $"Columns:      {props.ColumnCount}\n" +
+                       $"Indexes:      {props.IndexCount}\n" +
+                       $"Created:      {props.CreateDate:yyyy-MM-dd HH:mm}\n" +
+                       $"Modified:     {props.ModifyDate?.ToString("yyyy-MM-dd HH:mm") ?? "\u2014"}";
+
+            var parent = TopLevel.GetTopLevel(this) as Window;
+            if (parent == null) return;
+            var dialog = new ConfirmDialog(text, "Close", "");
+            dialog.Title = $"Table Properties \u2014 [{schema}].[{node.Name}]";
+            dialog.Width = 400;
+            dialog.Height = 300;
+            // Make text monospace for alignment + hide the empty cancel button
+            if (dialog.FindControl<Avalonia.Controls.TextBlock>("MessageText") is { } msgText)
+                msgText.FontFamily = new Avalonia.Media.FontFamily("Consolas, Menlo, Monaco, monospace");
+            if (dialog.FindControl<Button>("OkButton") is { } okBtn)
+                okBtn.Classes.Remove("btn-danger");
+            if (dialog.FindControl<Button>("CancelButton") is { } cancelBtn)
+                cancelBtn.IsVisible = false;
+            await dialog.ShowDialog(parent);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log($"Table properties failed: {ex.Message}");
+        }
     }
 
     private static MenuItem CreateMenuItem(string header, Action action)

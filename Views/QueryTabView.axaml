@@ -245,6 +245,43 @@
                         </Grid>
                     </Grid>
 
+                    <!-- Cell Detail Strip (visible when a cell is selected) -->
+                    <Border x:Name="CellDetailPanel" IsVisible="False"
+                            VerticalAlignment="Bottom" Height="60"
+                            Background="{DynamicResource PanelHeaderBackground}"
+                            BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0">
+                        <Grid RowDefinitions="Auto,Auto,*">
+                            <!-- Drag handle to resize -->
+                            <Border Grid.Row="0" x:Name="CellDetailResizeHandle"
+                                    Height="4" Cursor="SizeNorthSouth"
+                                    Background="Transparent"/>
+                            <Border Grid.Row="1" Padding="8,2" Height="22">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock x:Name="CellDetailHeader" FontSize="11"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" x:Name="CellDetailCopyButton"
+                                            Content="Copy" Classes="btn-secondary"
+                                            Padding="8,1" FontSize="10" Height="18" MinHeight="0"
+                                            Cursor="Hand" Margin="4,0"/>
+                                    <Button Grid.Column="2" x:Name="CellDetailCloseButton"
+                                            Content="&#xd7;" Background="Transparent"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            Padding="4,0" FontSize="14" MinWidth="0" MinHeight="0"
+                                            BorderThickness="0" Cursor="Hand"/>
+                                </Grid>
+                            </Border>
+                            <ScrollViewer Grid.Row="2" Padding="8,4"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <SelectableTextBlock x:Name="CellDetailText"
+                                           FontFamily="Consolas, Menlo, Monaco, monospace"
+                                           FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
                     <!-- Empty state -->
                     <TextBlock x:Name="EmptyState" Text="Run a query to see results here"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"

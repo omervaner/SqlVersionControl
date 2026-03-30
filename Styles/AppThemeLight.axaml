@@ -44,6 +44,7 @@
     <SolidColorBrush x:Key="SelectionActive" Color="#d4cec3"/>
     <SolidColorBrush x:Key="HoverBackground" Color="#ebe5da"/>
     <SolidColorBrush x:Key="WordHighlight" Color="#d4c48a"/>
+    <SolidColorBrush x:Key="BracketMatchBackground" Color="#40808080"/>
     <SolidColorBrush x:Key="EditorSelectionBrush" Color="#4a7ab5" Opacity="0.3"/>
     <SolidColorBrush x:Key="EditorSelectionForeground" Color="#1a1714"/>
     <SolidColorBrush x:Key="SelectedItemBackground" Color="#d4cec3"/>

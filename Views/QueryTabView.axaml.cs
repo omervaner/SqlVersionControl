@@ -132,6 +132,20 @@ public partial class QueryTabView : UserControl
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.KeyDown += OnResultsGridKeyDown;
 
+        // Cell detail viewer
+        ResultsGrid.SelectionChanged += OnResultsGridCellSelected;
+        CellDetailCopyButton.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+                await clipboard.SetTextAsync(CellDetailText.Text ?? "");
+        };
+        CellDetailCloseButton.Click += (_, _) => CellDetailPanel.IsVisible = false;
+
+        // Drag-to-resize cell detail panel
+        CellDetailResizeHandle.PointerPressed += OnCellDetailResizePressed;
+        CellDetailResizeHandle.PointerMoved += OnCellDetailResizeMoved;
+        CellDetailResizeHandle.PointerReleased += OnCellDetailResizeReleased;
+
         // Column header right-click for freeze/unfreeze
         ResultsGrid.AddHandler(PointerReleasedEvent, OnColumnHeaderPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
@@ -389,6 +403,9 @@ public partial class QueryTabView : UserControl
     }
 
     private OccurrenceHighlighter? _occurrenceHighlighter;
+    private BracketHighlighter? _bracketHighlighter;
+    private AvaloniaEdit.Folding.FoldingManager? _foldingManager;
+    private Timer? _foldingTimer;
 
     private void UpdatePlaceholder()
     {
@@ -422,6 +439,28 @@ public partial class QueryTabView : UserControl
         SqlEditor.TextArea.TextView.LineTransformers.Add(_occurrenceHighlighter);
         SqlEditor.TextArea.SelectionChanged += (_, _) => UpdateOccurrenceHighlight();
         SqlEditor.TextArea.Caret.PositionChanged += (_, _) => UpdateOccurrenceHighlight();
+
+        // Bracket matching
+        _bracketHighlighter = new BracketHighlighter();
+        SqlEditor.TextArea.TextView.LineTransformers.Add(_bracketHighlighter);
+        SqlEditor.TextArea.Caret.PositionChanged += (_, _) => UpdateBracketHighlight();
+
+        // Code folding
+        _foldingManager = AvaloniaEdit.Folding.FoldingManager.Install(SqlEditor.TextArea);
+        var foldingStrategy = new SqlFoldingStrategy();
+        SqlEditor.TextChanged += (_, _) =>
+        {
+            _foldingTimer?.Dispose();
+            _foldingTimer = new Timer(_ =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_foldingManager == null) return;
+                    var foldings = foldingStrategy.CreateNewFoldings(SqlEditor.Document);
+                    _foldingManager.UpdateFoldings(foldings, -1);
+                });
+            }, null, 500, Timeout.Infinite);
+        };
     }
 
     // ── Section 11: Highlight All Occurrences ────────────────────────
@@ -451,6 +490,192 @@ public partial class QueryTabView : UserControl
         _occurrenceHighlighter.SelectedWord = selection;
         _occurrenceHighlighter.HighlightColor = GetWordHighlightColor();
         SqlEditor.TextArea.TextView.Redraw();
+    }
+
+    private void UpdateBracketHighlight()
+    {
+        if (_bracketHighlighter == null) return;
+
+        var offset = SqlEditor.CaretOffset;
+        var text = SqlEditor.Text;
+        var match = FindMatchingBracket(text, offset);
+
+        _bracketHighlighter.OpenOffset = match?.openOffset ?? -1;
+        _bracketHighlighter.CloseOffset = match?.closeOffset ?? -1;
+        SqlEditor.TextArea.TextView.Redraw();
+    }
+
+    private static (int openOffset, int closeOffset)? FindMatchingBracket(string text, int offset)
+    {
+        if (offset > 0)
+        {
+            var ch = text[offset - 1];
+            if (ch == '(') return FindClosingBracket(text, offset - 1, '(', ')');
+            if (ch == ')') return FindOpeningBracket(text, offset - 1, '(', ')');
+        }
+        if (offset < text.Length)
+        {
+            var ch = text[offset];
+            if (ch == '(') return FindClosingBracket(text, offset, '(', ')');
+            if (ch == ')') return FindOpeningBracket(text, offset, '(', ')');
+        }
+        return null;
+    }
+
+    private static (int openOffset, int closeOffset)? FindClosingBracket(string text, int openPos, char open, char close)
+    {
+        int depth = 1;
+        for (int i = openPos + 1; i < text.Length && depth > 0; i++)
+        {
+            if (text[i] == open) depth++;
+            else if (text[i] == close) { depth--; if (depth == 0) return (openPos, i); }
+        }
+        return null;
+    }
+
+    private static (int openOffset, int closeOffset)? FindOpeningBracket(string text, int closePos, char open, char close)
+    {
+        int depth = 1;
+        for (int i = closePos - 1; i >= 0 && depth > 0; i--)
+        {
+            if (text[i] == close) depth++;
+            else if (text[i] == open) { depth--; if (depth == 0) return (i, closePos); }
+        }
+        return null;
+    }
+
+    private void OnEditorDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        // Check if the double-clicked word is BEGIN or END
+        var doc = SqlEditor.Document;
+        var offset = SqlEditor.CaretOffset;
+        if (offset < 0 || offset > doc.TextLength) return;
+
+        var text = doc.Text;
+
+        // Find the word under cursor (AvaloniaEdit already selected it by now)
+        int wordStart = offset, wordEnd = offset;
+        while (wordStart > 0 && char.IsLetterOrDigit(text[wordStart - 1])) wordStart--;
+        while (wordEnd < text.Length && char.IsLetterOrDigit(text[wordEnd])) wordEnd++;
+        var word = text[wordStart..wordEnd];
+
+        if (word.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
+        {
+            // Skip BEGIN TRAN / BEGIN TRANSACTION
+            var afterBegin = wordEnd;
+            while (afterBegin < text.Length && char.IsWhiteSpace(text[afterBegin])) afterBegin++;
+            if (IsKeywordAtPosition(text, afterBegin, "TRAN") || IsKeywordAtPosition(text, afterBegin, "TRANSACTION"))
+                return;
+
+            var match = FindMatchingEnd(text, wordStart);
+            if (match >= 0)
+            {
+                var selStart = wordStart;
+                var selLen = match + 3 - wordStart;
+                // Defer to override AvaloniaEdit's built-in word selection
+                Dispatcher.UIThread.Post(() => SqlEditor.Select(selStart, selLen),
+                    DispatcherPriority.Background);
+                e.Handled = true;
+            }
+        }
+        else if (word.Equals("END", StringComparison.OrdinalIgnoreCase))
+        {
+            var match = FindMatchingBegin(text, wordStart);
+            if (match >= 0)
+            {
+                var selStart = match;
+                var selLen = wordEnd - match;
+                Dispatcher.UIThread.Post(() => SqlEditor.Select(selStart, selLen),
+                    DispatcherPriority.Background);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private static int FindMatchingEnd(string text, int beginPos)
+    {
+        int depth = 1;
+        int i = beginPos + 5;
+        while (i < text.Length && depth > 0)
+        {
+            if (text[i] == '\'') { i++; while (i < text.Length && text[i] != '\'') i++; i++; continue; }
+            if (i < text.Length - 1 && text[i] == '-' && text[i + 1] == '-')
+            { while (i < text.Length && text[i] != '\n') i++; continue; }
+            if (i < text.Length - 1 && text[i] == '/' && text[i + 1] == '*')
+            { i += 2; while (i < text.Length - 1 && !(text[i] == '*' && text[i + 1] == '/')) i++; i += 2; continue; }
+
+            if (IsKeywordAtPosition(text, i, "BEGIN"))
+            {
+                var after = i + 5;
+                while (after < text.Length && char.IsWhiteSpace(text[after])) after++;
+                if (!IsKeywordAtPosition(text, after, "TRAN") && !IsKeywordAtPosition(text, after, "TRANSACTION"))
+                    depth++;
+                i += 5;
+                continue;
+            }
+            if (IsKeywordAtPosition(text, i, "END"))
+            {
+                depth--;
+                if (depth == 0) return i;
+                i += 3;
+                continue;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    private static int FindMatchingBegin(string text, int endPos)
+    {
+        // Scan backwards — simpler approach: collect all BEGIN/END positions forward, then match
+        var pairs = new List<(int pos, bool isBegin)>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '\'') { i++; while (i < text.Length && text[i] != '\'') i++; i++; continue; }
+            if (i < text.Length - 1 && text[i] == '-' && text[i + 1] == '-')
+            { while (i < text.Length && text[i] != '\n') i++; continue; }
+            if (i < text.Length - 1 && text[i] == '/' && text[i + 1] == '*')
+            { i += 2; while (i < text.Length - 1 && !(text[i] == '*' && text[i + 1] == '/')) i++; i += 2; continue; }
+
+            if (IsKeywordAtPosition(text, i, "BEGIN"))
+            {
+                var after = i + 5;
+                while (after < text.Length && char.IsWhiteSpace(text[after])) after++;
+                if (!IsKeywordAtPosition(text, after, "TRAN") && !IsKeywordAtPosition(text, after, "TRANSACTION"))
+                    pairs.Add((i, true));
+                i += 5;
+                continue;
+            }
+            if (IsKeywordAtPosition(text, i, "END"))
+            {
+                pairs.Add((i, false));
+                i += 3;
+                continue;
+            }
+            i++;
+        }
+
+        // Walk backwards from the target END to find its matching BEGIN
+        int depth = 0;
+        for (int j = pairs.Count - 1; j >= 0; j--)
+        {
+            if (pairs[j].pos == endPos) { depth = 1; continue; }
+            if (depth == 0) continue;
+            if (!pairs[j].isBegin) depth++;
+            else { depth--; if (depth == 0) return pairs[j].pos; }
+        }
+        return -1;
+    }
+
+    private static bool IsKeywordAtPosition(string text, int pos, string keyword)
+    {
+        if (pos + keyword.Length > text.Length) return false;
+        if (pos > 0 && char.IsLetterOrDigit(text[pos - 1])) return false;
+        if (!text.AsSpan(pos, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase))
+            return false;
+        var after = pos + keyword.Length;
+        return after >= text.Length || !char.IsLetterOrDigit(text[after]);
     }
 
     private static Color GetWordHighlightColor()
@@ -878,6 +1103,7 @@ public partial class QueryTabView : UserControl
     private void OnEditModeChanged()
     {
         if (_viewModel == null) return;
+        CellDetailPanel.IsVisible = false;
 
         var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
             ? _selectedTabIndex : 0;
@@ -903,6 +1129,78 @@ public partial class QueryTabView : UserControl
 
         UpdateEditModeButton();
         UpdateEditBar();
+    }
+
+    // ── Cell Detail Panel Resize ────────────────────────────────────
+    private bool _cellDetailResizing;
+    private Point _cellDetailResizeStart;
+    private double _cellDetailStartHeight;
+
+    private void OnCellDetailResizePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(CellDetailResizeHandle).Properties.IsLeftButtonPressed)
+        {
+            _cellDetailResizing = true;
+            _cellDetailResizeStart = e.GetPosition(this);
+            _cellDetailStartHeight = CellDetailPanel.Height;
+            e.Pointer.Capture(CellDetailResizeHandle);
+            e.Handled = true;
+        }
+    }
+
+    private void OnCellDetailResizeMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_cellDetailResizing) return;
+        var current = e.GetPosition(this);
+        var delta = _cellDetailResizeStart.Y - current.Y;
+        var newHeight = Math.Clamp(_cellDetailStartHeight + delta, 40, 400);
+        CellDetailPanel.Height = newHeight;
+        e.Handled = true;
+    }
+
+    private void OnCellDetailResizeReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_cellDetailResizing)
+        {
+            _cellDetailResizing = false;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+        }
+    }
+
+    private void OnResultsGridCellSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (ResultsGrid.SelectedItem == null || ResultsGrid.CurrentColumn == null)
+        {
+            CellDetailPanel.IsVisible = false;
+            return;
+        }
+
+        var colIndex = ResultsGrid.Columns.IndexOf(ResultsGrid.CurrentColumn);
+        if (colIndex < 0) { CellDetailPanel.IsVisible = false; return; }
+
+        var colName = ResultsGrid.CurrentColumn.Header?.ToString() ?? "";
+        object? cellValue = null;
+
+        if (ResultsGrid.SelectedItem is object?[] row && colIndex < row.Length)
+            cellValue = row[colIndex];
+        else if (ResultsGrid.SelectedItem is EditableRow editRow)
+            cellValue = editRow[colIndex];
+
+        if (cellValue == null || cellValue == DBNull.Value)
+        {
+            CellDetailHeader.Text = $"{colName}: NULL";
+            CellDetailText.Text = "NULL";
+        }
+        else
+        {
+            var text = cellValue.ToString() ?? "";
+            var length = text.Length;
+            CellDetailHeader.Text = $"{colName} ({length:N0} chars)";
+            CellDetailText.Text = text;
+        }
+
+        CellDetailPanel.IsVisible = true;
     }
 
     private async void OnResultsGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1189,7 +1487,32 @@ public partial class QueryTabView : UserControl
             await dialog.ShowDialog(parent);
     }
 
-    private async void OnExportClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnExportClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_viewModel == null) return;
+
+        var menu = new MenuFlyout();
+
+        var excelItem = new MenuItem { Header = "Export as Excel (.xlsx)" };
+        excelItem.Click += async (_, _) => await ExportResultsAsync("xlsx");
+        menu.Items.Add(excelItem);
+
+        var csvItem = new MenuItem { Header = "Export as CSV" };
+        csvItem.Click += async (_, _) => await ExportResultsAsync("csv");
+        menu.Items.Add(csvItem);
+
+        var jsonItem = new MenuItem { Header = "Export as JSON" };
+        jsonItem.Click += async (_, _) => await ExportResultsAsync("json");
+        menu.Items.Add(jsonItem);
+
+        var tsvItem = new MenuItem { Header = "Export as Tab-Delimited" };
+        tsvItem.Click += async (_, _) => await ExportResultsAsync("tsv");
+        menu.Items.Add(tsvItem);
+
+        menu.ShowAt(ExportButton, true);
+    }
+
+    private async Task ExportResultsAsync(string format)
     {
         if (_viewModel == null) return;
 
@@ -1200,17 +1523,52 @@ public partial class QueryTabView : UserControl
         var result = _viewModel.Results[resultIndex];
         if (result.Error != null) return;
 
-        // Determine which rows to export
         var selectedRows = GetSelectedRows();
         var rowsToExport = selectedRows.Count > 0 ? selectedRows : result.Rows;
         var isPartial = selectedRows.Count > 0;
 
-        var path = await ShowExcelSaveDialog();
+        var (extension, description) = format switch
+        {
+            "xlsx" => ("xlsx", "Excel Files"),
+            "csv" => ("csv", "CSV Files"),
+            "json" => ("json", "JSON Files"),
+            "tsv" => ("tsv", "Tab-Delimited Files"),
+            _ => ("xlsx", "Excel Files")
+        };
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(
+            new FilePickerSaveOptions
+            {
+                Title = $"Export as {extension.ToUpperInvariant()}",
+                SuggestedFileName = "results",
+                DefaultExtension = extension,
+                FileTypeChoices = [new FilePickerFileType(description) { Patterns = [$"*.{extension}"] }]
+            });
+
+        var path = file?.TryGetLocalPath();
         if (path == null) return;
 
         try
         {
-            ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rowsToExport, path);
+            switch (format)
+            {
+                case "xlsx":
+                    ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rowsToExport, path);
+                    break;
+                case "csv":
+                    await File.WriteAllTextAsync(path, ResultToDelimited(result, rowsToExport, ","));
+                    break;
+                case "tsv":
+                    await File.WriteAllTextAsync(path, ResultToDelimited(result, rowsToExport, "\t"));
+                    break;
+                case "json":
+                    await File.WriteAllTextAsync(path, ResultToJson(result, rowsToExport));
+                    break;
+            }
+
             _viewModel.StatusText = isPartial
                 ? $"Exported {rowsToExport.Count:N0} of {result.RowCount:N0} rows to {Path.GetFileName(path)}"
                 : $"Exported {result.RowCount:N0} rows to {Path.GetFileName(path)}";
@@ -1220,6 +1578,54 @@ public partial class QueryTabView : UserControl
             _viewModel.StatusText = $"Export failed: {ex.Message}";
         }
     }
+
+    private static string ResultToDelimited(QueryResult result, List<object?[]> rows, string delimiter)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join(delimiter, result.ColumnNames.Select(c =>
+            delimiter == "," ? $"\"{c.Replace("\"", "\"\"")}\"" : c)));
+        foreach (var row in rows)
+        {
+            sb.AppendLine(string.Join(delimiter, row.Select(v =>
+            {
+                if (v == null || v == DBNull.Value) return "";
+                var text = v.ToString() ?? "";
+                return delimiter == "," ? $"\"{text.Replace("\"", "\"\"")}\"" : text;
+            })));
+        }
+        return sb.ToString();
+    }
+
+    private static string ResultToJson(QueryResult result, List<object?[]> rows)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("[");
+        for (int r = 0; r < rows.Count; r++)
+        {
+            sb.Append("  {");
+            for (int c = 0; c < result.ColumnNames.Length; c++)
+            {
+                if (c > 0) sb.Append(", ");
+                var val = c < rows[r].Length ? rows[r][c] : null;
+                sb.Append($"\"{EscapeJsonString(result.ColumnNames[c])}\": ");
+                if (val == null || val == DBNull.Value)
+                    sb.Append("null");
+                else if (val is bool b)
+                    sb.Append(b ? "true" : "false");
+                else if (IsNumericType(val.GetType()))
+                    sb.Append(val);
+                else
+                    sb.Append($"\"{EscapeJsonString(val.ToString() ?? "")}\"");
+            }
+            sb.Append(r < rows.Count - 1 ? "}," : "}");
+            sb.AppendLine();
+        }
+        sb.AppendLine("]");
+        return sb.ToString();
+    }
+
+    private static string EscapeJsonString(string s) =>
+        s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
 
     /// <summary>Get the currently displayed result (live or pinned).</summary>
     private QueryResult? GetCurrentResult()
@@ -1289,9 +1695,32 @@ public partial class QueryTabView : UserControl
 
     // ── Read-Only Context Menu ─────────────────────────────────────────
 
+    /// <summary>Fired when "Filter by Value" is clicked — host should open a new tab.</summary>
+    public event Action<string>? FilterByValueRequested;
+
     private void SetupReadOnlyContextMenu()
     {
         var menu = new ContextMenu();
+
+        var copyCellValue = new MenuItem { Header = "Copy Cell Value" };
+        copyCellValue.Click += async (_, _) => await CopyCellValueAsync();
+
+        var copyRow = new MenuItem { Header = "Copy Row" };
+        copyRow.Click += async (_, _) => await CopySelectedRowsAsync();
+
+        var copyWithHeaders = new MenuItem { Header = "Copy with Headers" };
+        copyWithHeaders.Click += async (_, _) => await CopyWithHeadersAsync();
+
+        var copyInsert = new MenuItem { Header = "Copy as INSERT" };
+        copyInsert.Click += async (_, _) => await CopyAsInsertAsync();
+
+        var copyAllInsert = new MenuItem { Header = "Copy All as INSERT" };
+        copyAllInsert.Click += async (_, _) => await CopyAllAsInsertAsync();
+
+        var filterByValue = new MenuItem { Header = "Filter by This Value" };
+        filterByValue.Click += (_, _) => FilterByCurrentCellValue();
+
+        var separator1 = new Separator();
 
         var exportSelected = new MenuItem { Header = "Export Selected to Excel" };
         exportSelected.Click += async (_, _) =>
@@ -1317,33 +1746,114 @@ public partial class QueryTabView : UserControl
             }
         };
 
-        var copyInsert = new MenuItem { Header = "Copy as INSERT" };
-        copyInsert.Click += async (_, _) => await CopyAsInsertAsync();
-
-        var copyRows = new MenuItem { Header = "Copy Selected Rows" };
-        copyRows.Click += async (_, _) => await CopySelectedRowsAsync();
-
-        var copyWithHeaders = new MenuItem { Header = "Copy with Headers (Ctrl+Shift+C)" };
-        copyWithHeaders.Click += async (_, _) => await CopyWithHeadersAsync();
-
-        menu.Items.Add(exportSelected);
-        menu.Items.Add(copyInsert);
-        menu.Items.Add(copyRows);
+        menu.Items.Add(copyCellValue);
+        menu.Items.Add(copyRow);
         menu.Items.Add(copyWithHeaders);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(copyInsert);
+        menu.Items.Add(copyAllInsert);
+        menu.Items.Add(separator1);
+        menu.Items.Add(filterByValue);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(exportSelected);
 
         menu.Opening += (_, _) =>
         {
             var hasSelection = ResultsGrid.SelectedItems.Count > 0;
             var hasTable = _viewModel?.EditTableSchema != null && _viewModel?.EditTableName != null;
+            var result = GetCurrentResult();
+
+            copyCellValue.IsVisible = hasSelection;
+            copyRow.IsVisible = hasSelection;
+            copyInsert.IsEnabled = hasSelection && hasTable;
+            copyAllInsert.IsVisible = hasTable && result != null && result.Rows.Count <= 1000;
+            if (result != null && hasTable)
+                copyAllInsert.Header = $"Copy All as INSERT ({result.Rows.Count} rows)";
+
+            // Filter by value: only when a cell is selected and has a non-null value
+            var cellValue = GetCurrentCellValue();
+            filterByValue.IsVisible = cellValue != null && cellValue != DBNull.Value;
+            if (filterByValue.IsVisible)
+            {
+                var text = cellValue?.ToString() ?? "";
+                filterByValue.Header = $"Filter by '{(text.Length > 30 ? text[..27] + "..." : text)}'";
+            }
 
             exportSelected.IsVisible = hasSelection;
-            copyInsert.IsVisible = true;
-            copyInsert.IsEnabled = hasSelection && hasTable;
-            copyRows.IsVisible = hasSelection;
         };
 
         ResultsGrid.ContextMenu = menu;
     }
+
+    private object? GetCurrentCellValue()
+    {
+        if (ResultsGrid.SelectedItem == null || ResultsGrid.CurrentColumn == null)
+            return null;
+        var colIndex = ResultsGrid.Columns.IndexOf(ResultsGrid.CurrentColumn);
+        if (colIndex < 0) return null;
+        if (ResultsGrid.SelectedItem is object?[] row && colIndex < row.Length)
+            return row[colIndex];
+        return null;
+    }
+
+    private async Task CopyCellValueAsync()
+    {
+        var cellValue = GetCurrentCellValue();
+        var text = cellValue == null || cellValue == DBNull.Value ? "NULL" : cellValue.ToString() ?? "";
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(text);
+            if (_viewModel != null) _viewModel.StatusText = "Cell value copied";
+        }
+    }
+
+    private async Task CopyAllAsInsertAsync()
+    {
+        if (_viewModel == null) return;
+        var result = GetCurrentResult();
+        if (result == null || _viewModel.EditTableSchema == null || _viewModel.EditTableName == null) return;
+
+        var sql = ExportService.GenerateInsertStatements(
+            _viewModel.EditTableSchema, _viewModel.EditTableName,
+            result.ColumnNames, result.ColumnTypes, result.Rows);
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(sql);
+            _viewModel.StatusText = $"Copied {result.Rows.Count} INSERT statement{(result.Rows.Count == 1 ? "" : "s")}";
+        }
+    }
+
+    private void FilterByCurrentCellValue()
+    {
+        var result = GetCurrentResult();
+        if (result == null || ResultsGrid.CurrentColumn == null) return;
+
+        var colIndex = ResultsGrid.Columns.IndexOf(ResultsGrid.CurrentColumn);
+        if (colIndex < 0 || colIndex >= result.ColumnNames.Length) return;
+
+        var cellValue = GetCurrentCellValue();
+        if (cellValue == null || cellValue == DBNull.Value) return;
+
+        var colName = result.ColumnNames[colIndex];
+        var cellText = cellValue.ToString() ?? "";
+        var isNumeric = colIndex < result.ColumnTypes.Length && IsNumericType(result.ColumnTypes[colIndex]);
+        var whereClause = isNumeric
+            ? $"WHERE [{colName}] = {cellText}"
+            : $"WHERE [{colName}] = '{cellText.Replace("'", "''")}'";
+
+        var sql = result.SourceSql != null
+            ? $"-- Filter from results\nSELECT * FROM (\n{result.SourceSql}\n) sub\n{whereClause}"
+            : $"-- TODO: add table name\nSELECT * FROM [???]\n{whereClause}";
+
+        FilterByValueRequested?.Invoke(sql);
+    }
+
+    private static bool IsNumericType(Type t) =>
+        t == typeof(int) || t == typeof(long) || t == typeof(short) || t == typeof(byte) ||
+        t == typeof(decimal) || t == typeof(double) || t == typeof(float);
 
     private async Task CopyAsInsertAsync()
     {
@@ -2027,6 +2537,7 @@ public partial class QueryTabView : UserControl
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = false;
         EmptyState.IsVisible = false;
+        CellDetailPanel.IsVisible = false;
 
         if (result.Error != null)
         {
@@ -2154,6 +2665,7 @@ public partial class QueryTabView : UserControl
         MessagesPanel.IsVisible = true;
         TracePanel.IsVisible = false;
         EmptyState.IsVisible = false;
+        CellDetailPanel.IsVisible = false;
         UpdateTabHighlight(MessagesTabTag);
     }
 
@@ -2164,6 +2676,7 @@ public partial class QueryTabView : UserControl
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = true;
         EmptyState.IsVisible = false;
+        CellDetailPanel.IsVisible = false;
         UpdateTabHighlight(TraceTabTag);
     }
 
@@ -2261,5 +2774,43 @@ internal class ExecutionFlashHighlighter : AvaloniaEdit.Rendering.DocumentColori
                 element.TextRunProperties.SetBackgroundBrush(new SolidColorBrush(FlashColor));
             });
         }
+    }
+}
+
+/// <summary>
+/// Highlights matching bracket pairs (parentheses) when cursor is adjacent.
+/// </summary>
+internal class BracketHighlighter : AvaloniaEdit.Rendering.DocumentColorizingTransformer
+{
+    public int OpenOffset { get; set; } = -1;
+    public int CloseOffset { get; set; } = -1;
+
+    protected override void ColorizeLine(AvaloniaEdit.Document.DocumentLine line)
+    {
+        if (OpenOffset < 0 || CloseOffset < 0) return;
+
+        var brush = GetBracketHighlightBrush();
+
+        HighlightIfOnLine(line, OpenOffset, brush);
+        HighlightIfOnLine(line, CloseOffset, brush);
+    }
+
+    private void HighlightIfOnLine(AvaloniaEdit.Document.DocumentLine line, int offset, SolidColorBrush brush)
+    {
+        if (offset >= line.Offset && offset < line.EndOffset)
+        {
+            ChangeLinePart(offset, offset + 1, element =>
+            {
+                element.TextRunProperties.SetBackgroundBrush(brush);
+            });
+        }
+    }
+
+    private static SolidColorBrush GetBracketHighlightBrush()
+    {
+        if (Application.Current?.Resources.TryGetResource("BracketMatchBackground", null, out var res) == true
+            && res is SolidColorBrush brush)
+            return brush;
+        return new SolidColorBrush(Color.FromArgb(0x40, 0x80, 0x80, 0x80));
     }
 }
