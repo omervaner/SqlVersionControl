@@ -54,9 +54,9 @@
                         HorizontalAlignment="Center" Spacing="10">
                 <TextBlock Text="No execution plan generated" FontSize="16"
                            Foreground="{DynamicResource TextDisabled}" HorizontalAlignment="Center"/>
-                <TextBlock Text="Select an object in Version History, then click Generate Plan"
+                <TextBlock Text="Paste a query in the editor and press Generate Plan, or select a stored procedure in Version History."
                            FontSize="12" Foreground="{DynamicResource TextDisabled}" HorizontalAlignment="Center"
-                           TextWrapping="Wrap" MaxWidth="300" TextAlignment="Center"/>
+                           TextWrapping="Wrap" MaxWidth="360" TextAlignment="Center"/>
                 <!-- Error display -->
                 <Border IsVisible="{Binding PlanError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                         Background="{DynamicResource ErrorBannerBackground}" CornerRadius="5" Padding="15" Margin="0,10,0,0">

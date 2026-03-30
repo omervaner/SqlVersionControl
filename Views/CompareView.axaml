@@ -139,6 +139,15 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Empty state hint -->
+                    <TextBlock Grid.Row="3"
+                               Text="Select a source and target connection above, then click Compare to see differences."
+                               FontSize="12" Foreground="{DynamicResource TextDisabled}"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               MaxWidth="220" Margin="20"
+                               IsVisible="{Binding !HasObjects}"/>
+
                     <ListBox Grid.Row="3"
                              ItemsSource="{Binding Objects}"
                              SelectedItem="{Binding SelectedObject}"

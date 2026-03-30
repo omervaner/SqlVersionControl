@@ -407,8 +407,8 @@
             <!-- Click-to-dismiss background -->
             <Border Background="#40000000" x:Name="CommandPaletteBackdrop"/>
             <!-- Palette panel at top center -->
-            <Border VerticalAlignment="Top" HorizontalAlignment="Center"
-                    Margin="0,60,0,0" Width="500"
+            <Border VerticalAlignment="Center" HorizontalAlignment="Center"
+                    Margin="0,0,0,80" Width="500"
                     Background="{DynamicResource ToolbarBackground}"
                     BorderBrush="{DynamicResource BorderDefault}"
                     BorderThickness="1" CornerRadius="8"

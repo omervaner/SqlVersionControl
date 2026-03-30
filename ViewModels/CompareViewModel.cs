@@ -203,6 +203,7 @@ public partial class CompareViewModel : ViewModelBase
     private int _identicalCount;
 
     public bool HasSummary => SourceOnlyCount > 0 || TargetOnlyCount > 0 || ModifiedCount > 0;
+    public bool HasObjects => Objects.Count > 0;
 
     // Selection for batch deploy
     [ObservableProperty]
@@ -921,6 +922,7 @@ public partial class CompareViewModel : ViewModelBase
             Objects.Add(o);
         }
 
+        OnPropertyChanged(nameof(HasObjects));
         UpdateStatusMessage();
     }
 

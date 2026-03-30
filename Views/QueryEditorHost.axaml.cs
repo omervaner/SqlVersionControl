@@ -20,6 +20,9 @@ public partial class QueryEditorHost : UserControl
     private readonly List<QueryTabView> _tabs = [];
     private int _activeTabIndex = -1;
     private int _tabCounter;
+    private int _tabDragIndex = -1;
+    private Point _tabDragStart;
+    private bool _tabDragging;
     private List<string> _cachedDatabases = [];
     private bool _restoringSession;
     private Timer? _autosaveTimer;
@@ -104,6 +107,11 @@ public partial class QueryEditorHost : UserControl
 
         // Refresh query tab strip on theme change
         ThemeManager.ThemeChanged += RefreshTheme;
+
+        // Tab drag-to-reorder (handled at TabStrip level, doesn't interfere with button Click)
+        TabStrip.AddHandler(InputElement.PointerPressedEvent, OnTabStripPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        TabStrip.AddHandler(InputElement.PointerMovedEvent, OnTabStripPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        TabStrip.AddHandler(InputElement.PointerReleasedEvent, OnTabStripPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         // Wire history button (toggle panel)
         QueryHistoryButton.Click += (_, _) => ToggleHistoryPanel();
@@ -609,6 +617,69 @@ public partial class QueryEditorHost : UserControl
     private IBrush FindBrush(string key) =>
         Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
             ? b : Brushes.Transparent;
+
+    // ── Tab drag-to-reorder ──────────────────────────────────────────
+
+    private int FindTabIndexFromPointer(PointerEventArgs e)
+    {
+        for (int i = 0; i < _tabs.Count && i < TabStrip.Children.Count; i++)
+        {
+            if (TabStrip.Children[i] is Button btn)
+            {
+                var pos = e.GetPosition(btn);
+                if (pos.X >= 0 && pos.X <= btn.Bounds.Width && pos.Y >= 0 && pos.Y <= btn.Bounds.Height)
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    private void OnTabStripPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(TabStrip).Properties.IsLeftButtonPressed) return;
+        var idx = FindTabIndexFromPointer(e);
+        if (idx >= 0)
+        {
+            _tabDragIndex = idx;
+            _tabDragStart = e.GetPosition(TabStrip);
+            _tabDragging = false;
+        }
+    }
+
+    private void OnTabStripPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_tabDragIndex < 0) return;
+        var pos = e.GetPosition(TabStrip);
+        if (!_tabDragging && Math.Abs(pos.X - _tabDragStart.X) > 12)
+            _tabDragging = true;
+        if (!_tabDragging) return;
+
+        // Find which tab position we've dragged over
+        var targetIdx = FindTabIndexFromPointer(e);
+        if (targetIdx < 0 || targetIdx == _tabDragIndex) return;
+
+        // Reorder: move the dragged tab to the target position
+        var tab = _tabs[_tabDragIndex];
+        _tabs.RemoveAt(_tabDragIndex);
+        _tabs.Insert(targetIdx, tab);
+
+        // Update active tab index to follow the active tab
+        if (_activeTabIndex == _tabDragIndex)
+            _activeTabIndex = targetIdx;
+        else if (_tabDragIndex < _activeTabIndex && targetIdx >= _activeTabIndex)
+            _activeTabIndex--;
+        else if (_tabDragIndex > _activeTabIndex && targetIdx <= _activeTabIndex)
+            _activeTabIndex++;
+
+        _tabDragIndex = targetIdx;
+        RebuildTabStrip();
+    }
+
+    private void OnTabStripPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _tabDragIndex = -1;
+        _tabDragging = false;
+    }
 
     private void RebuildTabStrip()
     {
