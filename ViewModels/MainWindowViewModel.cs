@@ -374,8 +374,9 @@ public partial class MainWindowViewModel : ViewModelBase
         FilterObjects();
 
         // Cancel any pending code search
-        _codeSearchCts?.Cancel();
+        try { _codeSearchCts?.Cancel(); } catch (ObjectDisposedException) { }
         _codeSearchCts?.Dispose();
+        _codeSearchCts = null;
 
         if (string.IsNullOrWhiteSpace(value) || value.Length < 2 || string.IsNullOrEmpty(SelectedDatabase))
         {
