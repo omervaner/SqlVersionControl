@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.7 (March 31, 2026)
+## PROJECT STATUS: v2.4.8 (March 31, 2026)
+
+v2.4.8: Fix crash on long-running queries — elapsed timer was updating UI from thread pool thread.
 
 v2.4.7: Fix Connection Manager button states — Connect/Disconnect always visible with proper enable/disable, Connect auto-saves new connections.
 

@@ -205,9 +205,10 @@ public partial class QueryTabViewModel : ObservableObject
         {
             if (_runStopwatch == null) return;
             var elapsed = _runStopwatch.Elapsed;
-            QueryStatusText = elapsed.TotalSeconds < 60
+            var text = elapsed.TotalSeconds < 60
                 ? $"Running... {elapsed.TotalSeconds:F1}s"
                 : $"Running... {elapsed:mm\\:ss}";
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => QueryStatusText = text);
         }, null, 500, 500);
     }
 
