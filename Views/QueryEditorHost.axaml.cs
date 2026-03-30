@@ -2113,6 +2113,19 @@ public partial class QueryEditorHost : UserControl
             return;
         }
 
+        // Left-click on container nodes (Connection, Database, Folder) → toggle expand
+        if (e.InitialPressMouseButton == MouseButton.Left
+            && node.NodeType is ObjectExplorerNodeType.Connection
+                or ObjectExplorerNodeType.Database
+                or ObjectExplorerNodeType.Folder
+            && e.Source is Visual src
+            && src.FindAncestorOfType<Avalonia.Controls.Primitives.ToggleButton>() == null)
+        {
+            node.IsExpanded = !node.IsExpanded;
+            e.Handled = true;
+            return;
+        }
+
         if (e.InitialPressMouseButton != MouseButton.Right) return;
 
         ShowContextMenu(node, treeViewItem);
