@@ -772,6 +772,8 @@ public partial class CompareViewModel : ViewModelBase
 
         if (value && IsSourceConnected && IsTargetConnected)
         {
+            IsScanning = true;
+            ScanProgressText = "Preparing scan...";
             _ = ScanForDifferencesAsync();
         }
         else

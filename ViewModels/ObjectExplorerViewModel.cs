@@ -15,6 +15,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _rootNodes = [];
     [ObservableProperty] private string _filterText = "";
+    [ObservableProperty] private bool _showFilterEmptyState;
 
     /// <summary>Fired when a context menu action wants to set editor text. Bool = auto-run.</summary>
     public event Action<string, bool>? InsertTextRequested;
@@ -185,8 +186,13 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public void ApplyFilter()
     {
         var filter = FilterText?.Trim() ?? "";
+        var anyVisible = false;
         foreach (var db in RootNodes)
-            ApplyFilterToNode(db, filter);
+        {
+            if (ApplyFilterToNode(db, filter))
+                anyVisible = true;
+        }
+        ShowFilterEmptyState = !string.IsNullOrEmpty(filter) && !anyVisible;
     }
 
     private bool ApplyFilterToNode(ObjectExplorerNode node, string filter)

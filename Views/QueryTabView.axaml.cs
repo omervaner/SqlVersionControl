@@ -88,6 +88,21 @@ public partial class QueryTabView : UserControl
         SqlEditor.AddHandler(InputElement.PointerWheelChangedEvent, OnEditorPointerWheelChanged, handledEventsToo: false);
 
         vm.Results.CollectionChanged += OnResultsChanged;
+        vm.ExpandResultsForMessages += () =>
+        {
+            // DML with no result sets — expand to show Messages tab
+            if (_resultsCollapsed)
+            {
+                _resultsCollapsed = false;
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(7, GridUnitType.Star);
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(3, GridUnitType.Star);
+                ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.Content = "\u25BC";
+            }
+            // Build tab bar (so Messages tab button exists) and switch to it
+            RebuildResultTabs();
+            SelectMessagesTab();
+        };
 
         // Edit mode state changes
         vm.EditModeChanged += OnEditModeChanged;
@@ -1779,16 +1794,19 @@ public partial class QueryTabView : UserControl
         _pinnedTabIndices.Clear();
 
         var results = _viewModel.Results;
-        var hasTabs = _pinnedResults.Count > 0 || results.Count > 0;
+        var hasMessages = !string.IsNullOrEmpty(_viewModel.Messages);
+        var hasTabs = _pinnedResults.Count > 0 || results.Count > 0 || hasMessages;
 
         if (!hasTabs)
         {
             ResultsGrid.IsVisible = false;
             MessagesPanel.IsVisible = false;
+            ResultsTabBar.IsVisible = false;
             EmptyState.IsVisible = true;
             return;
         }
 
+        ResultsTabBar.IsVisible = true;
         EmptyState.IsVisible = false;
 
         // Pinned tabs first (tag = -(pinnedIdx + 1))

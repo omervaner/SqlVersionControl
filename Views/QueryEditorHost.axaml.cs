@@ -354,7 +354,14 @@ public partial class QueryEditorHost : UserControl
         };
 
         // Record query history on successful execution
-        vm.QueryExecuted += (sql, db, rows) => _sessionService?.AddQueryToHistory(sql, db, rows);
+        vm.QueryExecuted += (sql, db, rows) =>
+        {
+            _sessionService?.AddQueryToHistory(sql, db, rows);
+
+            // Invalidate intellisense cache if DDL was executed
+            if (vm.TabConnectionString != null && db != null && IsDdlStatement(sql))
+                _intellisenseCache.Remove($"{vm.TabConnectionString}|{db}");
+        };
 
         var tabView = new QueryTabView();
         tabView.Initialize(vm, _settings);
@@ -792,6 +799,14 @@ public partial class QueryEditorHost : UserControl
     }
 
     // ── Intellisense Schema Cache ─────────────────────────────────────
+
+    private static bool IsDdlStatement(string sql)
+    {
+        var trimmed = sql.TrimStart();
+        return trimmed.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("ALTER ", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("DROP ", StringComparison.OrdinalIgnoreCase);
+    }
 
     private async void OnTabDatabaseChanged(QueryTabViewModel tabVm)
     {

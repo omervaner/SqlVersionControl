@@ -149,6 +149,9 @@ public partial class QueryTabViewModel : ObservableObject
     /// <summary>Fired after a successful query execution (sql, database, totalRows).</summary>
     public event Action<string, string?, int>? QueryExecuted;
 
+    /// <summary>Fired when results panel should expand to show messages (DML with no result sets).</summary>
+    public event Action? ExpandResultsForMessages;
+
     // ── Per-Tab Connection (v1.6.0) ─────────────────────────────────
 
     /// <summary>Full connection string for this tab's server (null = use global).</summary>
@@ -324,6 +327,10 @@ public partial class QueryTabViewModel : ObservableObject
                     QueryStatusSeverity.Success);
             }
             _suppressNextFlash = false;
+
+            // Auto-expand results panel for DML (no result sets, but messages)
+            if (Results.Count == 0 && !string.IsNullOrEmpty(messages))
+                ExpandResultsForMessages?.Invoke();
 
             // Record in query history
             QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);

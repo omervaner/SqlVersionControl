@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.4.9 (March 31, 2026)
+## PROJECT STATUS: v2.5.0 (March 31, 2026)
+
+v2.5.0: 22 UX improvements — OE double-click for Views/Functions, Ctrl+Tab, ConnectOnStartup, edit mode confirm, DML messages tab, delete connection confirm, intellisense cache invalidation, Compare tab error surfacing, and more.
 
 v2.4.9: Extended title bar (traffic lights) macOS-only — fixes Windows title bar buttons being cut off.
 

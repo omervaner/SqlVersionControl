@@ -19,6 +19,14 @@ public partial class ConnectionManagerDialog : Window
         DataContext = vm;
         BuildColorPicker(vm);
 
+        // Wire delete confirmation
+        vm.ConfirmRequested += async message =>
+        {
+            var dialog = new ConfirmDialog(message, "Delete", "Cancel");
+            await dialog.ShowDialog(this);
+            return dialog.Confirmed;
+        };
+
         // Wire password prompt — registry asks for password, we show a simple dialog
         registry.PasswordRequested += async config =>
         {

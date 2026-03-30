@@ -90,6 +90,8 @@ public partial class ConnectionManagerViewModel : ViewModelBase
         ("#6bb5c9", "Teal"),
     ];
 
+    public event Func<string, Task<bool>>? ConfirmRequested;
+
     public ConnectionManagerViewModel(ConnectionRegistry registry, DatabaseService db)
     {
         _registry = registry;
@@ -151,9 +153,15 @@ public partial class ConnectionManagerViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void Delete()
+    private async Task DeleteAsync()
     {
         if (SelectedConnection == null) return;
+
+        if (ConfirmRequested != null)
+        {
+            var confirmed = await ConfirmRequested($"Delete connection '{SelectedConnection.DisplayName}'?");
+            if (!confirmed) return;
+        }
 
         _registry.Remove(SelectedConnection.Id);
         SelectedConnection = Connections.FirstOrDefault();
