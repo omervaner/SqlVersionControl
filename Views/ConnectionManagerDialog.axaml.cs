@@ -48,6 +48,19 @@ public partial class ConnectionManagerDialog : Window
                 result = passwordBox.Text;
                 dialog.Close();
             };
+            dialog.KeyDown += (_, args) =>
+            {
+                if (args.Key == Avalonia.Input.Key.Enter)
+                {
+                    result = passwordBox.Text;
+                    dialog.Close();
+                }
+                else if (args.Key == Avalonia.Input.Key.Escape)
+                {
+                    dialog.Close();
+                }
+            };
+            dialog.Opened += (_, _) => passwordBox.Focus();
 
             await dialog.ShowDialog(this);
             return result;

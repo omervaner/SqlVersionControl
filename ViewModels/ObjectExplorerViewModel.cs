@@ -1088,7 +1088,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var parentTable = node.ParentTableName;
         var action = enable ? "ENABLE" : "DISABLE";
         var sql = $"{action} TRIGGER [{schema}].[{node.Name}] ON [{schema}].[{parentTable}]";
-        InsertTextRequested?.Invoke(sql, true);
+        InsertTextRequested?.Invoke(sql, false);
     }
 
     /// <summary>Generate INSERT template with all columns and placeholder values.</summary>

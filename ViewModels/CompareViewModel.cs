@@ -324,6 +324,13 @@ public partial class CompareViewModel : ViewModelBase
 
         _sourceConnectionString = BuildConnectionString(conn);
 
+        if (string.IsNullOrEmpty(_sourceConnectionString))
+        {
+            IsSourceConnected = false;
+            SourceStatus = "Password required — click Connect to retry";
+            return;
+        }
+
         if (await TestConnectionAsync(_sourceConnectionString))
         {
             IsSourceConnected = true;
@@ -334,7 +341,7 @@ public partial class CompareViewModel : ViewModelBase
         else
         {
             IsSourceConnected = false;
-            SourceStatus = "Connection failed";
+            SourceStatus = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
 
@@ -355,6 +362,13 @@ public partial class CompareViewModel : ViewModelBase
         }
 
         _targetConnectionString = BuildConnectionString(conn);
+
+        if (string.IsNullOrEmpty(_targetConnectionString))
+        {
+            IsTargetConnected = false;
+            TargetStatus = "Password required — click Connect to retry";
+            return;
+        }
 
         if (await TestConnectionAsync(_targetConnectionString))
         {
@@ -378,7 +392,7 @@ public partial class CompareViewModel : ViewModelBase
         else
         {
             IsTargetConnected = false;
-            TargetStatus = "Connection failed";
+            TargetStatus = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
 
@@ -400,6 +414,13 @@ public partial class CompareViewModel : ViewModelBase
 
         _target2ConnectionString = BuildConnectionString(conn);
 
+        if (string.IsNullOrEmpty(_target2ConnectionString))
+        {
+            IsTarget2Connected = false;
+            Target2Status = "Password required — click Connect to retry";
+            return;
+        }
+
         if (await TestConnectionAsync(_target2ConnectionString))
         {
             IsTarget2Connected = true;
@@ -414,7 +435,7 @@ public partial class CompareViewModel : ViewModelBase
         else
         {
             IsTarget2Connected = false;
-            Target2Status = "Connection failed";
+            Target2Status = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
 
@@ -482,7 +503,7 @@ public partial class CompareViewModel : ViewModelBase
                 if (_passwords.TryGetValue(key, out var password))
                     settings.Password = password;
                 else
-                    settings.UseWindowsAuth = true; // No password — fall back to Windows auth
+                    return ""; // No password available — caller should prompt
             }
         }
 
@@ -508,16 +529,20 @@ public partial class CompareViewModel : ViewModelBase
     private string GetTargetDescription(SavedConnection? conn)
         => IsProductionConnection(conn) ? "PRODUCTION" : conn?.Server ?? "target";
 
+    private string? _lastConnectionError;
+
     private async Task<bool> TestConnectionAsync(string connectionString)
     {
         try
         {
+            _lastConnectionError = null;
             using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            _lastConnectionError = ex.Message;
             return false;
         }
     }
@@ -726,7 +751,7 @@ public partial class CompareViewModel : ViewModelBase
 
     private string GetCompareStatus(bool inSource, bool inTarget)
     {
-        if (inSource && inTarget) return "Both";
+        if (inSource && inTarget) return "Uncompared";
         if (inSource) return "Source Only";
         return "Target Only";
     }
@@ -1693,6 +1718,7 @@ public partial class CompareViewModel : ViewModelBase
         var total = selectedObjects.Count;
         var successCount = 0;
         var failCount = 0;
+        var failures = new List<(string ObjectName, string Error)>();
 
         try
         {
@@ -1730,8 +1756,9 @@ public partial class CompareViewModel : ViewModelBase
                     successCount++;
                 }
                 catch (OperationCanceledException) { throw; }
-                catch
+                catch (Exception ex)
                 {
+                    failures.Add((obj.ObjectName, ex.Message));
                     failCount++;
                 }
             }
@@ -1749,7 +1776,11 @@ public partial class CompareViewModel : ViewModelBase
             if (failCount == 0)
                 StatusMessage = $"Successfully deployed {successCount} {(IsTableCompareMode ? "tables" : "objects")} to {targetDesc}";
             else
-                StatusMessage = $"Deployed {successCount}, {failCount} failed";
+            {
+                var failDetails = string.Join("; ", failures.Take(3).Select(f => $"{f.ObjectName}: {f.Error}"));
+                if (failures.Count > 3) failDetails += $" (+{failures.Count - 3} more)";
+                StatusMessage = $"Deployed {successCount}, {failCount} failed — {failDetails}";
+            }
         }
 
         // Refresh to update states
@@ -1862,7 +1893,7 @@ public class CompareObject : ObservableObject
     public string DisplayName => $"{FullName} [{Status}]";
     public string StatusIcon => Status switch
     {
-        "Both" => "=",
+        "Uncompared" or "Both" => "?",
         "Identical" => "=",
         "Modified" => "~",
         "Source Only" => "+",

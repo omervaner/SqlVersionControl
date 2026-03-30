@@ -388,7 +388,9 @@ public partial class MainWindow : Window
         foreach (var path in recentPaths)
         {
             var name = Path.GetFileNameWithoutExtension(path);
-            var item = new MenuItem { Header = name, Tag = path };
+            var dir = Path.GetDirectoryName(path);
+            var shortDir = dir != null ? $"  ({Path.GetFileName(dir)})" : "";
+            var item = new MenuItem { Header = $"{name}{shortDir}", Tag = path };
             item.Click += (s, _) =>
             {
                 if (s is MenuItem mi && mi.Tag is string filePath)
@@ -420,9 +422,13 @@ public partial class MainWindow : Window
 
         foreach (var entry in history)
         {
-            var truncated = entry.SqlText.ReplaceLineEndings(" ");
-            if (truncated.Length > 80)
-                truncated = truncated[..77] + "...";
+            // Strip leading whitespace, blank lines, and comment lines for better preview
+            var lines = entry.SqlText.Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0 && !l.StartsWith("--"));
+            var truncated = string.Join(" ", lines);
+            if (truncated.Length > 120)
+                truncated = truncated[..117] + "...";
 
             var dbLabel = !string.IsNullOrEmpty(entry.Database) ? $" [{entry.Database}]" : "";
             var item = new MenuItem { Header = $"{truncated}{dbLabel}" };
@@ -473,6 +479,21 @@ public partial class MainWindow : Window
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+
+        // Ctrl+Tab / Ctrl+Shift+Tab — switch query tabs
+        if (ctrl && e.Key == Key.Tab && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            if (host != null)
+            {
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    host.SwitchToPreviousTab();
+                else
+                    host.SwitchToNextTab();
+            }
+            e.Handled = true;
+            return;
+        }
 
         // Cmd+E / Ctrl+E — Command Palette
         if (ctrl && e.Key == Key.E)
@@ -573,7 +594,7 @@ public partial class MainWindow : Window
         // Cmd+= / Cmd+- — font zoom
         if (ctrl && (e.Key == Key.OemPlus || e.Key == Key.Add))
         {
-            var newSize = Math.Min(_settings.Settings.FontSize + 1, 24);
+            var newSize = Math.Min(_settings.Settings.FontSize + 1, 32);
             _settings.Settings.FontSize = newSize;
             ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, newSize);
             _settings.Save();
@@ -1515,8 +1536,12 @@ public partial class MainWindow : Window
 
     private void OnQueryTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(QueryTabViewModel.QueryStatusText) && _boundQueryTab != null)
+        if (_boundQueryTab == null) return;
+
+        if (e.PropertyName == nameof(QueryTabViewModel.QueryStatusText))
             QueryStatusText.Text = _boundQueryTab.QueryStatusText;
+        else if (e.PropertyName == nameof(QueryTabViewModel.SelectedDatabase))
+            UpdateStatusBar();
     }
 
     private void OnQueryFlash(string message, QueryStatusSeverity severity)
@@ -1624,7 +1649,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Success — switch to Query Editor and open a new tab
+        // Success — switch to Query Editor
         QueryEditorTab.IsChecked = true;
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         if (host != null)

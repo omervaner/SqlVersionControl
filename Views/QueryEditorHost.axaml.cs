@@ -36,6 +36,10 @@ public partial class QueryEditorHost : UserControl
     private SettingsService? _settings;
     private bool _oeCollapsed;
 
+    // Caret tracking (prevent handler leak on tab switch)
+    private AvaloniaEdit.TextEditor? _lastCaretEditor;
+    private EventHandler? _caretHandler;
+
     private class CachedServerData
     {
         public List<string> Databases { get; set; } = [];
@@ -479,6 +483,18 @@ public partial class QueryEditorHost : UserControl
             SaveSession();
     }
 
+    public void SwitchToNextTab()
+    {
+        if (_tabs.Count <= 1) return;
+        SwitchToTab((_activeTabIndex + 1) % _tabs.Count);
+    }
+
+    public void SwitchToPreviousTab()
+    {
+        if (_tabs.Count <= 1) return;
+        SwitchToTab((_activeTabIndex - 1 + _tabs.Count) % _tabs.Count);
+    }
+
     /// <summary>Sync toolbar Database combo, Run/Stop enabled state with active tab.</summary>
     private void SyncToolbarWithActiveTab()
     {
@@ -497,14 +513,19 @@ public partial class QueryEditorHost : UserControl
         vm.PropertyChanged -= OnActiveTabPropertyChanged;
         vm.PropertyChanged += OnActiveTabPropertyChanged;
 
-        // Wire caret position tracking on active editor
+        // Wire caret position tracking on active editor (unsubscribe previous to prevent leak)
+        if (_lastCaretEditor != null && _caretHandler != null)
+            _lastCaretEditor.TextArea.Caret.PositionChanged -= _caretHandler;
+
         var activeTab = _tabs[_activeTabIndex];
-        activeTab.Editor.TextArea.Caret.PositionChanged += (_, _) =>
+        _lastCaretEditor = activeTab.Editor;
+        _caretHandler = (_, _) =>
         {
             var line = activeTab.Editor.TextArea.Caret.Line;
             var col = activeTab.Editor.TextArea.Caret.Column;
             CaretPositionChanged?.Invoke(line, col);
         };
+        activeTab.Editor.TextArea.Caret.PositionChanged += _caretHandler;
         // Fire immediately for current position
         CaretPositionChanged?.Invoke(
             activeTab.Editor.TextArea.Caret.Line,
@@ -679,16 +700,24 @@ public partial class QueryEditorHost : UserControl
     {
         var menu = new ContextMenu();
 
+        var targetTab = _tabs[tabIndex];
+
         var close = new MenuItem { Header = "Close" };
-        close.Click += async (_, _) => await CloseTabAsync(tabIndex);
+        close.Click += async (_, _) =>
+        {
+            var idx = _tabs.IndexOf(targetTab);
+            if (idx >= 0) await CloseTabAsync(idx);
+        };
         menu.Items.Add(close);
 
         var closeOthers = new MenuItem { Header = "Close Others" };
         closeOthers.Click += async (_, _) =>
         {
-            for (int i = _tabs.Count - 1; i >= 0; i--)
+            var tabsToClose = _tabs.Where(t => t != targetTab).ToList();
+            foreach (var tab in tabsToClose)
             {
-                if (i != tabIndex) await CloseTabAsync(i);
+                var idx = _tabs.IndexOf(tab);
+                if (idx >= 0) await CloseTabAsync(idx);
             }
         };
         menu.Items.Add(closeOthers);
@@ -696,16 +725,26 @@ public partial class QueryEditorHost : UserControl
         var closeRight = new MenuItem { Header = "Close Tabs to the Right" };
         closeRight.Click += async (_, _) =>
         {
-            for (int i = _tabs.Count - 1; i > tabIndex; i--)
-                await CloseTabAsync(i);
+            var idx = _tabs.IndexOf(targetTab);
+            if (idx < 0) return;
+            var tabsToClose = _tabs.Skip(idx + 1).ToList();
+            foreach (var tab in tabsToClose)
+            {
+                var i = _tabs.IndexOf(tab);
+                if (i >= 0) await CloseTabAsync(i);
+            }
         };
         menu.Items.Add(closeRight);
 
         var closeAll = new MenuItem { Header = "Close All" };
         closeAll.Click += async (_, _) =>
         {
-            for (int i = _tabs.Count - 1; i >= 0; i--)
-                await CloseTabAsync(i);
+            var tabsToClose = _tabs.ToList();
+            foreach (var tab in tabsToClose)
+            {
+                var idx = _tabs.IndexOf(tab);
+                if (idx >= 0) await CloseTabAsync(idx);
+            }
         };
         menu.Items.Add(closeAll);
 
@@ -731,7 +770,11 @@ public partial class QueryEditorHost : UserControl
         var newVm = newTab.DataContext as QueryTabViewModel;
         if (newVm != null)
         {
-            newVm.SelectedDatabase = sourceVm.SelectedDatabase;
+            // Load databases with desired selection (avoids race condition)
+            var connStr = newVm.TabConnectionString;
+            if (connStr != null && sourceVm.SelectedDatabase != null)
+                _ = LoadDatabasesForTabAsync(newVm, connStr, sourceVm.SelectedDatabase);
+
             newTab.Editor.Text = _tabs[sourceIndex].Editor.Text;
             newVm.SqlText = sourceVm.SqlText;
         }
@@ -932,7 +975,7 @@ public partial class QueryEditorHost : UserControl
         }
     }
 
-    private async Task LoadDatabasesForTabAsync(QueryTabViewModel vm, string connectionString)
+    private async Task LoadDatabasesForTabAsync(QueryTabViewModel vm, string connectionString, string? selectDatabase = null)
     {
         try
         {
@@ -948,7 +991,7 @@ public partial class QueryEditorHost : UserControl
                     _serverCache[connectionString] = new CachedServerData();
                 _serverCache[connectionString].Databases = dbs;
             }
-            vm.SetDatabases(dbs, vm.SelectedDatabase);
+            vm.SetDatabases(dbs, selectDatabase ?? vm.SelectedDatabase);
         }
         catch
         {
@@ -1166,7 +1209,7 @@ public partial class QueryEditorHost : UserControl
                         if (managed.ResolvedConnectionString != null)
                         {
                             vm.TabConnectionString = managed.ResolvedConnectionString;
-                            _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                            _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
                         }
                         restored = true;
                     }
@@ -1183,7 +1226,7 @@ public partial class QueryEditorHost : UserControl
                             if (match.ResolvedConnectionString != null)
                             {
                                 vm.TabConnectionString = match.ResolvedConnectionString;
-                                _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                                _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
                             }
                             restored = true;
                         }
@@ -1217,12 +1260,8 @@ public partial class QueryEditorHost : UserControl
                     vm.TabConnectionString = connSettings.ConnectionString;
 
                     // Load databases for this server async
-                    _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString);
+                    _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
                 }
-
-                // Restore database selection (will be applied when databases load)
-                if (tabState.SelectedDatabase != null)
-                    vm.SelectedDatabase = tabState.SelectedDatabase;
 
                 // Restore editor text
                 tabView.Editor.Text = tabState.SqlText;
@@ -1874,7 +1913,15 @@ public partial class QueryEditorHost : UserControl
                 explorer.SelectTop100(node);
                 e.Handled = true;
                 break;
+            case ObjectExplorerNodeType.View:
+                explorer.SelectTop100(node);
+                e.Handled = true;
+                break;
             case ObjectExplorerNodeType.Proc:
+                _ = explorer.ViewDefinitionAsync(node);
+                e.Handled = true;
+                break;
+            case ObjectExplorerNodeType.Function:
                 _ = explorer.ViewDefinitionAsync(node);
                 e.Handled = true;
                 break;
