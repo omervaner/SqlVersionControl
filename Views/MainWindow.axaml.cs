@@ -829,6 +829,67 @@ public partial class MainWindow : Window
     private async void OnOpened(object? sender, EventArgs e)
     {
         Opened -= OnOpened;
+
+        // Try auto-connecting saved connections with ConnectOnStartup
+        var autoConnects = _registry.Connections
+            .Where(c => c.Config.ConnectOnStartup)
+            .ToList();
+
+        foreach (var managed in autoConnects)
+        {
+            var (success, _) = await _registry.ConnectAsync(managed.Id);
+            if (success && managed.ResolvedConnectionString != null)
+            {
+                // Build ConnectionSettings from the managed connection
+                var config = managed.Config;
+                var settings = new ConnectionSettings
+                {
+                    Server = config.Server,
+                    Database = config.Database,
+                    Username = config.Username,
+                    UseWindowsAuth = config.UseWindowsAuth,
+                    TrustServerCertificate = config.TrustServerCertificate,
+                };
+                // Use the resolved connection string's password if SQL auth
+                if (!config.UseWindowsAuth)
+                    settings.Password = PasswordStore.Get(config.Server, config.Database, config.Username) ?? "";
+
+                _viewModel.OnConnected(settings, config);
+                _sleepDetector.Start();
+
+                var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                host?.SetDefaultConnection(settings, config);
+
+                UpdateStatusBar();
+                UpdateHistoryConnectionDot();
+
+                if (host != null) _ = host.ReloadDatabasesAsync();
+
+                var actView = this.FindControl<ActivityView>("ActivityViewControl");
+                actView?.UpdateConnectionDot(
+                    _viewModel.ActivityConnectionColor,
+                    _viewModel.ActivityConnectionProfile?.Name);
+                if (actView != null)
+                    _ = actView.InitializeConnectionAsync(settings.ConnectionString);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var traceService = new TraceService();
+                        await traceService.CleanupOrphanedSessionsAsync(settings.ConnectionString);
+                    }
+                    catch { }
+                });
+
+                var traceView = this.FindControl<TraceView>("TraceViewControl");
+                traceView?.RefreshConnections(_registry);
+
+                return; // Skip the connection dialog
+            }
+        }
+
+        // No auto-connect succeeded — show dialog as usual
         await ShowConnectionDialogAsync();
     }
 

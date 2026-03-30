@@ -316,6 +316,17 @@ public partial class QueryEditorHost : UserControl
             };
         }
 
+        // Wire confirm-discard-edits callback
+        vm.ConfirmDiscardEditsCallback = async message =>
+        {
+            var parent = TopLevel.GetTopLevel(this) as Window;
+            if (parent == null) return true;
+
+            var dialog = new ConfirmDialog(message, "Discard", "Cancel");
+            await dialog.ShowDialog(parent);
+            return dialog.Confirmed;
+        };
+
         // Load databases from appropriate server
         var effectiveConn = vm.TabConnectionString;
         if (effectiveConn != null && effectiveConn != _primaryConnectionString)

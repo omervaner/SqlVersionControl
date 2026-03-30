@@ -171,6 +171,12 @@ public partial class QueryTabViewModel : ObservableObject
     /// </summary>
     public Func<string, Task<string?>>? ReconnectCallback { get; set; }
 
+    /// <summary>
+    /// Callback to confirm discarding pending edit-mode changes.
+    /// Takes message, returns true if user confirms discard.
+    /// </summary>
+    public Func<string, Task<bool>>? ConfirmDiscardEditsCallback { get; set; }
+
     public string GetEffectiveConnectionString(string database)
     {
         if (TabConnectionString != null)
@@ -260,9 +266,17 @@ public partial class QueryTabViewModel : ObservableObject
 
         if (string.IsNullOrWhiteSpace(sql)) return;
 
-        // Exit edit mode before running a new query
+        // Exit edit mode before running a new query — confirm if pending changes
         if (IsEditMode)
+        {
+            if (PendingChangeCount > 0 && ConfirmDiscardEditsCallback != null)
+            {
+                var confirmed = await ConfirmDiscardEditsCallback(
+                    $"You have {PendingChangeCount} unsaved row change{(PendingChangeCount == 1 ? "" : "s")}. Discard and run query?");
+                if (!confirmed) return;
+            }
             ExitEditMode();
+        }
 
         IsRunning = true;
         StatusText = "Executing...";
@@ -394,7 +408,15 @@ public partial class QueryTabViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(sql)) return;
 
         if (IsEditMode)
+        {
+            if (PendingChangeCount > 0 && ConfirmDiscardEditsCallback != null)
+            {
+                var confirmed = await ConfirmDiscardEditsCallback(
+                    $"You have {PendingChangeCount} unsaved row change{(PendingChangeCount == 1 ? "" : "s")}. Discard and run query?");
+                if (!confirmed) return;
+            }
             ExitEditMode();
+        }
 
         // Check permission first
         var traceService = new TraceService();
