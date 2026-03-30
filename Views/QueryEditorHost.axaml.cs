@@ -84,13 +84,17 @@ public partial class QueryEditorHost : UserControl
         DataContext = _viewModel;
 
         // Wire Object Explorer events → active tab
-        _viewModel.ObjectExplorer.InsertTextRequested += OnInsertText;
+        _viewModel.ObjectExplorer.InsertTextRequested += (sql, autoRun, dbName, connId) => OnInsertText(sql, autoRun, dbName, connId);
         _viewModel.ObjectExplorer.InsertAtCursorRequested += OnInsertAtCursor;
-        _viewModel.ObjectExplorer.EditDataRequested += OnEditDataRequested;
+        _viewModel.ObjectExplorer.EditDataRequested += (sql, dbName, connId) => OnEditDataRequested(sql, dbName, connId);
         _viewModel.ObjectExplorer.CopyToClipboardRequested += OnCopyToClipboard;
         _viewModel.ObjectExplorer.AlterSequenceRequested += OnAlterSequenceRequested;
         _viewModel.ObjectExplorer.ResetSequenceRequested += OnResetSequenceRequested;
         _viewModel.ObjectExplorer.StartJobRequested += OnStartJobRequested;
+
+        // Rebuild tab strip when connection state changes (dot fade/unfade)
+        if (_registry != null)
+            _registry.ConnectionStateChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(RebuildTabStrip);
 
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);
@@ -635,7 +639,12 @@ public partial class QueryEditorHost : UserControl
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             });
 
-            // Connection color dot
+            // Check if tab's connection is active
+            var tabConnId = vm?.TabConnectionProfile?.Id;
+            var isTabConnected = tabConnId == null || _registry == null ||
+                (_registry.GetById(tabConnId)?.IsConnected ?? false);
+
+            // Connection color dot (faded if disconnected)
             if (vm?.TabConnectionProfile != null)
             {
                 var dotColor = Avalonia.Media.Color.Parse(vm.TabConnectionColor);
@@ -644,6 +653,7 @@ public partial class QueryEditorHost : UserControl
                     Width = 6,
                     Height = 6,
                     Fill = new Avalonia.Media.SolidColorBrush(dotColor),
+                    Opacity = isTabConnected ? 1.0 : 0.5,
                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
                 });
             }
@@ -664,13 +674,20 @@ public partial class QueryEditorHost : UserControl
             closeBtn.Click += async (_, _) => await CloseTabAsync(idx);
             headerPanel.Children.Add(closeBtn);
 
-            // Colored bottom border for connection environment
+            // Colored bottom border for connection environment (faded if disconnected)
             IBrush? bottomBorder = null;
             if (vm?.TabConnectionProfile != null)
             {
                 var borderColor = Avalonia.Media.Color.Parse(vm.TabConnectionColor);
-                bottomBorder = new Avalonia.Media.SolidColorBrush(borderColor);
+                bottomBorder = new Avalonia.Media.SolidColorBrush(borderColor,
+                    isTabConnected ? 1.0 : 0.5);
             }
+
+            // Tooltip: connection name + database
+            var tooltipText = vm?.TabConnectionProfile != null
+                ? $"{vm.TabConnectionDisplay}" + (vm.SelectedDatabase != null ? $" / {vm.SelectedDatabase}" : "")
+                  + (!isTabConnected ? " (disconnected)" : "")
+                : null;
 
             var tabBtn = new Button
             {
@@ -682,6 +699,8 @@ public partial class QueryEditorHost : UserControl
                 BorderThickness = bottomBorder != null ? new Thickness(0, 0, 0, 2) : new Thickness(0),
                 BorderBrush = bottomBorder
             };
+            if (tooltipText != null)
+                ToolTip.SetTip(tabBtn, tooltipText);
             tabBtn.Click += (_, _) => SwitchToTab(idx);
 
             // Middle-click to close
@@ -771,6 +790,31 @@ public partial class QueryEditorHost : UserControl
         var duplicate = new MenuItem { Header = "Duplicate Tab" };
         duplicate.Click += (_, _) => DuplicateTab(tabIndex);
         menu.Items.Add(duplicate);
+
+        // Reconnect option for disconnected tabs
+        var tabVm = _tabs[tabIndex].DataContext as QueryTabViewModel;
+        var tabConnId = tabVm?.TabConnectionProfile?.Id;
+        if (tabConnId != null && _registry != null)
+        {
+            var managed = _registry.GetById(tabConnId);
+            if (managed != null && !managed.IsConnected)
+            {
+                menu.Items.Add(new Separator());
+                var reconnect = new MenuItem { Header = "Reconnect" };
+                reconnect.Click += async (_, _) =>
+                {
+                    var (success, error) = await _registry.ConnectAsync(tabConnId);
+                    if (success && managed.ResolvedConnectionString != null)
+                    {
+                        tabVm!.TabConnectionString = managed.ResolvedConnectionString;
+                        _ = LoadDatabasesForTabAsync(tabVm, managed.ResolvedConnectionString);
+                        RebuildTabStrip();
+                        ActiveTabChanged?.Invoke();
+                    }
+                };
+                menu.Items.Add(reconnect);
+            }
+        }
 
         return menu;
     }
@@ -1406,13 +1450,40 @@ public partial class QueryEditorHost : UserControl
             _tabs[_activeTabIndex].InsertText(sql, false);
     }
 
-    private void OnInsertText(string sql, bool autoRun)
+    /// <summary>Resolve connection from OE node, falling back to active tab.</summary>
+    private (string? connStr, SavedConnection? profile) ResolveOeConnection(string? connectionId)
     {
-        // Inherit active tab's connection for OE context menu actions
-        var activeVm = ActiveTabViewModel;
-        AddNewTab(activeVm?.TabConnectionString, activeVm?.TabConnectionProfile);
+        string? connStr = null;
+        SavedConnection? profile = null;
+
+        if (connectionId != null && _registry != null)
+        {
+            var managed = _registry.GetById(connectionId);
+            if (managed != null)
+            {
+                connStr = managed.ResolvedConnectionString;
+                profile = managed.Config;
+            }
+        }
+
+        connStr ??= ActiveTabViewModel?.TabConnectionString;
+        profile ??= ActiveTabViewModel?.TabConnectionProfile;
+        return (connStr, profile);
+    }
+
+    private void OnInsertText(string sql, bool autoRun, string? databaseName = null, string? connectionId = null)
+    {
+        var (connStr, profile) = ResolveOeConnection(connectionId);
+        AddNewTab(connStr, profile);
+
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+        {
+            if (databaseName != null && connStr != null)
+                _ = LoadDatabasesForTabAsync(
+                    (_tabs[_activeTabIndex].DataContext as QueryTabViewModel)!, connStr, databaseName);
+
             _tabs[_activeTabIndex].InsertText(sql, autoRun);
+        }
     }
 
     private void OnInsertAtCursor(string text)
@@ -1570,16 +1641,20 @@ public partial class QueryEditorHost : UserControl
         _ = _viewModel.ObjectExplorer.ViewDefinitionAsync(node);
     }
 
-    private void OnEditDataRequested(string sql)
+    private void OnEditDataRequested(string sql, string? databaseName = null, string? connectionId = null)
     {
-        var activeVm = ActiveTabViewModel;
-        AddNewTab(activeVm?.TabConnectionString, activeVm?.TabConnectionProfile);
+        var (connStr, profile) = ResolveOeConnection(connectionId);
+        AddNewTab(connStr, profile);
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
         {
             var tab = _tabs[_activeTabIndex];
             var vm = tab.DataContext as QueryTabViewModel;
             if (vm != null)
+            {
                 vm.AutoEnterEditMode = true;
+                if (databaseName != null && connStr != null)
+                    _ = LoadDatabasesForTabAsync(vm, connStr, databaseName);
+            }
             tab.InsertText(sql, autoRun: true);
         }
     }

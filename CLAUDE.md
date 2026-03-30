@@ -1,7 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.5.0 (March 31, 2026)
+## PROJECT STATUS: v2.5.1 (March 31, 2026)
+
+v2.5.1: OE actions use correct connection/database for new tabs, tab dot+border fade on disconnect, tab tooltips show connection info, Messages tab bar for DML/DDL.
 
 v2.5.0: 22 UX improvements — OE double-click for Views/Functions, Ctrl+Tab, ConnectOnStartup, edit mode confirm, DML messages tab, delete connection confirm, intellisense cache invalidation, Compare tab error surfacing, and more.
 

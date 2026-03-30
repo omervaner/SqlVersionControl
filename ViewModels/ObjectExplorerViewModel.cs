@@ -17,14 +17,15 @@ public partial class ObjectExplorerViewModel : ObservableObject
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private bool _showFilterEmptyState;
 
-    /// <summary>Fired when a context menu action wants to set editor text. Bool = auto-run.</summary>
-    public event Action<string, bool>? InsertTextRequested;
+    /// <summary>Fired when a context menu action wants to set editor text. (sql, autoRun, databaseName, connectionId)</summary>
+    public event Action<string, bool, string?, string?>? InsertTextRequested;
 
     /// <summary>Fired when column double-click wants to insert text at cursor.</summary>
     public event Action<string>? InsertAtCursorRequested;
 
     /// <summary>Fired when "Edit Data" wants to run a SELECT and auto-enter edit mode.</summary>
-    public event Action<string>? EditDataRequested;
+    /// <summary>Fired when "Edit Data" wants to run a SELECT and auto-enter edit mode. (sql, databaseName, connectionId)</summary>
+    public event Action<string, string?, string?>? EditDataRequested;
 
     /// <summary>Fired when a sequence context menu wants to show the Alter dialog.</summary>
     public event Action<ObjectExplorerNode>? AlterSequenceRequested;
@@ -1021,18 +1022,23 @@ public partial class ObjectExplorerViewModel : ObservableObject
 
     // ── Context Menu Actions ────────────────────────────────────────
 
+    private void FireInsertText(string sql, bool autoRun, ObjectExplorerNode node)
+    {
+        InsertTextRequested?.Invoke(sql, autoRun, node.DatabaseName, node.ConnectionId);
+    }
+
     public void SelectTop100(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"SELECT TOP 100 * FROM [{schema}].[{node.Name}]";
-        InsertTextRequested?.Invoke(sql, true);
+        FireInsertText(sql, true, node);
     }
 
     public void SelectCount(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"SELECT COUNT(*) FROM [{schema}].[{node.Name}]";
-        InsertTextRequested?.Invoke(sql, true);
+        FireInsertText(sql, true, node);
     }
 
     public async Task ViewDefinitionAsync(ObjectExplorerNode node)
@@ -1043,7 +1049,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             ? await _db.GetObjectDefinitionAsync(connStr, node.DatabaseName, schema, node.Name)
             : await _db.GetObjectDefinitionAsync(node.DatabaseName, schema, node.Name);
         if (definition != null)
-            InsertTextRequested?.Invoke(definition, false);
+            FireInsertText(definition, false, node);
     }
 
     public void ScriptAsCreate(ObjectExplorerNode node)
@@ -1068,7 +1074,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             @"\bCREATE\s+(OR\s+ALTER\s+)?(PROCEDURE|PROC|FUNCTION|VIEW|TRIGGER)\b",
             "ALTER $2",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        InsertTextRequested?.Invoke(altered, false);
+        FireInsertText(altered, false, node);
     }
 
     /// <summary>Script as DROP with IF EXISTS safety.</summary>
@@ -1085,7 +1091,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             _ => "OBJECT"
         };
         var sql = $"DROP {objectType} IF EXISTS [{schema}].[{node.Name}]";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     public void ToggleTrigger(ObjectExplorerNode node, bool enable)
@@ -1094,7 +1100,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var parentTable = node.ParentTableName;
         var action = enable ? "ENABLE" : "DISABLE";
         var sql = $"{action} TRIGGER [{schema}].[{node.Name}] ON [{schema}].[{parentTable}]";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     /// <summary>Generate INSERT template with all columns and placeholder values.</summary>
@@ -1111,7 +1117,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var colNames = string.Join(",\n    ", columns.Select(c => $"[{c.Name}]"));
         var colValues = string.Join(",\n    ", columns.Select(c => $"/* {c.TypeName} */ NULL"));
         var sql = $"INSERT INTO [{schema}].[{node.Name}]\n(\n    {colNames}\n)\nVALUES\n(\n    {colValues}\n)";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     /// <summary>Generate ALTER TABLE ADD column template.</summary>
@@ -1119,7 +1125,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"ALTER TABLE [{schema}].[{node.Name}]\n    ADD [ColumnName] NVARCHAR(50) NULL";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     /// <summary>Generate CREATE TABLE script from column metadata.</summary>
@@ -1134,7 +1140,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         if (columns.Count == 0) return;
 
         var sql = DatabaseService.GenerateCreateTableScript(schema, node.Name, columns);
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     /// <summary>Script column as SELECT with this column.</summary>
@@ -1143,7 +1149,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var table = node.ParentTableName;
         var sql = $"SELECT [{node.Name}] FROM [{schema}].[{table}]";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     /// <summary>Script column as WHERE clause.</summary>
@@ -1177,7 +1183,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             sql += "\n     " + paramList;
         }
 
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     public void SelectDistinct(ObjectExplorerNode node)
@@ -1185,7 +1191,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var table = node.ParentTableName;
         var sql = $"SELECT DISTINCT [{node.Name}] FROM [{schema}].[{table}] ORDER BY [{node.Name}]";
-        InsertTextRequested?.Invoke(sql, true);
+        FireInsertText(sql, true, node);
     }
 
     public void InsertColumnName(ObjectExplorerNode node)
@@ -1197,7 +1203,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"SELECT current_value FROM [{node.DatabaseName}].sys.sequences WHERE name = '{node.Name}' AND schema_id = SCHEMA_ID('{schema}')";
-        InsertTextRequested?.Invoke(sql, true);
+        FireInsertText(sql, true, node);
     }
 
     public void ScriptSequenceCreate(ObjectExplorerNode node)
@@ -1205,7 +1211,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var dataType = node.TypeInfo.Split(',')[0].Trim();
         var sql = $"CREATE SEQUENCE [{schema}].[{node.Name}] AS {dataType}";
-        InsertTextRequested?.Invoke(sql, false);
+        FireInsertText(sql, false, node);
     }
 
     public async Task ViewJobStepsAsync(ObjectExplorerNode node)
@@ -1227,7 +1233,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
             sb.AppendLine();
         }
 
-        InsertTextRequested?.Invoke(sb.ToString(), false);
+        FireInsertText(sb.ToString(), false, node);
     }
 
     public async Task ViewJobHistoryAsync(ObjectExplorerNode node)
@@ -1253,14 +1259,14 @@ public partial class ObjectExplorerViewModel : ObservableObject
             sb.AppendLine();
         }
 
-        InsertTextRequested?.Invoke(sb.ToString(), false);
+        FireInsertText(sb.ToString(), false, node);
     }
 
     public void EditData(ObjectExplorerNode node)
     {
         var schema = string.IsNullOrEmpty(node.Schema) ? "dbo" : node.Schema;
         var sql = $"SELECT TOP 200 * FROM [{schema}].[{node.Name}]";
-        EditDataRequested?.Invoke(sql);
+        EditDataRequested?.Invoke(sql, node.DatabaseName, node.ConnectionId);
     }
 
     /// <summary>
