@@ -69,7 +69,7 @@
         </Border>
 
         <!-- Right panel: edit form -->
-        <Grid Grid.Column="1" RowDefinitions="*,Auto" IsVisible="{Binding IsEditing}">
+        <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto" IsVisible="{Binding IsEditing}">
             <ScrollViewer Grid.Row="0" Padding="20,16,20,8">
                 <StackPanel>
                     <!-- Connection Name -->
@@ -125,35 +125,35 @@
                     <TextBlock Text="Color" FontWeight="SemiBold" FontSize="12" Margin="0,12,0,4"
                                Foreground="{DynamicResource TextPrimary}"/>
                     <StackPanel x:Name="ColorPicker" Orientation="Horizontal" Spacing="8"/>
-
-                    <!-- Test / Status -->
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,16,0,0">
-                        <Button Content="Test Connection"
-                                Command="{Binding TestConnectionCommand}"
-                                IsEnabled="{Binding !IsTesting}"
-                                Classes="btn-secondary" Padding="10,5" FontSize="11"/>
-                        <Button Content="Connect" Command="{Binding ConnectCommand}"
-                                IsEnabled="{Binding CanConnect}"
-                                Classes="btn-primary" Padding="10,5" FontSize="11"/>
-                        <Button Content="Disconnect" Command="{Binding DisconnectCommand}"
-                                IsEnabled="{Binding CanDisconnect}"
-                                Classes="btn-danger" Padding="10,5" FontSize="11"/>
-                    </StackPanel>
-
-                    <TextBlock Text="{Binding TestResult}" Margin="0,6,0,0" FontSize="11"
-                               TextWrapping="Wrap"
-                               IsVisible="{Binding TestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Save / Cancel — pinned at bottom -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="20,8,20,16"
-                        HorizontalAlignment="Right">
-                <Button Content="Cancel" Command="{Binding CancelEditCommand}"
-                        Classes="btn-secondary" Padding="14,6" FontSize="12"/>
-                <Button Content="Save" Command="{Binding SaveCommand}"
-                        Classes="btn-primary" Padding="14,6" FontSize="12"/>
-            </StackPanel>
+            <!-- Test result message -->
+            <TextBlock Grid.Row="1" Text="{Binding TestResult}" Margin="20,6,20,0" FontSize="11"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding TestResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <!-- All buttons — pinned at bottom -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="20,8,20,16">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Test Connection"
+                            Command="{Binding TestConnectionCommand}"
+                            IsEnabled="{Binding !IsTesting}"
+                            Classes="btn-secondary" Padding="10,5" FontSize="11"/>
+                    <Button Content="Connect" Command="{Binding ConnectCommand}"
+                            IsEnabled="{Binding CanConnect}"
+                            Classes="btn-primary" Padding="10,5" FontSize="11"/>
+                    <Button Content="Disconnect" Command="{Binding DisconnectCommand}"
+                            IsEnabled="{Binding CanDisconnect}"
+                            Classes="btn-danger" Padding="10,5" FontSize="11"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Cancel" Command="{Binding CancelEditCommand}"
+                            Classes="btn-secondary" Padding="14,6" FontSize="12"/>
+                    <Button Content="Save" Command="{Binding SaveCommand}"
+                            Classes="btn-primary" Padding="14,6" FontSize="12"/>
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- Empty state when not editing -->

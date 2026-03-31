@@ -40,6 +40,9 @@ public partial class MainWindow : Window
         _settings = new SettingsService();
         _registry = new ConnectionRegistry(_settings);
         _registry.Load();
+        _registry.ConnectionAdded += _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => RebuildQuickSwitchButtons());
+        _registry.ConnectionRemoved += _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => RebuildQuickSwitchButtons());
+        _registry.ConnectionStateChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => RebuildQuickSwitchButtons());
         _sessionService = new SessionService();
         _queryFileService = new QueryFileService();
         _viewModel = new MainWindowViewModel();
@@ -1661,6 +1664,17 @@ public partial class MainWindow : Window
             var color = Avalonia.Media.Color.Parse(conn.Color ?? "#88a1bb");
             var brush = new Avalonia.Media.SolidColorBrush(color);
 
+            // On light theme, use darkened color for text/border to ensure contrast
+            var displayBrush = brush;
+            if (!ThemeManager.IsDarkTheme)
+            {
+                var darkened = Avalonia.Media.Color.FromRgb(
+                    (byte)(color.R * 0.55),
+                    (byte)(color.G * 0.55),
+                    (byte)(color.B * 0.55));
+                displayBrush = new Avalonia.Media.SolidColorBrush(darkened);
+            }
+
             var btn = new Button
             {
                 Content = conn.Name,
@@ -1668,8 +1682,8 @@ public partial class MainWindow : Window
                 Padding = new Avalonia.Thickness(6, 1),
                 Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
                 Background = isActive ? brush : Avalonia.Media.Brushes.Transparent,
-                Foreground = isActive ? Avalonia.Media.Brushes.White : brush,
-                BorderBrush = brush,
+                Foreground = isActive ? Avalonia.Media.Brushes.White : displayBrush,
+                BorderBrush = displayBrush,
                 BorderThickness = new Avalonia.Thickness(1),
                 FontWeight = isActive ? Avalonia.Media.FontWeight.Bold : Avalonia.Media.FontWeight.Normal,
                 MinWidth = 0,
