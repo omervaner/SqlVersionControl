@@ -129,7 +129,8 @@ public partial class QueryEditorHost : UserControl
         // Wire Format button
         FormatButton.Click += (_, _) => FormatSqlInEditor();
 
-        // Wire OE collapse/expand buttons
+        // Wire OE refresh/collapse/expand buttons
+        OeRefreshButton.Click += async (_, _) => await ReloadDatabasesAsync();
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
         OeExpandButton.Click += (_, _) => ToggleObjectExplorer();
         RestoreObjectExplorerState();
@@ -293,12 +294,17 @@ public partial class QueryEditorHost : UserControl
     {
         if (_db == null) return;
 
+        // Inherit from active tab when no explicit connection is provided
+        var currentVm = ActiveTabViewModel;
+        var connStr = connectionString ?? currentVm?.TabConnectionString ?? _primaryConnectionString;
+        var connProfile = profile ?? currentVm?.TabConnectionProfile ?? _primaryProfile;
+
         _tabCounter++;
         var vm = new QueryTabViewModel(_db)
         {
             TabTitle = $"Query {_tabCounter}",
-            TabConnectionString = connectionString ?? _primaryConnectionString,
-            TabConnectionProfile = profile ?? _primaryProfile
+            TabConnectionString = connStr,
+            TabConnectionProfile = connProfile
         };
 
         // Wire reconnect callback for disconnected connections

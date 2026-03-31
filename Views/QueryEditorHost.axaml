@@ -13,10 +13,23 @@
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,1,0">
             <Grid RowDefinitions="Auto,Auto,*">
                 <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="10,0" Height="28">
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
                         <TextBlock Text="Object Explorer" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Button x:Name="OeCollapseButton"
+                        <Button x:Name="OeRefreshButton"
                                 Grid.Column="1"
+                                Content="&#x21BB;" FontSize="12"
+                                Width="20" Height="20"
+                                Padding="0" MinWidth="0" MinHeight="0"
+                                Background="Transparent"
+                                Foreground="{DynamicResource TextSecondary}"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                VerticalAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                ToolTip.Tip="Refresh Object Explorer"/>
+                        <Button x:Name="OeCollapseButton"
+                                Grid.Column="2"
                                 Content="&#x25C0;" FontSize="9"
                                 Width="20" Height="20"
                                 Padding="0" MinWidth="0" MinHeight="0"
@@ -25,6 +38,8 @@
                                 BorderThickness="0"
                                 Cursor="Hand"
                                 VerticalAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
                                 ToolTip.Tip="Collapse Object Explorer (Ctrl+B)"/>
                     </Grid>
                 </Border>
