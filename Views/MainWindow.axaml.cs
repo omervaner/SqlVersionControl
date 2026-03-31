@@ -706,8 +706,11 @@ public partial class MainWindow : Window
                 break;
 
             case Key.R:
-                if (_viewModel.IsConnected)
-                    _ = _viewModel.RefreshCommand.ExecuteAsync(null);
+                if (QueryEditorTab.IsChecked == true)
+                {
+                    var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    qeHost?.ToggleActiveResultsPanel();
+                }
                 e.Handled = true;
                 break;
 
@@ -1318,7 +1321,7 @@ public partial class MainWindow : Window
 
             // View
             new() { Name = "Toggle Object Explorer", Shortcut = $"{mod}+B", Description = "Show/hide sidebar", Execute = () => host?.ToggleObjectExplorer() },
-            new() { Name = "Toggle Results Panel", Shortcut = $"{mod}+J", Description = "Show/hide results", Execute = () => host?.ToggleActiveResultsPanel() },
+            new() { Name = "Toggle Results Panel", Shortcut = $"{mod}+R", Description = "Show/hide results", Execute = () => host?.ToggleActiveResultsPanel() },
             new() { Name = "Zoom In", Shortcut = $"{mod}+=", Description = "Increase font size", Execute = () => { var s = Math.Min(_settings.Settings.FontSize + 1, 32); _settings.Settings.FontSize = s; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, s); _settings.Save(); } },
             new() { Name = "Zoom Out", Shortcut = $"{mod}+-", Description = "Decrease font size", Execute = () => { var s = Math.Max(_settings.Settings.FontSize - 1, 8); _settings.Settings.FontSize = s; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, s); _settings.Save(); } },
             new() { Name = "Reset Zoom", Shortcut = "", Description = "Reset to default font size", Execute = () => { _settings.Settings.FontSize = 12; ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, 12); _settings.Save(); } },

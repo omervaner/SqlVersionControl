@@ -94,8 +94,10 @@ public partial class QueryTabView : UserControl
             if (_resultsCollapsed)
             {
                 _resultsCollapsed = false;
-                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(7, GridUnitType.Star);
-                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(3, GridUnitType.Star);
+                var totalHeight = EditorResultsGrid.Bounds.Height;
+                var msgHeight = Math.Max(totalHeight > 0 ? totalHeight * 0.25 : 150, 80);
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(totalHeight - msgHeight - 6, GridUnitType.Pixel);
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(msgHeight, GridUnitType.Pixel);
                 ResultsSplitter.IsEnabled = true;
                 ResultsCollapseButton.Content = "\u25BC";
             }
@@ -155,6 +157,9 @@ public partial class QueryTabView : UserControl
         // Wire results collapse button + double-click results tab bar to toggle
         ResultsCollapseButton.Click += (_, _) => ToggleResultsPanel();
         ResultsTabBar.DoubleTapped += (_, _) => ToggleResultsPanel();
+
+        // Double-click splitter to toggle between auto-sized and maximized (50/50)
+        ResultsSplitter.DoubleTapped += (_, _) => ToggleResultsMaximized();
 
         // Peek Definition: Cmd+Click (Mac) / Ctrl+Click (Windows) on word in editor
         SqlEditor.AddHandler(InputElement.PointerPressedEvent, OnEditorPointerPressed, handledEventsToo: true);
@@ -2087,8 +2092,10 @@ public partial class QueryTabView : UserControl
         if (_resultsCollapsed)
         {
             _resultsCollapsed = false;
-            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(6, GridUnitType.Star);
-            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(4, GridUnitType.Star);
+            var totalHeight = EditorResultsGrid.Bounds.Height;
+            var peekHeight = totalHeight > 0 ? totalHeight * 0.4 : 250;
+            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(totalHeight - peekHeight - 6, GridUnitType.Pixel);
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(peekHeight, GridUnitType.Pixel);
             ResultsSplitter.IsEnabled = true;
             ResultsCollapseButton.Content = "\u25BC"; // ▼
         }
@@ -2197,21 +2204,30 @@ public partial class QueryTabView : UserControl
     {
         RebuildResultTabs();
 
-        // Auto-expand results panel when new results arrive (70% editor / 30% results)
+        // Auto-expand results panel, sized to fit content (capped at 50%)
         try
         {
-            if (_resultsCollapsed && _viewModel?.Results.Count > 0)
+            if (_viewModel?.Results.Count > 0)
             {
                 _resultsCollapsed = false;
-                // Use saved height, or calculate 30% of available space
-                var h = _settings?.Settings.ResultsPanelHeight ?? 0;
-                if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h))
-                {
-                    var totalHeight = EditorResultsGrid.Bounds.Height;
-                    h = totalHeight > 100 ? totalHeight * 0.3 : 200;
-                }
-                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(7, GridUnitType.Star);
-                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(3, GridUnitType.Star);
+
+                var totalHeight = EditorResultsGrid.Bounds.Height;
+                if (totalHeight <= 0) totalHeight = 600;
+                var maxResultsHeight = totalHeight * 0.5;
+
+                // Calculate height needed: header bar (28) + rows × row height
+                var rowHeight = _settings?.Settings.GridRowHeight ?? 22;
+                var firstResult = _viewModel.Results[0];
+                var rowCount = firstResult.RowCount;
+                var neededHeight = 28 + (rowCount + 2) * rowHeight + 10; // +1 header row, +1 buffer row, +10 chrome
+
+                var resultHeight = Math.Min(neededHeight, maxResultsHeight);
+                var minHeight = Math.Max(150, totalHeight * 0.2); // at least 20% or 150px
+                resultHeight = Math.Max(resultHeight, minHeight);
+
+                var editorHeight = totalHeight - resultHeight - 6; // 6 for splitter
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(editorHeight, GridUnitType.Pixel);
+                EditorResultsGrid.RowDefinitions[2].Height = new GridLength(resultHeight, GridUnitType.Pixel);
                 ResultsSplitter.IsEnabled = true;
                 ResultsCollapseButton.Content = "\u25BC"; // ▼
                 if (_settings != null)
@@ -2267,6 +2283,47 @@ public partial class QueryTabView : UserControl
         catch (Exception ex)
         {
             AppLogger.LogError("QueryTabView.ToggleResultsPanel", ex);
+        }
+    }
+
+    private bool _resultsMaximized;
+
+    private void ToggleResultsMaximized()
+    {
+        if (_resultsCollapsed) return; // nothing to maximize if collapsed
+
+        var rowDefs = EditorResultsGrid.RowDefinitions;
+        var totalHeight = EditorResultsGrid.Bounds.Height;
+        if (totalHeight <= 0) return;
+
+        if (_resultsMaximized)
+        {
+            // Restore to auto-sized based on row count
+            _resultsMaximized = false;
+            if (_viewModel?.Results.Count > 0)
+            {
+                var rowHeight = _settings?.Settings.GridRowHeight ?? 22;
+                var rowCount = _viewModel.Results[0].RowCount;
+                var neededHeight = 28 + (rowCount + 2) * rowHeight + 10;
+                var resultHeight = Math.Min(neededHeight, totalHeight * 0.5);
+                var minHeight = Math.Max(150, totalHeight * 0.2);
+                resultHeight = Math.Max(resultHeight, minHeight);
+
+                rowDefs[0].Height = new GridLength(totalHeight - resultHeight - 6, GridUnitType.Pixel);
+                rowDefs[2].Height = new GridLength(resultHeight, GridUnitType.Pixel);
+            }
+            else
+            {
+                rowDefs[0].Height = new GridLength(7, GridUnitType.Star);
+                rowDefs[2].Height = new GridLength(3, GridUnitType.Star);
+            }
+        }
+        else
+        {
+            // Maximize results to 50/50
+            _resultsMaximized = true;
+            rowDefs[0].Height = new GridLength(1, GridUnitType.Star);
+            rowDefs[2].Height = new GridLength(1, GridUnitType.Star);
         }
     }
 

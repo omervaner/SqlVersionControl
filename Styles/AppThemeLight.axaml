@@ -31,7 +31,7 @@
     <SolidColorBrush x:Key="BorderDefault" Color="#c4b9a5"/>
     <SolidColorBrush x:Key="SplitterBackground" Color="#c4b9a5"/>
     <SolidColorBrush x:Key="IndentGuide" Color="#c4b9a5" Opacity="0.3"/>
-    <SolidColorBrush x:Key="GridVerticalLine" Color="#c4b9a5" Opacity="0.2"/>
+    <SolidColorBrush x:Key="GridVerticalLine" Color="#c4b9a5" Opacity="0.6"/>
 
     <!-- === TEXT === -->
     <SolidColorBrush x:Key="TextPrimary" Color="#3a3632"/>

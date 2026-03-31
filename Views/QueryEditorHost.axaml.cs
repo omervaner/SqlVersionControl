@@ -361,6 +361,11 @@ public partial class QueryEditorHost : UserControl
                 : null;
             vm.SetDatabases(_cachedDatabases, selectedDb);
         }
+        else if (effectiveConn != null)
+        {
+            // Registry mode — _cachedDatabases not populated, fetch directly
+            _ = LoadDatabasesForTabAsync(vm, effectiveConn);
+        }
 
         // Refresh tab strip when unsaved changes indicator changes
         vm.PropertyChanged += (_, e) =>
