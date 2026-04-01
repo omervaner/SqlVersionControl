@@ -867,10 +867,12 @@ public partial class QueryTabView : UserControl
         {
             var docLine = doc.GetLineByNumber(line);
             var text = doc.GetText(docLine.Offset, docLine.Length);
-            if (text.StartsWith("-- "))
-                doc.Remove(docLine.Offset, 3);
-            else if (text.StartsWith("--"))
-                doc.Remove(docLine.Offset, 2);
+            var trimmed = text.TrimStart();
+            var indent = text.Length - trimmed.Length;
+            if (trimmed.StartsWith("-- "))
+                doc.Remove(docLine.Offset + indent, 3);
+            else if (trimmed.StartsWith("--"))
+                doc.Remove(docLine.Offset + indent, 2);
         }
         doc.EndUpdate();
     }
@@ -1949,16 +1951,38 @@ public partial class QueryTabView : UserControl
     private void OnEditorDragOver(object? sender, DragEventArgs e)
     {
 #pragma warning disable CS0618 // DragEventArgs.Data is obsolete
-        if (e.Data.Contains("ObjectExplorerNode"))
+        if (e.Data.Contains("ObjectExplorerNode") || e.Data.Contains(DataFormats.Files))
             e.DragEffects = DragDropEffects.Copy;
         else
             e.DragEffects = DragDropEffects.None;
 #pragma warning restore CS0618
     }
 
+    /// <summary>Fired when a .sql file is dropped on the editor (opens in new tab).</summary>
+    public event Action<string>? FileDropped;
+
     private void OnEditorDrop(object? sender, DragEventArgs e)
     {
 #pragma warning disable CS0618 // DragEventArgs.Data is obsolete
+        // Handle external file drops (.sql files → open in new tab)
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            var files = e.Data.GetFiles();
+            if (files != null)
+            {
+                foreach (var item in files)
+                {
+                    if (item is Avalonia.Platform.Storage.IStorageFile file)
+                    {
+                        var path = file.Path.LocalPath;
+                        if (path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+                            FileDropped?.Invoke(path);
+                    }
+                }
+            }
+            return;
+        }
+
         if (!e.Data.Contains("ObjectExplorerNode")) return;
         var node = e.Data.Get("ObjectExplorerNode") as ObjectExplorerNode;
 #pragma warning restore CS0618

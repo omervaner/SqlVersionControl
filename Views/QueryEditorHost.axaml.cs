@@ -394,6 +394,7 @@ public partial class QueryEditorHost : UserControl
         tabView.QuickExecuteRequested += OnQuickExecuteRequested;
         tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
         tabView.FilterByValueRequested += sql => OpenScriptInNewTab(sql);
+        tabView.FileDropped += path => OpenDroppedFile(path);
         tabView.FormatSqlRequested += FormatSqlInEditor;
         tabView.QuickQuoteRequested += () => QuickQuoteSelection(nPrefix: false);
         tabView.ShowDependenciesRequested += OnShowDependenciesFromEditor;
@@ -1531,6 +1532,31 @@ public partial class QueryEditorHost : UserControl
         AddNewTab(connectionString ?? activeVm?.TabConnectionString, profile ?? activeVm?.TabConnectionProfile);
         if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
             _tabs[_activeTabIndex].InsertText(sql, false);
+    }
+
+    /// <summary>Open a .sql file dropped onto the editor in a new tab.</summary>
+    private void OpenDroppedFile(string path)
+    {
+        try
+        {
+            var sql = System.IO.File.ReadAllText(path);
+            AddNewTab();
+            if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            {
+                var tab = _tabs[_activeTabIndex];
+                var vm = tab.DataContext as QueryTabViewModel;
+                if (vm != null)
+                {
+                    vm.TabTitle = System.IO.Path.GetFileName(path);
+                    tab.InsertText(sql, false);
+                }
+                RebuildTabStrip();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("QueryEditorHost.OpenDroppedFile", ex);
+        }
     }
 
     /// <summary>Resolve connection from OE node, falling back to active tab.</summary>
