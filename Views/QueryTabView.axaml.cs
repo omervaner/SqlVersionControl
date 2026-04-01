@@ -96,7 +96,7 @@ public partial class QueryTabView : UserControl
                 _resultsCollapsed = false;
                 var totalHeight = EditorResultsGrid.Bounds.Height;
                 var msgHeight = Math.Max(totalHeight > 0 ? totalHeight * 0.25 : 150, 80);
-                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(totalHeight - msgHeight - 6, GridUnitType.Pixel);
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 EditorResultsGrid.RowDefinitions[2].Height = new GridLength(msgHeight, GridUnitType.Pixel);
                 ResultsSplitter.IsEnabled = true;
                 ResultsCollapseButton.Content = "\u25BC";
@@ -134,8 +134,10 @@ public partial class QueryTabView : UserControl
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.KeyDown += OnResultsGridKeyDown;
 
-        // Cell detail viewer
+        // Cell detail viewer — track both row changes and cell clicks
         ResultsGrid.SelectionChanged += OnResultsGridCellSelected;
+        ResultsGrid.CellPointerPressed += (_, _) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateCellDetail(), Avalonia.Threading.DispatcherPriority.Background);
         CellDetailCopyButton.Click += async (_, _) =>
         {
             if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
@@ -1157,9 +1159,24 @@ public partial class QueryTabView : UserControl
     {
         if (!_cellDetailResizing) return;
         var current = e.GetPosition(this);
-        var delta = _cellDetailResizeStart.Y - current.Y;
-        var newHeight = Math.Clamp(_cellDetailStartHeight + delta, 40, 400);
+        var delta = _cellDetailResizeStart.Y - current.Y; // positive = dragged up = panel grows
+
+        var resultsHeight = EditorResultsGrid.RowDefinitions[2].ActualHeight;
+        var maxGrowth = resultsHeight - 80; // keep at least 80px for results grid
+        var maxDetailHeight = _cellDetailStartHeight + Math.Max(maxGrowth, 0);
+        var newHeight = Math.Clamp(_cellDetailStartHeight + delta, 40, maxDetailHeight);
+        var actualDelta = newHeight - _cellDetailStartHeight;
+
+        // Shrink results grid by the same amount the detail panel grows
+        if (actualDelta != 0)
+        {
+            var newResultsHeight = Math.Max(resultsHeight - actualDelta, 80);
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(newResultsHeight, GridUnitType.Pixel);
+        }
+
         CellDetailPanel.Height = newHeight;
+        _cellDetailResizeStart = current;
+        _cellDetailStartHeight = newHeight;
         e.Handled = true;
     }
 
@@ -1173,7 +1190,9 @@ public partial class QueryTabView : UserControl
         }
     }
 
-    private void OnResultsGridCellSelected(object? sender, SelectionChangedEventArgs e)
+    private void OnResultsGridCellSelected(object? sender, SelectionChangedEventArgs e) => UpdateCellDetail();
+
+    private void UpdateCellDetail()
     {
         if (ResultsGrid.SelectedItem == null || ResultsGrid.CurrentColumn == null)
         {
@@ -2094,7 +2113,7 @@ public partial class QueryTabView : UserControl
             _resultsCollapsed = false;
             var totalHeight = EditorResultsGrid.Bounds.Height;
             var peekHeight = totalHeight > 0 ? totalHeight * 0.4 : 250;
-            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(totalHeight - peekHeight - 6, GridUnitType.Pixel);
+            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
             EditorResultsGrid.RowDefinitions[2].Height = new GridLength(peekHeight, GridUnitType.Pixel);
             ResultsSplitter.IsEnabled = true;
             ResultsCollapseButton.Content = "\u25BC"; // ▼
@@ -2225,8 +2244,7 @@ public partial class QueryTabView : UserControl
                 var minHeight = Math.Max(150, totalHeight * 0.2); // at least 20% or 150px
                 resultHeight = Math.Max(resultHeight, minHeight);
 
-                var editorHeight = totalHeight - resultHeight - 6; // 6 for splitter
-                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(editorHeight, GridUnitType.Pixel);
+                EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 EditorResultsGrid.RowDefinitions[2].Height = new GridLength(resultHeight, GridUnitType.Pixel);
                 ResultsSplitter.IsEnabled = true;
                 ResultsCollapseButton.Content = "\u25BC"; // ▼
@@ -2309,7 +2327,7 @@ public partial class QueryTabView : UserControl
                 var minHeight = Math.Max(150, totalHeight * 0.2);
                 resultHeight = Math.Max(resultHeight, minHeight);
 
-                rowDefs[0].Height = new GridLength(totalHeight - resultHeight - 6, GridUnitType.Pixel);
+                rowDefs[0].Height = new GridLength(1, GridUnitType.Star);
                 rowDefs[2].Height = new GridLength(resultHeight, GridUnitType.Pixel);
             }
             else
