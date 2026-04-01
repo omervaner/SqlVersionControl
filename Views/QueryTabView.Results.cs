@@ -23,6 +23,8 @@ public partial class QueryTabView
 
     private const int MessagesTabTag = -1000;
     private const int TraceTabTag = -2000;
+    private const int PlanTabTag = -3000;
+    private bool _hasPlan;
 
     private static IBrush GetNullForeground()
     {
@@ -195,7 +197,7 @@ public partial class QueryTabView
 
         var results = _viewModel.Results;
         var hasMessages = _viewModel.Messages.Count > 0;
-        var hasTabs = _pinnedResults.Count > 0 || results.Count > 0 || hasMessages;
+        var hasTabs = _pinnedResults.Count > 0 || results.Count > 0 || hasMessages || _hasPlan;
 
         if (!hasTabs)
         {
@@ -370,6 +372,26 @@ public partial class QueryTabView
             ResultTabHeaders.Children.Add(traceBtn);
         }
 
+        // Exec Plan tab (only visible when plan has been generated)
+        if (_hasPlan)
+        {
+            var planBtn = new Button
+            {
+                Content = "Exec Plan",
+                Padding = new Thickness(10, 4),
+                Margin = new Thickness(0),
+                FontSize = 11,
+                Foreground = GetRowBrush("TextSecondary"),
+                Background = Brushes.Transparent,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                BorderBrush = Brushes.Transparent,
+                Tag = PlanTabTag
+            };
+            planBtn.Click += (_, _) => SelectPlanTab();
+            ResultTabHeaders.Children.Add(planBtn);
+        }
+
         // Auto-select first live result
         if (results.Count > 0)
         {
@@ -465,6 +487,7 @@ public partial class QueryTabView
         _selectedTabIndex = index;
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = false;
+        PlanPanel.IsVisible = false;
         EmptyState.IsVisible = false;
         CellDetailPanel.IsVisible = false;
 
@@ -578,6 +601,7 @@ public partial class QueryTabView
         ResultsGrid.IsVisible = false;
         MessagesPanel.IsVisible = true;
         TracePanel.IsVisible = false;
+        PlanPanel.IsVisible = false;
         EmptyState.IsVisible = false;
         CellDetailPanel.IsVisible = false;
         UpdateTabHighlight(MessagesTabTag);
@@ -589,9 +613,51 @@ public partial class QueryTabView
         ResultsGrid.IsVisible = false;
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = true;
+        PlanPanel.IsVisible = false;
         EmptyState.IsVisible = false;
         CellDetailPanel.IsVisible = false;
         UpdateTabHighlight(TraceTabTag);
+    }
+
+    private void SelectPlanTab()
+    {
+        _selectedTabIndex = PlanTabTag;
+        ResultsGrid.IsVisible = false;
+        MessagesPanel.IsVisible = false;
+        TracePanel.IsVisible = false;
+        PeekPanel.IsVisible = false;
+        EmptyState.IsVisible = false;
+        CellDetailPanel.IsVisible = false;
+        PlanPanel.IsVisible = true;
+        UpdateTabHighlight(PlanTabTag);
+    }
+
+    /// <summary>
+    /// Shows an execution plan in the embedded PlanView panel. Called from QueryEditorHost.
+    /// </summary>
+    public void ShowExecPlan(string sql, string planXml, string label, DatabaseService db)
+    {
+        // Initialize embedded PlanView on first use
+        if (PlanPanel.ViewModel == null)
+            PlanPanel.InitializeEmbedded(db);
+
+        PlanPanel.LoadPlan(sql, planXml, label);
+        _hasPlan = true;
+
+        // Expand results panel if collapsed
+        if (_resultsCollapsed)
+        {
+            _resultsCollapsed = false;
+            var totalHeight = EditorResultsGrid.Bounds.Height;
+            var planHeight = totalHeight > 0 ? totalHeight * 0.5 : 300;
+            EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
+            EditorResultsGrid.RowDefinitions[2].Height = new GridLength(planHeight, GridUnitType.Pixel);
+            ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.Content = "\u25BC";
+        }
+
+        RebuildResultTabs();
+        SelectPlanTab();
     }
 
     private void UpdateTabHighlight(int selectedIndex)

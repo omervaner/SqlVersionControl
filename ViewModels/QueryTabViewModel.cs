@@ -24,7 +24,7 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private ObservableCollection<QueryMessage> _messages = [];
 
     /// <summary>Helper to set Messages from a single string (validation errors, etc.)</summary>
-    private void SetMessageText(string text, MessageType type = MessageType.Error)
+    public void SetMessageText(string text, MessageType type = MessageType.Error)
     {
         Messages = [new QueryMessage { Type = type, Text = text }];
     }

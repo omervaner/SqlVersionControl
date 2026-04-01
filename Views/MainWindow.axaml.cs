@@ -69,10 +69,6 @@ public partial class MainWindow : Window
             compareView.RefreshTheme();
         }
 
-        // Initialize PlanView with shared services
-        var planView = this.FindControl<PlanView>("PlanViewControl");
-        planView?.Initialize(_viewModel.DatabaseService, _viewModel);
-
         // Initialize ActivityView with shared services
         var activityView = this.FindControl<ActivityView>("ActivityViewControl");
         activityView?.Initialize(_viewModel.DatabaseService);
@@ -205,7 +201,6 @@ public partial class MainWindow : Window
         QueryEditorTab.Click += (_, _) => UpdateStatusBar();
         VersionHistoryTab.Click += (_, _) => UpdateStatusBar();
         CompareTab.Click += (_, _) => UpdateStatusBar();
-        PlanTab.Click += (_, _) => UpdateStatusBar();
         ActivityTab.Click += (_, _) => UpdateStatusBar();
 
         // Wire update bar buttons
@@ -632,13 +627,14 @@ public partial class MainWindow : Window
         }
 
         // Editor shortcuts: Alt+Up/Down (move lines), Ctrl+G (go to line),
-        // Ctrl+K (comment), Ctrl+L (uncomment), Ctrl+Shift+U (upper), Ctrl+Shift+L (lower), Alt+Z (word wrap)
+        // Ctrl+K (comment), Ctrl+Shift+K (uncomment), Ctrl+L (exec plan),
+        // Ctrl+Shift+U (upper), Ctrl+Shift+L (lower), Alt+Z (word wrap)
         var alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         if (QueryEditorTab.IsChecked == true &&
             ((alt && (e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Z)) ||
              (ctrl && e.Key == Key.G) ||
-             (ctrl && !shift && (e.Key == Key.K || e.Key == Key.L)) ||
+             (ctrl && (e.Key == Key.K || e.Key == Key.L)) ||
              (ctrl && shift && (e.Key == Key.U || e.Key == Key.L))))
         {
             var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
@@ -687,16 +683,11 @@ public partial class MainWindow : Window
                 break;
 
             case Key.D4:
-                PlanTab.IsChecked = true;
-                e.Handled = true;
-                break;
-
-            case Key.D5:
                 ActivityTab.IsChecked = true;
                 e.Handled = true;
                 break;
 
-            case Key.D6:
+            case Key.D5:
                 TraceTab.IsChecked = true;
                 e.Handled = true;
                 break;
@@ -1343,7 +1334,7 @@ public partial class MainWindow : Window
             new() { Name = "Replace", Shortcut = $"{mod}+H", Description = "Find and replace", Execute = () => OpenSearchPanel(true) },
             new() { Name = "Go to Line", Shortcut = $"{mod}+G", Description = "Jump to line number", Execute = () => GetActiveQueryTabView()?.ShowGoToLinePopup() },
             new() { Name = "Comment Lines", Shortcut = $"{mod}+K", Description = "Toggle line comments", Execute = () => GetActiveQueryTabView()?.CommentLines() },
-            new() { Name = "Uncomment Lines", Shortcut = $"{mod}+L", Description = "Remove line comments", Execute = () => GetActiveQueryTabView()?.UncommentLines() },
+            new() { Name = "Uncomment Lines", Shortcut = $"{mod}+Shift+K", Description = "Remove line comments", Execute = () => GetActiveQueryTabView()?.UncommentLines() },
             new() { Name = "Uppercase Selection", Shortcut = $"{mod}+Shift+U", Description = "Transform to uppercase", Execute = () => GetActiveQueryTabView()?.UppercaseSelection() },
             new() { Name = "Lowercase Selection", Shortcut = $"{mod}+Shift+L", Description = "Transform to lowercase", Execute = () => GetActiveQueryTabView()?.LowercaseSelection() },
             new() { Name = "Toggle Word Wrap", Shortcut = "Alt+Z", Description = "Wrap long lines", Execute = () => { var e = GetActiveEditor(); if (e != null) e.WordWrap = !e.WordWrap; } },
@@ -1370,13 +1361,13 @@ public partial class MainWindow : Window
             new() { Name = "Query Editor", Shortcut = $"{mod}+1", Description = "Switch to editor", Execute = () => QueryEditorTab.IsChecked = true },
             new() { Name = "Version History", Shortcut = $"{mod}+2", Description = "Switch to history", Execute = () => VersionHistoryTab.IsChecked = true },
             new() { Name = "Compare Databases", Shortcut = $"{mod}+3", Description = "Switch to compare", Execute = () => CompareTab.IsChecked = true },
-            new() { Name = "Execution Plan", Shortcut = $"{mod}+4", Description = "Switch to plan", Execute = () => PlanTab.IsChecked = true },
-            new() { Name = "Activity Monitor", Shortcut = $"{mod}+5", Description = "Switch to activity", Execute = () => ActivityTab.IsChecked = true },
-            new() { Name = "Query Trace", Shortcut = $"{mod}+6", Description = "Switch to trace", Execute = () => TraceTab.IsChecked = true },
+            new() { Name = "Activity Monitor", Shortcut = $"{mod}+4", Description = "Switch to activity", Execute = () => ActivityTab.IsChecked = true },
+            new() { Name = "Query Trace", Shortcut = $"{mod}+5", Description = "Switch to trace", Execute = () => TraceTab.IsChecked = true },
 
             // Run
             new() { Name = "Run Query", Shortcut = "F5", Description = "Execute query", Execute = () => host?.RunActiveQuery() },
             new() { Name = "Run with Trace", Shortcut = "Ctrl+Shift+F5", Description = "Execute with XE tracing", Execute = () => host?.RunActiveWithTrace() },
+            new() { Name = "Estimated Execution Plan", Shortcut = $"{mod}+L", Description = "Show estimated plan for current SQL", Execute = () => { if (host != null) _ = host.GenerateExecPlanForActiveTab(); } },
 
             // Help
             new() { Name = "Keyboard Shortcuts", Shortcut = "", Description = "View all shortcuts", Execute = () => _ = new KeyboardShortcutsDialog().ShowDialog(this) },
@@ -1471,7 +1462,6 @@ public partial class MainWindow : Window
         var isQE = QueryEditorTab.IsChecked == true;
         var isHistory = VersionHistoryTab.IsChecked == true;
         var isCompare = CompareTab.IsChecked == true;
-        var isPlan = PlanTab.IsChecked == true;
         var isActivity = ActivityTab.IsChecked == true;
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         var activeTabVm = host?.ActiveTabViewModel;
@@ -1491,11 +1481,6 @@ public partial class MainWindow : Window
             {
                 displayColor = _viewModel.HistoryConnectionColor;
                 displayText = _viewModel.HistoryConnectionDisplay;
-            }
-            else if (isPlan)
-            {
-                displayColor = _viewModel.PlanConnectionColor;
-                displayText = _viewModel.PlanConnectionDisplay;
             }
             else if (isActivity)
             {

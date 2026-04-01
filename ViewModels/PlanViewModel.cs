@@ -70,6 +70,41 @@ public partial class PlanViewModel : ViewModelBase
         _mainVm = mainVm;
     }
 
+    /// <summary>
+    /// Lightweight constructor for embedded use (no MainWindowViewModel needed).
+    /// </summary>
+    public PlanViewModel(DatabaseService db)
+    {
+        _db = db;
+        _mainVm = null!;
+    }
+
+    /// <summary>
+    /// Loads a pre-generated plan for display. Used by the embedded editor plan panel.
+    /// </summary>
+    public void LoadFromQuery(string sql, string planXml, string label)
+    {
+        PlanError = null;
+        CurrentObjectName = label;
+        SqlText = sql;
+        _rawPlanXml = planXml;
+
+        var (plan, error) = DatabaseService.ParseAndAnalyzePlan(planXml);
+        if (plan == null)
+        {
+            PlanError = $"Failed to parse plan: {error}";
+            ClearPlan();
+            NotifyPlanState();
+            PlanChanged?.Invoke();
+            return;
+        }
+
+        _currentPlan = plan;
+        PopulateFromPlan(plan);
+        NotifyPlanState();
+        PlanChanged?.Invoke();
+    }
+
     partial void OnSelectedNodeChanged(PlanNodeViewModel? value)
     {
         if (value?.Statement == null)

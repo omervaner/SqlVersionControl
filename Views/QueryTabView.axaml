@@ -3,6 +3,7 @@
              xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
              xmlns:vm="using:SqlVersionControl.ViewModels"
              xmlns:conv="using:SqlVersionControl.Converters"
+             xmlns:views="using:SqlVersionControl.Views"
              x:Class="SqlVersionControl.Views.QueryTabView"
              x:DataType="vm:QueryTabViewModel">
 
@@ -112,6 +113,25 @@
                                     Padding="8,2" Margin="2,2"
                                     FontSize="11" Height="22" MinHeight="0"
                                     ToolTip.Tip="Export results to CSV"/>
+                            <!-- Export progress (hidden by default) -->
+                            <StackPanel x:Name="ExportProgressPanel" Orientation="Horizontal"
+                                        Spacing="3" VerticalAlignment="Center" IsVisible="False">
+                                <ProgressBar x:Name="ExportProgressBar"
+                                             Width="80" Height="6" Minimum="0" Maximum="100"
+                                             Foreground="{DynamicResource AccentBlue}"
+                                             VerticalAlignment="Center"/>
+                                <TextBlock x:Name="ExportProgressText" Text="0%"
+                                           FontSize="10" Foreground="{DynamicResource TextSecondary}"
+                                           VerticalAlignment="Center"/>
+                                <Button x:Name="ExportCancelButton" Content="&#xd7;"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextSecondary}"
+                                        Padding="3,0" FontSize="12"
+                                        MinWidth="0" MinHeight="0" Height="18"
+                                        BorderThickness="0" Cursor="Hand"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Cancel export"/>
+                            </StackPanel>
                             <!-- Edit Mode Toggle -->
                             <Button x:Name="EditModeButton"
                                     Content="Edit"
@@ -279,6 +299,9 @@
                                            VerticalScrollBarVisibility="Auto"/>
                         </Grid>
                     </Grid>
+
+                    <!-- Execution Plan Panel (embedded PlanView) -->
+                    <views:PlanView x:Name="PlanPanel" IsVisible="False"/>
 
                     <!-- Empty state -->
                     <TextBlock x:Name="EmptyState" Text="Run a query to see results here"

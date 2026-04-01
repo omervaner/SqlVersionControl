@@ -119,6 +119,7 @@ public partial class QueryEditorHost
         tabView.FormatSqlRequested += FormatSqlInEditor;
         tabView.QuickQuoteRequested += () => QuickQuoteSelection(nPrefix: false);
         tabView.ShowDependenciesRequested += OnShowDependenciesFromEditor;
+        tabView.ExecPlanRequested += () => _ = GenerateExecPlanForActiveTab();
 
         _tabs.Add(tabView);
         TabContentPanel.Children.Add(tabView);

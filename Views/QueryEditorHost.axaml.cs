@@ -173,6 +173,7 @@ public partial class QueryEditorHost : UserControl
             if (vm.RunWithTraceCommand.CanExecute(null))
                 _ = vm.RunWithTraceCommand.ExecuteAsync(null);
         };
+        ToolbarExecPlanButton.Click += (_, _) => _ = GenerateExecPlanForActiveTab();
         ToolbarDatabaseCombo.SelectionChanged += (_, _) =>
         {
             var vm = ActiveTabViewModel;

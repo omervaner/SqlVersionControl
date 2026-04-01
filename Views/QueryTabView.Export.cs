@@ -1,6 +1,7 @@
 using System.Text;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
 
@@ -10,6 +11,8 @@ public partial class QueryTabView
 {
     /// <summary>Fired when "Filter by Value" is clicked — host should open a new tab.</summary>
     public event Action<string>? FilterByValueRequested;
+
+    private CancellationTokenSource? _exportCts;
 
     private void OnExportClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -34,6 +37,49 @@ public partial class QueryTabView
         menu.Items.Add(tsvItem);
 
         menu.ShowAt(ExportButton, true);
+    }
+
+    private void WireExportCancelButton()
+    {
+        ExportCancelButton.Click += (_, _) =>
+        {
+            _exportCts?.Cancel();
+        };
+    }
+
+    private void ShowExportProgress(bool visible)
+    {
+        ExportProgressPanel.IsVisible = visible;
+        ExportButton.IsEnabled = !visible;
+        if (visible)
+        {
+            ExportProgressBar.Value = 0;
+            ExportProgressText.Text = "0%";
+        }
+    }
+
+    private async void FlashExportButton(bool success)
+    {
+        var color = success
+            ? Avalonia.Media.Color.FromRgb(39, 174, 96)   // green
+            : Avalonia.Media.Color.FromRgb(231, 76, 60);  // red
+        var flashBrush = new Avalonia.Media.SolidColorBrush(color);
+        var originalContent = ExportButton.Content;
+
+        ExportButton.Foreground = flashBrush;
+        ExportButton.Content = success ? "\u2713 Export" : "\u2717 Export";
+
+        await Task.Delay(1500);
+
+        ExportButton.Content = originalContent;
+        ExportButton.Foreground = GetRowBrush("TextSecondary");
+    }
+
+    private void UpdateExportProgress(int current, int total)
+    {
+        var pct = total > 0 ? (int)(current * 100.0 / total) : 0;
+        ExportProgressBar.Value = pct;
+        ExportProgressText.Text = $"{pct}%";
     }
 
     private async Task ExportResultsAsync(string format)
@@ -75,34 +121,117 @@ public partial class QueryTabView
         var path = file?.TryGetLocalPath();
         if (path == null) return;
 
+        _exportCts = new CancellationTokenSource();
+        var ct = _exportCts.Token;
+        ShowExportProgress(true);
+
         try
         {
             switch (format)
             {
                 case "xlsx":
-                    ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rowsToExport, path);
+                    await Task.Run(() => ExportService.ExportToExcel(result.ColumnNames, result.ColumnTypes, rowsToExport, path), ct);
                     break;
                 case "csv":
-                    await File.WriteAllTextAsync(path, ResultToDelimited(result, rowsToExport, ","));
+                    await WriteDelimitedAsync(result, rowsToExport, ",", path, ct);
                     break;
                 case "tsv":
-                    await File.WriteAllTextAsync(path, ResultToDelimited(result, rowsToExport, "\t"));
+                    await WriteDelimitedAsync(result, rowsToExport, "\t", path, ct);
                     break;
                 case "json":
-                    await File.WriteAllTextAsync(path, ResultToJson(result, rowsToExport));
+                    await WriteJsonAsync(result, rowsToExport, path, ct);
                     break;
             }
 
             _viewModel.StatusText = isPartial
                 ? $"Exported {rowsToExport.Count:N0} of {result.RowCount:N0} rows to {Path.GetFileName(path)}"
                 : $"Exported {result.RowCount:N0} rows to {Path.GetFileName(path)}";
+            FlashExportButton(success: true);
+        }
+        catch (OperationCanceledException)
+        {
+            _viewModel.StatusText = "Export cancelled";
+            try { File.Delete(path); } catch { }
         }
         catch (Exception ex)
         {
             _viewModel.StatusText = $"Export failed: {ex.Message}";
+            FlashExportButton(success: false);
+        }
+        finally
+        {
+            ShowExportProgress(false);
+            _exportCts = null;
         }
     }
 
+    private async Task WriteDelimitedAsync(QueryResult result, List<object?[]> rows, string delimiter, string path, CancellationToken ct)
+    {
+        var total = rows.Count;
+        using var writer = new StreamWriter(path, false, Encoding.UTF8);
+        await writer.WriteLineAsync(string.Join(delimiter, result.ColumnNames.Select(c =>
+            delimiter == "," ? $"\"{c.Replace("\"", "\"\"")}\"" : c)));
+
+        for (int i = 0; i < total; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var row = rows[i];
+            await writer.WriteLineAsync(string.Join(delimiter, row.Select(v =>
+            {
+                if (v == null || v == DBNull.Value) return "";
+                var text = v.ToString() ?? "";
+                return delimiter == "," ? $"\"{text.Replace("\"", "\"\"")}\"" : text;
+            })));
+
+            if (i % 500 == 0)
+            {
+                var captured = i;
+                Dispatcher.UIThread.Post(() => UpdateExportProgress(captured, total));
+                await Task.Yield();
+            }
+        }
+        Dispatcher.UIThread.Post(() => UpdateExportProgress(total, total));
+    }
+
+    private async Task WriteJsonAsync(QueryResult result, List<object?[]> rows, string path, CancellationToken ct)
+    {
+        var total = rows.Count;
+        using var writer = new StreamWriter(path, false, Encoding.UTF8);
+        await writer.WriteLineAsync("[");
+
+        for (int r = 0; r < total; r++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var sb = new StringBuilder("  {");
+            for (int c = 0; c < result.ColumnNames.Length; c++)
+            {
+                if (c > 0) sb.Append(", ");
+                var val = c < rows[r].Length ? rows[r][c] : null;
+                sb.Append($"\"{EscapeJsonString(result.ColumnNames[c])}\": ");
+                if (val == null || val == DBNull.Value)
+                    sb.Append("null");
+                else if (val is bool b)
+                    sb.Append(b ? "true" : "false");
+                else if (IsNumericType(val.GetType()))
+                    sb.Append(val);
+                else
+                    sb.Append($"\"{EscapeJsonString(val.ToString() ?? "")}\"");
+            }
+            sb.Append(r < total - 1 ? "}," : "}");
+            await writer.WriteLineAsync(sb.ToString());
+
+            if (r % 500 == 0)
+            {
+                var captured = r;
+                Dispatcher.UIThread.Post(() => UpdateExportProgress(captured, total));
+                await Task.Yield();
+            }
+        }
+        await writer.WriteLineAsync("]");
+        Dispatcher.UIThread.Post(() => UpdateExportProgress(total, total));
+    }
+
+    // Keep for small inline uses (Copy as INSERT, etc.)
     private static string ResultToDelimited(QueryResult result, List<object?[]> rows, string delimiter)
     {
         var sb = new StringBuilder();

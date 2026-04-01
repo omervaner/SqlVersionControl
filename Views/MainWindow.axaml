@@ -50,7 +50,7 @@
                             <MenuItem x:Name="MenuReplace" Header="Replace..." InputGesture="Ctrl+H"/>
                             <Separator/>
                             <MenuItem x:Name="MenuComment" Header="Comment Lines" InputGesture="Ctrl+K"/>
-                            <MenuItem x:Name="MenuUncomment" Header="Uncomment Lines" InputGesture="Ctrl+L"/>
+                            <MenuItem x:Name="MenuUncomment" Header="Uncomment Lines" InputGesture="Ctrl+Shift+K"/>
                             <Separator/>
                             <Separator/>
                             <MenuItem x:Name="MenuGoToLine" Header="Go to Line..." InputGesture="Ctrl+G"/>
@@ -93,8 +93,6 @@
                                      Classes="TabButton" Content="History"/>
                         <RadioButton x:Name="CompareTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Compare"/>
-                        <RadioButton x:Name="PlanTab" GroupName="Tabs"
-                                     Classes="TabButton" Content="Exec Plan"/>
                         <RadioButton x:Name="ActivityTab" GroupName="Tabs"
                                      Classes="TabButton" Content="Activity"/>
                         <RadioButton x:Name="TraceTab" GroupName="Tabs"
@@ -369,9 +367,6 @@
 
             <!-- Compare Databases Tab -->
             <views:CompareView IsVisible="{Binding #CompareTab.IsChecked}" x:Name="CompareViewControl"/>
-
-            <!-- Execution Plan Tab -->
-            <views:PlanView IsVisible="{Binding #PlanTab.IsChecked}" x:Name="PlanViewControl"/>
 
             <!-- Activity Monitor Tab -->
             <views:ActivityView IsVisible="{Binding #ActivityTab.IsChecked}" x:Name="ActivityViewControl"/>

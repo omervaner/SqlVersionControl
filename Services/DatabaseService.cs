@@ -102,6 +102,56 @@ public partial class DatabaseService
     }
 
     /// <summary>
+    /// Generates an estimated execution plan for arbitrary SQL using SET SHOWPLAN_XML ON.
+    /// Uses the given connection string + database. Returns raw plan XML or null.
+    /// </summary>
+    public async Task<string?> GetEstimatedPlanForQueryAsync(string connectionString, string database, string sql)
+    {
+        try
+        {
+            var connStr = BuildConnectionString(connectionString, database);
+            using var conn = new SqlConnection(connStr);
+            await conn.OpenAsync();
+
+            using var onCmd = new SqlCommand("SET SHOWPLAN_XML ON", conn);
+            await onCmd.ExecuteNonQueryAsync();
+
+            try
+            {
+                // SHOWPLAN_XML returns one result set per batch statement — collect all
+                using var planCmd = new SqlCommand(sql, conn);
+                planCmd.CommandTimeout = 30;
+                using var reader = await planCmd.ExecuteReaderAsync();
+
+                string? xml = null;
+                while (await reader.ReadAsync())
+                {
+                    xml = reader.GetString(0);
+                }
+                // If multiple result sets (multiple statements), read remaining
+                while (await reader.NextResultAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        // Take the last plan XML (covers multi-statement batches)
+                        xml = reader.GetString(0);
+                    }
+                }
+                return xml;
+            }
+            finally
+            {
+                using var offCmd = new SqlCommand("SET SHOWPLAN_XML OFF", conn);
+                await offCmd.ExecuteNonQueryAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to generate execution plan: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
     /// Fetches a cached execution plan from sys.dm_exec_procedure_stats for procs
     /// that can't generate an estimated plan (e.g. require parameters).
     /// </summary>

@@ -124,6 +124,7 @@ public partial class QueryTabView : UserControl
         // Show SQL preview button + Export
         ShowSqlButton.Click += OnShowSqlClicked;
         ExportButton.Click += OnExportClicked;
+        WireExportCancelButton();
 
         // DataGrid row events for edit mode
         ResultsGrid.LoadingRow += OnDataGridLoadingRow;
@@ -231,17 +232,29 @@ public partial class QueryTabView : UserControl
     /// <summary>
     /// Handle F5 / Ctrl+Enter for query execution.
     /// </summary>
+    /// <summary>Fired when user presses Ctrl+L — host generates exec plan.</summary>
+    public event Action? ExecPlanRequested;
+
     public bool HandleKeyDown(KeyEventArgs e)
     {
         if (_viewModel == null) return false;
 
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
         if (ctrl && e.Key == Key.Space)
         {
             e.Handled = true;
             ShowCompletionWindow();
+            return true;
+        }
+
+        // Ctrl+L = Estimated Execution Plan (matching SSMS)
+        if (ctrl && !shift && e.Key == Key.L)
+        {
+            ExecPlanRequested?.Invoke();
+            e.Handled = true;
             return true;
         }
 

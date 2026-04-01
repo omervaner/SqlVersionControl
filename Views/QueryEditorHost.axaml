@@ -300,6 +300,12 @@
                                 VerticalContentAlignment="Center"
                                 HorizontalContentAlignment="Center"
                                 ToolTip.Tip="Run with trace (Ctrl+Shift+F5)"/>
+                        <Button x:Name="ToolbarExecPlanButton" Content="Plan"
+                                Classes="btn-secondary"
+                                Padding="10,0" FontSize="11" Height="22" MinHeight="0" MinWidth="50"
+                                VerticalContentAlignment="Center"
+                                HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Show estimated execution plan (Ctrl+L)"/>
                     </StackPanel>
 
                     <!-- Separator between Run/Stop and utility buttons -->

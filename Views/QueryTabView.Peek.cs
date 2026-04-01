@@ -102,6 +102,7 @@ public partial class QueryTabView
         // Show peek, hide other result panels
         ResultsGrid.IsVisible = false;
         MessagesPanel.IsVisible = false;
+        PlanPanel.IsVisible = false;
         EmptyState.IsVisible = false;
         PeekPanel.IsVisible = true;
 
@@ -167,7 +168,7 @@ public partial class QueryTabView
         // Formatting
         menu.Items.Add(CreateEditorMenuItem("Format SQL", "Ctrl+Shift+F", () => FormatSqlRequested?.Invoke()));
         menu.Items.Add(CreateEditorMenuItem("Comment Lines", $"{mod}+K", CommentLines));
-        menu.Items.Add(CreateEditorMenuItem("Uncomment Lines", $"{mod}+L", UncommentLines));
+        menu.Items.Add(CreateEditorMenuItem("Uncomment Lines", $"{mod}+Shift+K", UncommentLines));
         menu.Items.Add(CreateEditorMenuItem("Uppercase", $"{mod}+Shift+U", () => TransformSelection(s => s.ToUpperInvariant())));
         menu.Items.Add(CreateEditorMenuItem("Lowercase", $"{mod}+Shift+L", () => TransformSelection(s => s.ToLowerInvariant())));
         menu.Items.Add(new Separator());

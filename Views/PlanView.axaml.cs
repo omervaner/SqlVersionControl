@@ -37,6 +37,36 @@ public partial class PlanView : UserControl
 
     public PlanViewModel? ViewModel => _viewModel;
 
+    /// <summary>
+    /// Initializes as an embedded component (no MainWindowViewModel needed).
+    /// Hides the top toolbar since plan is loaded externally.
+    /// </summary>
+    public void InitializeEmbedded(DatabaseService db)
+    {
+        _viewModel = new PlanViewModel(db);
+        DataContext = _viewModel;
+        _viewModel.PlanChanged += RebuildCostBar;
+        _viewModel.HighlightChanged += OnHighlightChanged;
+
+        SqlTextBlock.SelectionBrush = GetHighlightBrush();
+        ThemeManager.ThemeChanged += () => SqlTextBlock.SelectionBrush = GetHighlightBrush();
+
+        // Hide the top toolbar (Generate Plan button is not needed in embedded mode)
+        if (this.Content is Avalonia.Controls.Grid grid && grid.Children.Count > 0
+            && grid.Children[0] is Avalonia.Controls.Border toolbar)
+        {
+            toolbar.IsVisible = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads a pre-generated plan for display (embedded use).
+    /// </summary>
+    public void LoadPlan(string sql, string planXml, string label)
+    {
+        _viewModel?.LoadFromQuery(sql, planXml, label);
+    }
+
     private void OnHighlightChanged()
     {
         if (_viewModel == null) return;

@@ -44,16 +44,6 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private SavedConnection? _historyConnectionProfile;
 
-    // --- Plan view owns its connection ---
-    [ObservableProperty]
-    private string _planConnectionDisplay = "Disconnected";
-
-    [ObservableProperty]
-    private string _planConnectionColor = "#88a1bb";
-
-    [ObservableProperty]
-    private SavedConnection? _planConnectionProfile;
-
     // --- Activity view owns its connection ---
     [ObservableProperty]
     private string _activityConnectionDisplay = "Disconnected";
@@ -163,9 +153,6 @@ public partial class MainWindowViewModel : ViewModelBase
         HistoryConnectionDisplay = display;
         HistoryConnectionColor = color;
         HistoryConnectionProfile = profile;
-        PlanConnectionDisplay = display;
-        PlanConnectionColor = color;
-        PlanConnectionProfile = profile;
         ActivityConnectionDisplay = display;
         ActivityConnectionColor = color;
         ActivityConnectionProfile = profile;

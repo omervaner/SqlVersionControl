@@ -193,6 +193,52 @@ public partial class QueryEditorHost
     }
 
     /// <summary>
+    /// Generate an estimated execution plan for the active tab's SQL and show it in the results area.
+    /// </summary>
+    public async Task GenerateExecPlanForActiveTab()
+    {
+        if (_activeTabIndex < 0 || _activeTabIndex >= _tabs.Count) return;
+        var tab = _tabs[_activeTabIndex];
+        var vm = tab.DataContext as QueryTabViewModel;
+        if (vm == null) return;
+
+        var sql = tab.Editor.SelectedText;
+        if (string.IsNullOrWhiteSpace(sql))
+            sql = tab.Editor.Text;
+        if (string.IsNullOrWhiteSpace(sql)) return;
+
+        if (string.IsNullOrEmpty(vm.TabConnectionString))
+        {
+            vm.SetMessageText("Error: No active connection for execution plan.");
+            return;
+        }
+        if (string.IsNullOrEmpty(vm.SelectedDatabase))
+        {
+            vm.SetMessageText("Error: No database selected for execution plan.");
+            return;
+        }
+
+        try
+        {
+            var planXml = await _db.GetEstimatedPlanForQueryAsync(
+                vm.TabConnectionString, vm.SelectedDatabase, sql);
+
+            if (string.IsNullOrEmpty(planXml))
+            {
+                vm.SetMessageText("No execution plan returned.");
+                return;
+            }
+
+            var label = "Estimated Plan";
+            tab.ShowExecPlan(sql, planXml, label, _db);
+        }
+        catch (Exception ex)
+        {
+            vm.SetMessageText($"Execution plan error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Get the active tab's TextEditor (for Edit menu pass-through).
     /// </summary>
     public TextEditor? GetActiveEditor()

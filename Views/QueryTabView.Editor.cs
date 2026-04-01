@@ -537,8 +537,8 @@ public partial class QueryTabView
             return true;
         }
 
-        // Uncomment: Cmd/Ctrl+L
-        if (ctrl && !shift && e.Key == Key.L)
+        // Uncomment: Cmd/Ctrl+Shift+K
+        if (ctrl && shift && e.Key == Key.K)
         {
             UncommentLines();
             e.Handled = true;

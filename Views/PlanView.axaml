@@ -54,7 +54,7 @@
                         HorizontalAlignment="Center" Spacing="10">
                 <TextBlock Text="No execution plan generated" FontSize="16"
                            Foreground="{DynamicResource TextDisabled}" HorizontalAlignment="Center"/>
-                <TextBlock Text="Paste a query in the editor and press Generate Plan, or select a stored procedure in Version History."
+                <TextBlock Text="Write a query in the editor and press Ctrl+L or the Plan toolbar button to generate an estimated execution plan."
                            FontSize="12" Foreground="{DynamicResource TextDisabled}" HorizontalAlignment="Center"
                            TextWrapping="Wrap" MaxWidth="360" TextAlignment="Center"/>
                 <!-- Error display -->
