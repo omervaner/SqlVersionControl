@@ -756,13 +756,20 @@ public class DatabaseService
                             rows.Add(row);
                         }
 
-                        results.Add(new QueryResult
+                        var qr = new QueryResult
                         {
                             ColumnNames = colNames,
                             ColumnTypes = colTypes,
                             Rows = rows,
                             RowCount = rows.Count,
                             ExecutionTimeMs = batchSw.ElapsedMilliseconds
+                        };
+                        results.Add(qr);
+
+                        messages.Add(new QueryMessage
+                        {
+                            Type = MessageType.RowCount,
+                            Text = $"({qr.RowCount} row(s) affected)"
                         });
                     } while (await reader.NextResultAsync(ct));
                 }
@@ -798,6 +805,17 @@ public class DatabaseService
             }
 
             sw.Stop();
+
+            if (!hasErrors && results.Count == 0 && totalRowsAffected == 0
+                && !messages.Any(m => m.Type == MessageType.RowCount))
+            {
+                messages.Add(new QueryMessage
+                {
+                    Type = MessageType.Info,
+                    Text = "Commands completed successfully."
+                });
+            }
+
             messages.Add(new QueryMessage
             {
                 Type = MessageType.Timing,
@@ -909,13 +927,21 @@ public class DatabaseService
                         rows.Add(row);
                     }
 
-                    results.Add(new QueryResult
+                    var qr = new QueryResult
                     {
                         ColumnNames = colNames,
                         ColumnTypes = colTypes,
                         Rows = rows,
                         RowCount = rows.Count,
                         ExecutionTimeMs = batchSw.ElapsedMilliseconds
+                    };
+                    results.Add(qr);
+
+                    // SELECT row count in Messages (SSMS shows this too)
+                    messages.Add(new QueryMessage
+                    {
+                        Type = MessageType.RowCount,
+                        Text = $"({qr.RowCount} row(s) affected)"
                     });
                 } while (await reader.NextResultAsync(ct));
             }
@@ -953,6 +979,18 @@ public class DatabaseService
         }
 
         sw.Stop();
+
+        // "Commands completed successfully." for DDL with no output (SSMS behavior)
+        if (!hasErrors && results.Count == 0 && totalRowsAffected == 0
+            && !messages.Any(m => m.Type == MessageType.RowCount))
+        {
+            messages.Add(new QueryMessage
+            {
+                Type = MessageType.Info,
+                Text = "Commands completed successfully."
+            });
+        }
+
         messages.Add(new QueryMessage
         {
             Type = MessageType.Timing,

@@ -158,6 +158,9 @@
                                 <Setter Property="FontSize" Value="12"/>
                                 <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
                                 <Setter Property="MinHeight" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="BorderThickness" Value="0"/>
                             </Style>
                             <Style Selector="DataGridRow">
                                 <Setter Property="MinHeight" Value="0"/>
@@ -180,7 +183,13 @@
                                                              FontSize="12" TextWrapping="Wrap"
                                                              Margin="0,1"
                                                              Tag="{Binding}"
-                                                             DoubleTapped="OnMessageDoubleTapped"/>
+                                                             DoubleTapped="OnMessageDoubleTapped">
+                                            <SelectableTextBlock.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Copy Message" Click="OnCopyMessageClick" Tag="{Binding Text}"/>
+                                                </ContextMenu>
+                                            </SelectableTextBlock.ContextMenu>
+                                        </SelectableTextBlock>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

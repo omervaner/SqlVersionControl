@@ -1264,6 +1264,12 @@ public partial class QueryTabView : UserControl
         CellDetailToggleButton.Opacity = _cellDetailEnabled ? 1.0 : 0.5;
     }
 
+    private async void OnCopyMessageClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string text } && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(text);
+    }
+
     private void OnMessageDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (sender is not Avalonia.Controls.SelectableTextBlock stb) return;
@@ -2510,12 +2516,22 @@ public partial class QueryTabView : UserControl
         }
 
         // Live result tabs (tag = positive index)
+        var resultNumber = 0;
         for (int i = 0; i < results.Count; i++)
         {
             var r = results[i];
-            var label = r.Error != null
-                ? "Error"
-                : $"Result {i + 1} ({r.RowCount} rows)";
+            string label;
+            if (r.Error != null)
+            {
+                label = "Error";
+            }
+            else
+            {
+                resultNumber++;
+                label = results.Count(x => x.Error == null) == 1
+                    ? $"Result ({r.RowCount} rows)"
+                    : $"Result {resultNumber} ({r.RowCount} rows)";
+            }
 
             var idx = i;
 
@@ -2560,10 +2576,42 @@ public partial class QueryTabView : UserControl
             ResultTabHeaders.Children.Add(btn);
         }
 
-        // Messages tab
+        // Messages tab (with error count badge if errors exist)
+        var errorCount = _viewModel.Messages.Count(m => m.Type == SqlVersionControl.Models.MessageType.Error);
+        object msgContent;
+        if (errorCount > 0)
+        {
+            var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Messages",
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            });
+            panel.Children.Add(new Border
+            {
+                Background = GetRowBrush("WarningSeverityCritical"),
+                CornerRadius = new CornerRadius(7),
+                Padding = new Thickness(5, 0),
+                MinWidth = 14,
+                Child = new TextBlock
+                {
+                    Text = errorCount.ToString(),
+                    FontSize = 9,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                }
+            });
+            msgContent = panel;
+        }
+        else
+        {
+            msgContent = "Messages";
+        }
+
         var msgBtn = new Button
         {
-            Content = "Messages",
+            Content = msgContent,
             Padding = new Thickness(10, 4),
             Margin = new Thickness(0),
             FontSize = 11,
