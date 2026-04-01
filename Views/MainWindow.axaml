@@ -278,6 +278,12 @@
                                 <TextBlock Text="Recent Changes" FontWeight="SemiBold"/>
                             </Border>
 
+                            <TextBlock Grid.Row="1"
+                                       Text="No version history found. Configure a DDL audit source in Settings to enable change tracking."
+                                       Foreground="{DynamicResource TextSecondary}" FontSize="12"
+                                       FontStyle="Italic" TextWrapping="Wrap"
+                                       Margin="20,30" HorizontalAlignment="Center"
+                                       IsVisible="{Binding ShowHistoryEmptyState}"/>
                             <DataGrid Grid.Row="1"
                                       ItemsSource="{Binding RecentChanges}"
                                       SelectedItem="{Binding SelectedChange}"

@@ -841,8 +841,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        // Auto-stop any active trace recording to avoid orphaned XE sessions
+        var traceView = this.FindControl<TraceView>("TraceViewControl");
+        if (traceView?.DataContext is TraceViewModel traceVm && traceVm.State == TraceState.Recording)
+        {
+            try { await traceVm.StopCaptureCommand.ExecuteAsync(null); }
+            catch { /* best-effort cleanup */ }
+        }
+
         _sleepDetector.Stop();
 
         // Stop timers

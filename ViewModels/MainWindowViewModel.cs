@@ -26,6 +26,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _statusMessage = "Not connected";
 
     [ObservableProperty]
+    private bool _showHistoryEmptyState;
+
+    [ObservableProperty]
     private string _connectionDisplay = "Disconnected";
 
     [ObservableProperty]
@@ -289,6 +292,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 var dbs = await _db.GetDatabasesAsync();
                 Databases.Clear();
                 foreach (var db in dbs) Databases.Add(db);
+                ShowHistoryEmptyState = true;
                 StatusMessage = "Version tracking: not configured (Settings → Version History)";
             }
 
@@ -357,6 +361,7 @@ public partial class MainWindowViewModel : ViewModelBase
             FilterObjects();
         }
 
+        ShowHistoryEmptyState = RecentChanges.Count == 0;
         StatusMessage = $"Loaded {RecentChanges.Count} recent changes";
     }
 

@@ -73,7 +73,7 @@ public partial class CompareViewModel : ViewModelBase
     [ObservableProperty]
     private bool _showTarget2; // Toggle for showing third DB
 
-    public string ToggleTarget2ButtonText => ShowTarget2 ? "- T2" : "+ T2";
+    public string ToggleTarget2ButtonText => ShowTarget2 ? "- Target 2" : "+ Target 2";
 
     partial void OnShowTarget2Changed(bool value)
     {

@@ -20,6 +20,7 @@ public partial class ObjectExplorerViewModel : ObservableObject
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private bool _showFilterEmptyState;
     [ObservableProperty] private bool _isSearching;
+    [ObservableProperty] private bool _showEmptyState;
 
     /// <summary>Fired when a context menu action wants to set editor text. (sql, autoRun, databaseName, connectionId)</summary>
     public event Action<string, bool, string?, string?>? InsertTextRequested;
@@ -68,6 +69,13 @@ public partial class ObjectExplorerViewModel : ObservableObject
     public ObjectExplorerViewModel(DatabaseService db)
     {
         _db = db;
+        RootNodes.CollectionChanged += (_, _) => ShowEmptyState = RootNodes.Count == 0;
+    }
+
+    partial void OnRootNodesChanged(ObservableCollection<ObjectExplorerNode> value)
+    {
+        ShowEmptyState = value.Count == 0;
+        value.CollectionChanged += (_, _) => ShowEmptyState = RootNodes.Count == 0;
     }
 
     // ── Multi-connection: registry-driven root nodes ─────────────────

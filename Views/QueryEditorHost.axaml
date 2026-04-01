@@ -213,6 +213,10 @@
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            FontStyle="Italic" Margin="14,8"
                            IsVisible="{Binding ObjectExplorer.ShowFilterEmptyState}"/>
+                <TextBlock Grid.Row="2" Text="No active connections"
+                           Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           FontStyle="Italic" Margin="14,20"
+                           IsVisible="{Binding ObjectExplorer.ShowEmptyState}"/>
             </Grid>
         </Border>
 
