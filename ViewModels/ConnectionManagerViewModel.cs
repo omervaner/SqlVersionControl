@@ -90,12 +90,51 @@ public partial class ConnectionManagerViewModel : ViewModelBase
         ("#6bb5c9", "Teal"),
     ];
 
+    /// <summary>Set to true when the user manually clicks a color in the picker.</summary>
+    public bool UserPickedColor { get; set; }
+
     public event Func<string, Task<bool>>? ConfirmRequested;
 
     public ConnectionManagerViewModel(ConnectionRegistry registry, DatabaseService db)
     {
         _registry = registry;
         _db = db;
+    }
+
+    partial void OnEditNameChanged(string value)
+    {
+        if (UserPickedColor) return;
+
+        var (env, color) = DetectEnvironment(value);
+        if (env != null)
+        {
+            EditEnvironment = env;
+            EditColor = color!;
+        }
+        else if (IsNewConnection)
+        {
+            EditEnvironment = "Unknown";
+            EditColor = "#88a1bb";
+        }
+    }
+
+    private static (string? Environment, string? Color) DetectEnvironment(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return (null, null);
+
+        var words = name.Split([' ', '-', '_', '.', '/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        foreach (var word in words)
+        {
+            var w = word.ToLowerInvariant();
+            if (w is "prod" or "production" or "live" or "prd")
+                return ("Production", "#e74c3c");
+            if (w is "dev" or "develop" or "development" or "local")
+                return ("Dev", "#b7bd73");
+            if (w is "test" or "qa" or "uat" or "staging" or "stg")
+                return ("Test", "#e9c880");
+        }
+
+        return (null, null);
     }
 
     // ── Selection ────────────────────────────────────────────────────
@@ -117,6 +156,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
 
     private void LoadFormFromConnection(SavedConnection config)
     {
+        UserPickedColor = true; // Don't auto-detect when loading existing connection
         EditName = config.Name ?? "";
         EditServer = config.Server;
         EditDatabase = config.Database;
@@ -127,6 +167,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
         EditTrustServerCertificate = config.TrustServerCertificate;
         EditColor = config.Color ?? "#88a1bb";
         EditConnectOnStartup = config.ConnectOnStartup;
+        UserPickedColor = false; // Now allow auto-detect if user edits the name
     }
 
     // ── Commands ─────────────────────────────────────────────────────
@@ -134,6 +175,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
     [RelayCommand]
     private void AddNew()
     {
+        UserPickedColor = false;
         SelectedConnection = null;
         EditName = "";
         EditServer = "";

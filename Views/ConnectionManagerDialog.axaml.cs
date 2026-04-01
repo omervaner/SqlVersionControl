@@ -93,6 +93,7 @@ public partial class ConnectionManagerDialog : Window
             var hexCapture = hex;
             circle.PointerPressed += (_, _) =>
             {
+                vm.UserPickedColor = true;
                 vm.EditColor = hexCapture;
                 UpdateColorSelection(vm.EditColor);
             };

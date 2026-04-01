@@ -4,6 +4,31 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.7.0 (April 2026)
+
+### Refactoring
+- Split QueryTabView.axaml.cs (2,913 → 312 lines, 8 partial files)
+- Split QueryEditorHost.axaml.cs (2,260 → 214 lines, 6 partial files)
+- Split DatabaseService.cs (2,698 → 559 lines, 8 partial files)
+- Extracted OccurrenceHighlighter, ExecutionFlashHighlighter, BracketHighlighter to Rendering/
+- Moved HistoryDisplayItem to Models/
+
+### UX Audit Fixes
+- Tab overflow: tabs scroll horizontally, toolbar pinned right, overflow arrows show when tabs are hidden
+- ConnectionIndicator: reusable control (dot + name + flyout picker) replaces 4 different connection UI patterns across History, Activity, Trace, and Compare tabs
+- Object Explorer search: 2+ character filter queries the server across all databases (single UNION ALL round-trip), with CancellationToken to prevent stale results when typing fast
+- Command palette: "Run Query" and "Run with Trace" now functional
+- Version History: shows guidance when DDL audit not configured
+- Object Explorer: shows "No active connections" when tree is empty
+- Trace: active recording auto-stopped on app close to prevent orphaned XE sessions
+- Compare: "+T2"/"-T2" button renamed to "+Target 2"/"-Target 2"
+
+### New Features
+- Auto-detect environment from connection name: typing "PROD", "DEV", "QA", etc. in the Connection Manager auto-sets the color and environment type (overridable by manual color selection)
+
+### Fixes
+- App icon: removed light gray background halo, regenerated .icns and .ico with clean transparency
+
 ## v2.6.7 (April 2026)
 - Toad-style cell editing: smooth double-click-to-edit, no column rebuild or visual flash
 - Double-click in edit mode directly opens that cell for editing

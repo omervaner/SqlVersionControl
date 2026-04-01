@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.6.7 (April 2026)
+## PROJECT STATUS: v2.7.0 (April 2026)
 
-Toad-style cell editing with smooth double-click-to-edit, drag-and-drop .sql files onto editor, and auto-sizing results grid with cell detail panel. Recent work also includes Connection Manager UX polish, OE refresh button, and Windows menu bar fix.
+Major refactoring and UX audit pass. Split the three largest files (QueryTabView, QueryEditorHost, DatabaseService) into partial classes. Reusable ConnectionIndicator control across all tabs. Server-side Object Explorer search. Tab overflow scroll with arrows. Auto-detect environment/color from connection name. App icon cleaned up (transparent background).
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
