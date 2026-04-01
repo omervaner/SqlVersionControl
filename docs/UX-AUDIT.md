@@ -45,7 +45,7 @@ This single fix eliminates: Trace empty picker confusion, Exec Plan wrong connec
 - Only trigger server search after debounce (200ms, already exists) and when filter is 2+ characters
 - Fall back to current client-side filter for already-expanded nodes
 
-### 4. Execution Plan — Remove Top-Level Tab, Move Into Editor
+### 4. Execution Plan — Remove Top-Level Tab, Move Into Editor — DONE
 **Where**: PlanView (currently a top-level tab), PlanViewModel, QueryEditorHost toolbar
 **Problem**: The Exec Plan tab is coupled to Version History — you must select a proc there first, then switch to Exec Plan, then click Generate. No way to get a plan for the SQL you're actually writing. Also uses the wrong connection in multi-connection mode.
 **Fix**: Remove the Exec Plan top-level tab entirely. Replace with two things:
@@ -63,7 +63,7 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 **Problem**: On a fresh server without the DDL audit setup, Version History is empty with no explanation.
 **Fix**: Show an empty state: "No version history found. This feature requires a DDL audit trigger. See Settings → DDL Audit Source to configure."
 
-### 6. Edit Mode — No Escape Hatch When Connection Drops
+### 6. Edit Mode — No Escape Hatch When Connection Drops — DONE
 **Where**: QueryTabView edit mode
 **Problem**: If you enter edit mode, make changes, and the connection drops — you can't Apply and Cancel discards everything. No way to save your pending work.
 **Fix**: Keep "Show SQL" working when disconnected (it generates SQL client-side). Add a "Copy SQL" button so user can save changes as a script.
@@ -111,7 +111,7 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 
 ## 🟢 Low Priority — Polish
 
-### 14. Query History — No Clear Option
+### 14. Query History — No Clear Option — DONE
 **Where**: QueryEditorHost history panel
 **Problem**: History grows indefinitely with no way to clear it.
 **Fix**: Add a "Clear History" button with confirmation.
@@ -126,7 +126,7 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 **Problem**: Some settings apply immediately, some need reconnect/sync. No visual distinction.
 **Fix**: Subtle labels: "Takes effect immediately" vs "Applies on next sync."
 
-### 17. Large Export — No Progress or Cancel
+### 17. Large Export — No Progress or Cancel — DONE
 **Where**: QueryTabView.ExportResultsAsync()
 **Problem**: Large exports happen synchronously with no progress indicator.
 **Fix**: Progress dialog for exports over ~10K rows.
@@ -139,13 +139,13 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 |----------|-------|------|-----------|
 | 🔴 Do First | 1 | 1 | 0 |
 | 🔵 Do Second | 1 | 1 | 0 |
-| 🔴 High | 5 | 3 (#3, #5, #7) | 2 (#4, #6) |
+| 🔴 High | 5 | 5 | 0 |
 | 🟡 Medium | 6 | 6 | 0 |
-| 🟢 Low | 4 | 2 (#15, #16) | 2 (#14, #17) |
+| 🟢 Low | 4 | 4 | 0 |
 | New | 1 | 1 (#18) | 0 |
 
-**Completed**: #1, #2, #3, #5, #7, #8, #9, #10, #11, #12, #13, #15, #16, #18 (14 of 18)
-**Remaining**: #4 (Exec Plan into Editor — deferred, big), #6 (edit mode escape), #14 (history clear), #17 (export progress).
+**All 18 items completed.** UX audit is fully closed out.
+**Completed**: #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18
 
 
 ### 18. Auto-Detect Environment from Connection Name
