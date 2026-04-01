@@ -83,6 +83,12 @@ public class SessionService
     }
 
     public List<HistoryEntry> GetQueryHistory() => _data.QueryHistory;
+
+    public void ClearQueryHistory()
+    {
+        _data.QueryHistory.Clear();
+        Save();
+    }
 }
 
 public class SessionData

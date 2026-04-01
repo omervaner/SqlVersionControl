@@ -127,6 +127,7 @@ public partial class QueryEditorHost : UserControl
         // Wire history button (toggle panel)
         QueryHistoryButton.Click += (_, _) => ToggleHistoryPanel();
         HistoryCloseButton.Click += (_, _) => ToggleHistoryPanel();
+        HistoryClearButton.Click += (_, _) => ClearQueryHistory();
         HistorySearchBox.TextChanged += (_, _) => RefreshHistoryGrid();
         HistoryGrid.DoubleTapped += OnHistoryGridDoubleTapped;
 

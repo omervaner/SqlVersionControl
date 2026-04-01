@@ -374,12 +374,21 @@
                                          Watermark="Search history..." FontSize="11"
                                          Margin="12,0" Height="24" Padding="6,0"
                                          BorderThickness="1" BorderBrush="{DynamicResource BorderDefault}"/>
-                                <Button x:Name="HistoryCloseButton" Grid.Column="2"
-                                        Content="×" Background="Transparent"
-                                        Foreground="{DynamicResource TextSecondary}"
-                                        Padding="6,0" BorderThickness="0" Cursor="Hand"
-                                        FontSize="14" MinWidth="0" MinHeight="0"
-                                        ToolTip.Tip="Close history panel"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                                    <Button x:Name="HistoryClearButton"
+                                            Content="Clear" Background="Transparent"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            Padding="6,2" BorderThickness="0" Cursor="Hand"
+                                            FontSize="11" MinWidth="0" MinHeight="0"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Clear all query history"/>
+                                    <Button x:Name="HistoryCloseButton"
+                                            Content="×" Background="Transparent"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            Padding="6,0" BorderThickness="0" Cursor="Hand"
+                                            FontSize="14" MinWidth="0" MinHeight="0"
+                                            ToolTip.Tip="Close history panel"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
                         <!-- History List -->

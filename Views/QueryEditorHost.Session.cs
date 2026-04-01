@@ -249,6 +249,13 @@ public partial class QueryEditorHost
         HistoryGrid.ItemsSource = items;
     }
 
+    private void ClearQueryHistory()
+    {
+        if (_sessionService == null) return;
+        _sessionService.ClearQueryHistory();
+        RefreshHistoryGrid();
+    }
+
     private void OnHistoryGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (HistoryGrid.SelectedItem is not HistoryDisplayItem item) return;

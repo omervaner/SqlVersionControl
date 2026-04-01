@@ -444,18 +444,44 @@ public partial class QueryTabView
             Margin = new Thickness(0)
         };
 
+        var copyButton = new Button
+        {
+            Content = "Copy SQL",
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Padding = new Thickness(12, 6),
+            Margin = new Thickness(0, 8, 0, 0),
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
+        };
+
+        var capturedSql = sql;
+        Window? dialogRef = null;
+        copyButton.Click += async (_, _) =>
+        {
+            var clipboard = dialogRef != null ? TopLevel.GetTopLevel(dialogRef)?.Clipboard : null;
+            clipboard ??= TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(capturedSql);
+                copyButton.Content = "\u2713 Copied";
+                await Task.Delay(1200);
+                copyButton.Content = "Copy SQL";
+            }
+        };
+
+        var layout = new DockPanel { Margin = new Thickness(10) };
+        DockPanel.SetDock(copyButton, Avalonia.Controls.Dock.Bottom);
+        layout.Children.Add(copyButton);
+        layout.Children.Add(new ScrollViewer { Content = textBox });
+
         var dialog = new Window
         {
-            Title = "Preview SQL — Changes will be executed in a single transaction",
+            Title = "Preview SQL — Copy to save your changes if disconnected",
             Width = 650,
             Height = 420,
-            Content = new Border
-            {
-                Padding = new Thickness(10),
-                Child = new ScrollViewer { Content = textBox }
-            },
+            Content = layout,
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
+        dialogRef = dialog;
 
         var parent = TopLevel.GetTopLevel(this) as Window;
         if (parent != null)
