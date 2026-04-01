@@ -143,7 +143,21 @@ public partial class QueryTabView : UserControl
             if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
                 await clipboard.SetTextAsync(CellDetailText.Text ?? "");
         };
-        CellDetailCloseButton.Click += (_, _) => CellDetailPanel.IsVisible = false;
+        CellDetailCloseButton.Click += (_, _) =>
+        {
+            CellDetailPanel.IsVisible = false;
+            _cellDetailEnabled = false;
+            UpdateCellDetailToggleButton();
+        };
+        CellDetailToggleButton.Click += (_, _) =>
+        {
+            _cellDetailEnabled = !_cellDetailEnabled;
+            UpdateCellDetailToggleButton();
+            if (_cellDetailEnabled)
+                UpdateCellDetail();
+            else
+                CellDetailPanel.IsVisible = false;
+        };
 
         // Drag-to-resize cell detail panel
         CellDetailResizeHandle.PointerPressed += OnCellDetailResizePressed;
@@ -234,6 +248,8 @@ public partial class QueryTabView : UserControl
         if (e.Key == Key.F5 && ctrl && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
+            _viewModel.SelectionStartLine = !string.IsNullOrEmpty(_viewModel.SelectedSqlText)
+                ? SqlEditor.Document.GetLineByOffset(SqlEditor.SelectionStart).LineNumber : 1;
             _viewModel.SqlText = SqlEditor.Text;
 
             if (!string.IsNullOrEmpty(_viewModel.SelectedSqlText))
@@ -248,6 +264,8 @@ public partial class QueryTabView : UserControl
         if (e.Key == Key.F5 || (ctrl && e.Key == Key.Enter))
         {
             _viewModel.SelectedSqlText = SqlEditor.SelectedText ?? "";
+            _viewModel.SelectionStartLine = !string.IsNullOrEmpty(_viewModel.SelectedSqlText)
+                ? SqlEditor.Document.GetLineByOffset(SqlEditor.SelectionStart).LineNumber : 1;
             _viewModel.SqlText = SqlEditor.Text;
 
             if (!string.IsNullOrEmpty(_viewModel.SelectedSqlText))
@@ -1147,6 +1165,7 @@ public partial class QueryTabView : UserControl
 
     // ── Cell Detail Panel Resize ────────────────────────────────────
     private bool _cellDetailResizing;
+    private bool _cellDetailEnabled; // toggle for cell detail panel (off by default)
     private Point _cellDetailResizeStart;
     private double _cellDetailStartHeight;
 
@@ -1201,6 +1220,12 @@ public partial class QueryTabView : UserControl
 
     private void UpdateCellDetail()
     {
+        if (!_cellDetailEnabled)
+        {
+            CellDetailPanel.IsVisible = false;
+            return;
+        }
+
         if (ResultsGrid.SelectedItem == null || ResultsGrid.CurrentColumn == null)
         {
             CellDetailPanel.IsVisible = false;
@@ -1234,6 +1259,24 @@ public partial class QueryTabView : UserControl
         CellDetailPanel.IsVisible = true;
     }
 
+    private void UpdateCellDetailToggleButton()
+    {
+        CellDetailToggleButton.Opacity = _cellDetailEnabled ? 1.0 : 0.5;
+    }
+
+    private void OnMessageDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not Avalonia.Controls.SelectableTextBlock stb) return;
+        if (stb.Tag is not SqlVersionControl.Models.QueryMessage msg) return;
+        if (msg.Type != SqlVersionControl.Models.MessageType.Error || msg.LineNumber < 1) return;
+
+        // Navigate to the error line in the editor
+        SqlEditor.TextArea.Caret.Line = msg.LineNumber;
+        SqlEditor.TextArea.Caret.Column = 1;
+        SqlEditor.ScrollTo(msg.LineNumber, 1);
+        SqlEditor.Focus();
+    }
+
     private async void OnResultsGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_viewModel == null || !_viewModel.CanEditMode) return;
@@ -1245,12 +1288,23 @@ public partial class QueryTabView : UserControl
             return;
         }
 
+        // Capture the clicked row index and column before ItemsSource swap resets selection
+        var clickedRowIndex = ResultsGrid.SelectedIndex;
+        var clickedColumn = ResultsGrid.CurrentColumn;
+
         // Enter edit mode (no column rebuild — just toggles IsReadOnly + swaps ItemsSource)
         await _viewModel.ToggleEditModeCommand.ExecuteAsync(null);
 
-        // Post to let ItemsSource swap settle, then begin editing the clicked cell
+        // Post to let ItemsSource swap settle, then restore selection and begin editing
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (clickedRowIndex >= 0 && clickedRowIndex < ResultsGrid.ItemsSource?.Cast<object>().Count())
+            {
+                ResultsGrid.SelectedIndex = clickedRowIndex;
+                if (clickedColumn != null)
+                    ResultsGrid.CurrentColumn = clickedColumn;
+                ResultsGrid.ScrollIntoView(ResultsGrid.SelectedItem, clickedColumn);
+            }
             ResultsGrid.BeginEdit();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
@@ -2409,7 +2463,7 @@ public partial class QueryTabView : UserControl
         _pinnedTabIndices.Clear();
 
         var results = _viewModel.Results;
-        var hasMessages = !string.IsNullOrEmpty(_viewModel.Messages);
+        var hasMessages = _viewModel.Messages.Count > 0;
         var hasTabs = _pinnedResults.Count > 0 || results.Count > 0 || hasMessages;
 
         if (!hasTabs)

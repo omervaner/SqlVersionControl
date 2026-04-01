@@ -1,169 +1,12 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.5.1 (March 31, 2026)
+## PROJECT STATUS: v2.6.7 (April 2026)
 
-v2.5.1: OE actions use correct connection/database for new tabs, tab dot+border fade on disconnect, tab tooltips show connection info, Messages tab bar for DML/DDL.
+Toad-style cell editing with smooth double-click-to-edit, drag-and-drop .sql files onto editor, and auto-sizing results grid with cell detail panel. Recent work also includes Connection Manager UX polish, OE refresh button, and Windows menu bar fix.
 
-v2.5.0: 22 UX improvements — OE double-click for Views/Functions, Ctrl+Tab, ConnectOnStartup, edit mode confirm, DML messages tab, delete connection confirm, intellisense cache invalidation, Compare tab error surfacing, and more.
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
-v2.4.9: Extended title bar (traffic lights) macOS-only — fixes Windows title bar buttons being cut off.
-
-v2.4.8: Fix crash on long-running queries — elapsed timer was updating UI from thread pool thread.
-
-v2.4.7: Fix Connection Manager button states — Connect/Disconnect always visible with proper enable/disable, Connect auto-saves new connections.
-
-v2.4.6: OE connection context menu (New Query, Disconnect), reconnect prompt on F5, session tab color preservation.
-
-v2.4.5: Fix macOS window position drift — all dialogs use CenterOwner instead of CenterScreen.
-
-v2.4.4: Live elapsed timer on status bar during query execution, connection dialog scrollable, password fix.
-
-v2.4.3: Connection dialog scrollable, password preserved on mode switch, command palette uppercase/lowercase fix.
-
-v2.4.2: Offline UX — Continue Offline on connection dialog, contextual error messages on F5, dynamic empty state.
-
-v2.4.1: Command Palette (Cmd+E) — VS Code-style fuzzy command search.
-
-v2.4.0: Object Explorer depth + Crash Reporter + Editor polish.
-
-**v2.4.0 changes:**
-- OE: Parameters under Procs/Functions (new `Parameter` node type, detailed type info with OUTPUT badge)
-- OE: Columns under Views (expandable with same display as table columns)
-- OE: Indexes under Tables (type, key columns, included columns from sys.indexes)
-- OE: Foreign Keys under Tables (referenced table, column mapping, cascade actions)
-- OE: Constraints under Tables (CHECK expressions, DEFAULT values)
-- OE: User-Defined Types top-level folder (scalar + table types)
-- OE: Database-Level DDL Triggers folder (name, enabled/disabled, event types)
-- OE: Show Dependencies right-click on Proc/Function/View/Trigger — replaces tree with Uses/Used By, chain navigation, Back button
-- Executed Selection Flash: 300ms blue highlight on F5'd selection range
-- Crash Reporter: CrashLogger service, global exception handlers (AppDomain + TaskScheduler + main try/catch), structured crash logs with context, red banner on next startup with View Report / Copy / Dismiss
-- View menu: Toggle OE (Ctrl+B), Toggle Results (Ctrl+J), Zoom In/Out/Reset, Toggle Theme, Word Wrap
-- Edit menu: added Go to Line (Cmd+G), Select All (Cmd+A)
-- Cmd/Ctrl+Mouse Wheel zoom on editor (8-32 range, persists to settings)
-- Editor selection colors: themed SelectionBrush + SelectionForeground (readable in both themes)
-- Editor right-click context menu: Cut/Copy/Paste, Format SQL, Comment/Uncomment, Upper/Lowercase, Quick Quote, Go to Line, Find/Replace, contextual Peek Definition/Quick Execute/Show Dependencies
-
-v2.3.0: Query Trace (XE-based profiler) + QoL batch.
-
-**v2.3.0 changes:**
-- Query Trace Mode 1 — Quick Trace (Ctrl+Shift+F5): run a query with XE tracing, see every internal statement with duration/CPU/reads in a Trace result tab
-- Query Trace Mode 3 — Capture (Ctrl+6): top-level Trace tab, Profiler replacement with filter setup, start/stop recording, searchable results grid with detail panel
-- TraceService: XE session lifecycle (create/start/read ring buffer/stop/cleanup), permission checking, orphaned session cleanup on startup
-- Toolbar "Trace" button next to Run/Stop
-- Status bar Ln/Col cursor position indicator
-- Cmd+=/- font zoom (persists to settings)
-- Cmd+Shift+T instant dark/light theme toggle
-- Window title shows active database ("Lookout — PROD WMS / GratisWMS")
-- Tab right-click context menu: Close, Close Others, Close Right, Close All, Duplicate Tab
-- Database dropdown preserves selection across tab switches and async loads
-- OE TreeView: horizontal scroll disabled, no layout shift on selection
-- Toolbar buttons tightened (22px height, MinHeight=0)
-
-v2.2.0: Connection Manager + multi-connection Object Explorer.
-
-**v2.2.0 changes:**
-- ConnectionRegistry service: central management of all database connections with connect/disconnect, credential resolution via PasswordStore, connection state events
-- SavedConnection extended with Id, Environment, TrustServerCertificate, SortOrder, ConnectOnStartup (auto-migrates legacy entries)
-- Connection Manager dialog (File → Manage Connections / Cmd+Shift+M): list+edit form, color picker, environment classification, test connection, connect/disconnect
-- ConnectionDialog refactored: works with registry, "Manage Connections..." button opens manager
-- Compare tab rewired: dropdowns populate from registry, BuildConnectionString checks registry first, production detection uses Environment instead of IP heuristic
-- Multi-connection Object Explorer: root nodes are registry connections, expand to databases, all nodes carry ConnectionId for correct connection resolution
-- OE tree is global (stable across tab switches), no longer rebuilt per-tab in multi-connection mode
-- Quick-switch buttons read from registry, use resolved connection strings
-- Session restore: matches tabs to registry by ConnectionId first, falls back to server/database/username match, gracefully handles deleted connections
-- HexToBrushConverter for DataTemplate color binding
-
-v2.1.2: UX blocking states fixed — reconnect overlay dismissable, scan/deploy cancellable.
-
-**v2.1.2 changes:**
-- Reconnect overlay: Dismiss button + Escape key, background retry every 10s, offline status bar (grey dot, desaturated stripe, "(offline)" suffix)
-- Compare scan: Cancel button with CancellationToken, shows partial results on cancel
-- Batch deploy: Cancel button, per-object progress ("Deploying 3/17: usp_GetStock..."), explicit 30s CommandTimeout on all deploy commands
-- Git Export cancel: verified already working (CTS wired to Cancel button)
-- Window title updated to "Lookout" in all states
-
-**v2.1.1 changes:**
-- Security: Connection string building now uses SqlConnectionStringBuilder (fixes injection via semicolons in passwords)
-- Security: TrustServerCertificate now configurable per-connection (default true, prep for public release)
-- Security: Single-quote escaping for DB_ID() in index analysis queries
-- Security: DDL audit table source bracket-escaped + Settings input validation
-- Quality: Application-level file logger (AppLogger) replaces all Console.WriteLine — writes to logs/app.log with 5MB rotation
-- Quality: RollbackToVersionAsync now returns actual error messages instead of generic "check permissions"
-- Quality: ConvertToCreateOrAlter deduplicated (single source of truth in DatabaseService)
-- Quality: ActivityViewModel implements IDisposable, disposed on app close
-- Quality: GetTableStructureAsync made static, no more orphan DatabaseService instances
-- Quality: CancellationTokenSource properly disposed before reassignment
-- Quality: Schedule removal now has confirmation dialog
-- Quality: AlterSequenceDialog shows warning about duplicate keys / skipped ranges
-- Quality: SPID re-fetched each refresh cycle (no more stale self-kill check)
-- Quality: PasswordStore uses ConcurrentDictionary for thread safety
-- Quality: FormatValue handles numeric types explicitly, unsupported types get /* comment */ fallback
-- Quality: Auto-sync timer stopped on app close
-
-**v2.1.0 changes:**
-- App renamed to "Lookout" — all user-facing surfaces updated, config folder auto-migrated
-- Quick Execute (Shift+Click) — click a proc name to open a new tab with ready-to-run EXEC template with typed parameters
-
-**v2.0.0 changes:**
-- Git Export (File → Export to Git / Settings → Export Now) — full snapshot export of all database objects as .sql files, change detection, cleanup of deleted objects, CHANGELOG.md generation, progress dialog with summary
-- Activity Monitor tab (Cmd+5) — real-time server monitoring with two sub-tabs:
-  - Sessions: sp_who replacement with DMV queries, blocking chain visualization, Kill Session with safety checks, auto-refresh, filters
-  - Jobs Dashboard: full SQL Agent job monitoring with color-coded status, human-readable schedules, inline job property editor (General/Steps/Schedule/History tabs), Start/Stop/Enable/Disable actions
-- AccentGreen theme resource added to both themes
-
-**v1.9.0 changes:**
-- Index Analysis dialog (Tools → Index Analysis) — three-tab DMV analysis: unused indexes, missing indexes, duplicate/overlapping indexes with DROP/CREATE script generation and CSV export
-- Comment/Uncomment lines (Cmd+K / Cmd+L)
-- Uppercase/Lowercase selection (Cmd+Shift+U / Cmd+Shift+L)
-- Copy results with column headers (Cmd+Shift+C) + context menu
-- Pin Result Tab — preserve result tabs across query re-runs, with unpin via context menu
-- Word Wrap toggle (Option+Z / Alt+Z) + Edit menu item
-- Keyboard Shortcuts dialog (Help → Keyboard Shortcuts) — grouped by category, platform-aware symbols
-- Right-click result tab → Open Source Query (opens original SQL in new tab)
-- Editor placeholder text (disappears on focus)
-- Fix: Copy as INSERT crash on boolean columns (InvalidCastException)
-
-**v1.8.4 changes:**
-- Query Formatter (Ctrl+Shift+F) — T-SQL formatting via Hogimn.Sql.Formatter, toolbar F button
-- Text Compare dialog (Tools → Text Compare) — reuses DiffView component
-- Dialog base styling — unified background, fonts, inputs, button padding across all 11 dialogs
-- Toolbar separator between Run/Stop and utility buttons (4px/8px spacing)
-
-**v1.8.3 changes:**
-- Tools menu with SQL Quoter dialog (paste values, get IN clause output)
-- Quick Quote toolbar button (`"` icon, Ctrl+Shift+Q) — quotes selected text in-place
-- Script Object As context menus (CREATE, ALTER, DROP, INSERT for tables; ALTER/DROP for procs/views/functions)
-- Peek Definition (Cmd+Click / Ctrl+Click on proc/view/function names)
-- Highlight all occurrences of selected word (case-insensitive, whole-word)
-- Move line up/down (Alt+Up/Down)
-- Go to Line (Cmd+G / Ctrl+G)
-- Redo keybinding fix (Cmd+Shift+Z / Ctrl+Y)
-- Context menu styling (12px font, themed background)
-
-v1.8.2: Major design system overhaul + architecture changes. See docs/ folder for full specs.
-
-**v1.8.x changes (March 29 session):**
-- Complete visual redesign — DESIGN-SYSTEM.md governs all UI decisions
-- Merged toolbar into query tab row (4 bars → 3 bars before editor)
-- Merged main view tabs into menu bar row (3 bars → 2 bars before editor)
-- Warm cream light theme with full theme switching (ThemeChanged event system)
-- Shortened tab labels: Editor, History, Compare, Exec Plan, Settings
-- Removed Query menu (redundant — Run/Stop already in toolbar)
-- Per-view connection ownership — each view remembers its own connection, status bar mirrors active view
-- Colored dots on query tabs showing their connection environment
-- Connection stripe gradient fade (transparent at edges)
-- OE density restored, 20px left padding, compact filter box
-- Results panel collapsed by default, expands on F5 (70/30 split)
-- Overlay auto-hide scrollbars
-- Configurable grid row height and monospace font size in Settings
-- DDL audit source configurable in Settings (no more hardcoded VMAuditDb)
-- Git integration path in Settings (UI only, export logic pending)
-- Closed-eye logo (monochrome, line-art, works at all sizes)
-- Tooltips on all toolbar buttons with keyboard shortcuts
-- CI fix: publish with `-f net9.0` flag (csproj targets both net9.0 and net10.0)
-
-v1.7.0: Collapsible panels, Sequences in OE, Table Structure Compare, SQL Agent Jobs. v1.6.0: Per-tab connections + quick-switch buttons. v1.5.0: Performance, session, connections & data tools. v1.4.0: Menu bar, multi-tab query editor, editable grid, saved queries. v1.3.0: Execution Plan tab. v1.2.0: Unified search, dependency explorer, sleep/wake recovery, encrypted passwords, auto-sync.
 ---
 
 ## Project Identity
@@ -191,7 +34,8 @@ Write and run SQL queries against any database on the connected server:
 - **SQL Agent Jobs** in Object Explorer: Jobs folder under each server, lazy-loaded from `msdb.dbo.sysjobs` + `sysjobhistory` + `sysjobactivity`. Shows job name, enabled/disabled status, last run outcome (Success/Failed/Running). Context menu for viewing steps, history, and starting jobs.
 - **Double-click quick actions**: Table → SELECT TOP 100 (auto-run); Proc → View Definition; Column → Insert column name at cursor
 - **Drag-and-drop** from Object Explorer into editor: Table/View → `[schema].[name]` at drop position; Function → `[schema].[name]()`; Column → `[name]`; Proc → opens full definition
-- **Editable result grid** (TOAD-style): For simple single-table SELECTs with a PK, "Edit" button appears on result tab header. Toggle enters edit mode — DataGrid becomes writable. Row-based change tracking: snapshot on row enter, compare on row leave, Escape reverts. Yellow=modified, green=new, red=deleted. "Mark for Delete" via right-click. "Add Row" for inserts. "Show SQL" previews parameterized DML. "Apply" executes in a single transaction with row-count verification. "Edit Data" context menu on tables auto-runs SELECT TOP 200 and enters edit mode.
+- **Drag-and-drop .sql files** from Finder/Explorer onto editor opens them in new tabs
+- **Editable result grid** (TOAD-style): For simple single-table SELECTs with a PK, "Edit" button appears on result tab header. Toggle enters edit mode — DataGrid becomes writable. Row-based change tracking: snapshot on row enter, compare on row leave, Escape reverts. Yellow=modified, green=new, red=deleted. "Mark for Delete" via right-click. "Add Row" for inserts. "Show SQL" previews parameterized DML. "Apply" executes in a single transaction with row-count verification. "Edit Data" context menu on tables auto-runs SELECT TOP 200 and enters edit mode. Smooth double-click-to-edit cells, Tab/Enter to navigate, Escape to cancel.
 
 ### Menu Bar + View Tabs (v1.8.2)
 Merged into a single row: menus left-aligned, view tabs right-aligned. Only 2 bars before SQL editor content.
@@ -272,6 +116,7 @@ SqlVersionControl/
 │   └── SESSION-SUMMARY-*.md  - Session logs
 ├── lib/             - Git submodule: PlanViewer.Core (DO NOT MODIFY)
 ├── CLAUDE.md        - This file (developer guide)
+├── CHANGELOG.md     - Full version history
 └── SqlVersionControl.csproj
 ```
 
@@ -329,7 +174,7 @@ SqlVersionControl/
 
 ---
 
-## ⚠️ THE #1 RULE — SINGLE SOURCE OF TRUTH ⚠️
+## THE #1 RULE — SINGLE SOURCE OF TRUTH
 
 **If you are about to write the same logic in a second place, STOP. Make it a method and call it from both places.**
 
@@ -428,7 +273,7 @@ dotnet build -f net10.0    # or net9.0 on machines without .NET 10
 dotnet run -f net10.0
 ```
 
-### ⚠️ IMPORTANT: Multi-Target & Velopack Release Process
+### IMPORTANT: Multi-Target & Velopack Release Process
 
 The csproj targets **both net9.0 and net10.0** (`<TargetFrameworks>net9.0;net10.0</TargetFrameworks>`).
 - **Always publish with `-f net9.0`** for releases — this ensures the self-contained binary works on both net9.0 and net10.0 machines.
@@ -558,12 +403,6 @@ if (SelectedSourceConnection != null && !IsSourceConnected)
 
 ---
 
-## Current Issues (To Fix)
-
-(None currently tracked)
-
----
-
 ## UI Color Scheme
 
 **Two themes**: Dark (Ghostty Default Dark) in `Styles/AppTheme.axaml`, Light (warm cream) in `Styles/AppThemeLight.axaml`. See docs/DESIGN-SYSTEM.md for the full color spec.
@@ -575,41 +414,6 @@ Key resources: `EditorBackground`, `ToolbarBackground`, `SidebarBackground`, `Ti
 Syntax highlighting: `ThemeManager.cs` has both Dark and Light color sets. `ThemeManager.GetKeywordColor()` etc. return the correct color for the current theme.
 
 **NEVER add a hardcoded `#xxxxxx` to any AXAML or code-behind file.** Add a resource to both AppTheme.axaml AND AppThemeLight.axaml, reference with `{DynamicResource}` in XAML, or use ThemeManager helpers in code-behind and subscribe to ThemeChanged.
-
----
-
-## Testing Checklist
-- [x] Connection persistence across app restarts
-- [x] Theme switching (light/dark) on both tabs
-- [x] Deploy to object that exists vs doesn't exist
-- [x] Deploy with CREATE vs CREATE OR ALTER in source
-- [x] Search with underscores and spaces
-- [x] Three-way compare (Source → Target1 → Target2)
-- [x] Auto-connect source after target connects (ONE password flow)
-- [x] Batch selection and deploy
-- [x] Unified search (name + code search with debounce)
-- [x] Dependency explorer (Uses / Used By with chain navigation)
-- [x] Sleep/wake recovery with reconnect overlay
-- [x] Encrypted password persistence (survives restart)
-- [x] Auto-sync timer (60s background polling)
-- [x] Copy buttons on Version History diff panel
-- [x] Keyboard shortcuts (Cmd/Ctrl+1/2/F/R/S/D, Escape)
-- [x] Object Explorer right-click context menus (table, view, proc, function, column)
-- [x] Object Explorer double-click quick actions (table, proc, column)
-- [x] Multi-tab query editor (Ctrl+N new, Ctrl+W close, middle-click close)
-- [x] Menu bar (File/Edit/Query/Help)
-- [x] About dialog with version display
-- [x] Settings dialog shows version at bottom
-- [ ] Editable result grid: edit mode toggle on simple SELECT with PK
-- [ ] Row-based change tracking (yellow=modified, green=new, red=deleted)
-- [ ] Show SQL preview, Apply in transaction, Cancel discards
-- [ ] "Edit Data" context menu on tables (SELECT TOP 200 + auto-edit-mode)
-- [ ] Saved queries: Ctrl+S shows save dialog for new query, overwrites for existing
-- [ ] Open query: Ctrl+O lists saved queries, double-click loads, Browse picks .sql file
-- [ ] Save As: Ctrl+Shift+S always prompts for new name
-- [ ] Recent Files menu populated and clickable
-- [ ] Tab title shows query name + asterisk for unsaved changes
-- [ ] Close tab "Save" button saves before closing
 
 ---
 
@@ -644,7 +448,7 @@ dotnet run
 | **Search** | |
 | `Cmd/Ctrl+F` | Focus search box / Find in editor |
 | `Cmd/Ctrl+H` | Replace in editor |
-| `Cmd/Ctrl+R` | Refresh |
+| `Cmd/Ctrl+R` | Toggle results panel |
 | `Cmd/Ctrl+D` | Dependencies for selected object |
 | **Editor** | |
 | `Cmd+K` / `Ctrl+K` | Comment selected lines (`--` prefix) |

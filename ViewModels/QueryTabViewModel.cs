@@ -21,7 +21,13 @@ public partial class QueryTabViewModel : ObservableObject
     [ObservableProperty] private string? _selectedDatabase;
     [ObservableProperty] private ObservableCollection<QueryResult> _results = [];
     [ObservableProperty] private int _selectedResultIndex;
-    [ObservableProperty] private string _messages = "";
+    [ObservableProperty] private ObservableCollection<QueryMessage> _messages = [];
+
+    /// <summary>Helper to set Messages from a single string (validation errors, etc.)</summary>
+    private void SetMessageText(string text, MessageType type = MessageType.Error)
+    {
+        Messages = [new QueryMessage { Type = type, Text = text }];
+    }
     [ObservableProperty] private bool _isRunning;
 
     // Trace support (Mode 1 — Quick Trace)
@@ -37,6 +43,8 @@ public partial class QueryTabViewModel : ObservableObject
 
     // SqlText and SelectedSqlText are set by the View (AvaloniaEdit doesn't support two-way binding)
     public string SelectedSqlText { get; set; } = "";
+    /// <summary>1-based line number where the selection starts in the editor (for error line offset).</summary>
+    public int SelectionStartLine { get; set; } = 1;
 
     private string _sqlText = "";
     private string _cleanText = ""; // Text state considered "saved" (initial or after save)
@@ -207,22 +215,32 @@ public partial class QueryTabViewModel : ObservableObject
             SelectedDatabase = Databases[0];
     }
 
+    private volatile bool _elapsedTimerActive;
+
     private void StartElapsedTimer()
     {
         _runStopwatch = Stopwatch.StartNew();
+        _elapsedTimerActive = true;
         _elapsedTimer = new Timer(_ =>
         {
-            if (_runStopwatch == null) return;
-            var elapsed = _runStopwatch.Elapsed;
+            if (!_elapsedTimerActive) return;
+            var sw = _runStopwatch;
+            if (sw == null) return;
+            var elapsed = sw.Elapsed;
             var text = elapsed.TotalSeconds < 60
                 ? $"Running... {elapsed.TotalSeconds:F1}s"
                 : $"Running... {elapsed:mm\\:ss}";
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => QueryStatusText = text);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_elapsedTimerActive) return;
+                QueryStatusText = text;
+            });
         }, null, 500, 500);
     }
 
     private void StopElapsedTimer()
     {
+        _elapsedTimerActive = false;
         _elapsedTimer?.Dispose();
         _elapsedTimer = null;
         _runStopwatch = null;
@@ -239,7 +257,7 @@ public partial class QueryTabViewModel : ObservableObject
             var newConnStr = await ReconnectCallback(TabConnectionProfile.Id);
             if (newConnStr == null)
             {
-                Messages = "Query cancelled — connection is disconnected.";
+                SetMessageText("Query cancelled — connection is disconnected.", MessageType.Info);
                 StatusText = "× Disconnected";
                 QueryStatusText = "Disconnected";
                 return;
@@ -249,7 +267,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         if (string.IsNullOrEmpty(TabConnectionString))
         {
-            Messages = "Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.";
+            SetMessageText("Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.");
             StatusText = "× Not connected";
             QueryStatusText = "Not connected";
             return;
@@ -257,7 +275,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         if (string.IsNullOrEmpty(SelectedDatabase))
         {
-            Messages = "Error: No database selected.\nSelect a database from the dropdown above.";
+            SetMessageText("Error: No database selected.\nSelect a database from the dropdown above.");
             StatusText = "× No database";
             QueryStatusText = "No database";
             return;
@@ -286,7 +304,7 @@ public partial class QueryTabViewModel : ObservableObject
         QueryStatusText = "Running...";
         Services.CrashLogger.LastQuery = sql;
         Results.Clear();
-        Messages = "";
+        Messages = [];
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
         StartElapsedTimer();
@@ -294,46 +312,91 @@ public partial class QueryTabViewModel : ObservableObject
 
         try
         {
-            var (results, messages) = TabConnectionString != null
+            var execResult = TabConnectionString != null
                 ? await _db.ExecuteQueryAsync(TabConnectionString, SelectedDatabase!, sql, _cts.Token)
                 : await _db.ExecuteQueryAsync(SelectedDatabase!, sql, _cts.Token);
             sw.Stop();
+            StopElapsedTimer(); // Stop before setting final status to prevent race with timer's Post
 
-            foreach (var r in results)
+            foreach (var r in execResult.Results)
             {
                 r.SourceSql = sql;
                 Results.Add(r);
             }
 
-            Messages = messages;
+            // Offset error line numbers when running a selection (not starting at line 1)
+            var lineOffset = SelectionStartLine - 1;
+            if (lineOffset > 0)
+            {
+                foreach (var msg in execResult.Messages)
+                {
+                    if (msg.LineNumber > 0)
+                    {
+                        var oldLine = msg.LineNumber;
+                        msg.LineNumber += lineOffset;
+                        // Update displayed line number in message text
+                        msg.Text = msg.Text.Replace($"Line {oldLine}", $"Line {msg.LineNumber}");
+                    }
+                }
+            }
+
+            Messages = new ObservableCollection<QueryMessage>(execResult.Messages);
 
             if (Results.Count > 0)
                 SelectedResultIndex = 0;
 
-            var totalRows = results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var totalSelectRows = execResult.Results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var totalDmlRows = execResult.TotalRowsAffected;
             var elapsed = sw.ElapsedMilliseconds < 1000
                 ? $"{sw.ElapsedMilliseconds}ms"
                 : $"{sw.Elapsed.TotalSeconds:F1}s";
-            StatusText = totalRows > 10_000
-                ? $"{Results.Count} result set(s), {totalRows:N0} total rows (large)"
-                : $"{Results.Count} result set(s), {totalRows:N0} total rows";
-            QueryStatusText = $"{totalRows:N0} rows, {elapsed}";
 
-            if (!_suppressNextFlash)
+            // Status bar text
+            if (totalSelectRows > 0)
             {
-                var hasColumns = results.Any(r => r.Error == null && r.ColumnNames.Length > 0);
-                QueryFlash?.Invoke(
-                    hasColumns ? $"\u2713 {totalRows:N0} rows" : $"\u2713 {totalRows:N0} rows affected",
-                    QueryStatusSeverity.Success);
+                StatusText = totalSelectRows > 10_000
+                    ? $"{Results.Count} result set(s), {totalSelectRows:N0} total rows (large)"
+                    : $"{Results.Count} result set(s), {totalSelectRows:N0} total rows";
+            }
+            else
+            {
+                StatusText = totalDmlRows > 0
+                    ? $"{totalDmlRows:N0} row(s) affected"
+                    : "Commands completed successfully";
+            }
+
+            // SSMS-style binary flash: error or success, no middle ground
+            if (execResult.HasErrors)
+            {
+                QueryFlash?.Invoke("Query completed with errors", QueryStatusSeverity.Error);
+                QueryStatusText = $"Errors, {elapsed}";
+            }
+            else if (!_suppressNextFlash)
+            {
+                if (totalSelectRows > 0)
+                {
+                    QueryFlash?.Invoke($"\u2713 {totalSelectRows:N0} rows", QueryStatusSeverity.Success);
+                    QueryStatusText = $"{totalSelectRows:N0} rows, {elapsed}";
+                }
+                else if (totalDmlRows > 0)
+                {
+                    QueryFlash?.Invoke($"\u2713 {totalDmlRows:N0} row(s) affected", QueryStatusSeverity.Success);
+                    QueryStatusText = $"{totalDmlRows:N0} affected, {elapsed}";
+                }
+                else
+                {
+                    QueryFlash?.Invoke("Commands completed successfully", QueryStatusSeverity.Success);
+                    QueryStatusText = elapsed;
+                }
             }
             _suppressNextFlash = false;
 
             // Auto-expand results panel for DML (no result sets, but messages)
-            if (Results.Count == 0 && !string.IsNullOrEmpty(messages))
+            if (Results.Count == 0 && execResult.Messages.Count > 0)
                 ExpandResultsForMessages?.Invoke();
 
             // Record in query history
-            QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);
+            QueryExecuted?.Invoke(sql, SelectedDatabase, totalSelectRows > 0 ? totalSelectRows : totalDmlRows);
 
             // Check if result is eligible for edit mode
             CheckEditEligibility(sql);
@@ -352,6 +415,7 @@ public partial class QueryTabViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             sw.Stop();
+            StopElapsedTimer();
             StatusText = "Query cancelled";
             QueryStatusText = "";
             QueryFlash?.Invoke("\u2298 Cancelled", QueryStatusSeverity.Warning);
@@ -360,19 +424,16 @@ public partial class QueryTabViewModel : ObservableObject
         catch (Exception ex)
         {
             sw.Stop();
-            Messages = $"Error: {ex.Message}";
+            StopElapsedTimer();
+            SetMessageText($"Error: {ex.Message}");
             StatusText = "Error";
             QueryStatusText = "";
-            // Try to extract line number from SQL error (e.g. "Line 12")
-            var lineMatch = System.Text.RegularExpressions.Regex.Match(ex.Message, @"Line (\d+)");
-            QueryFlash?.Invoke(
-                lineMatch.Success ? $"\u2717 Error (Line {lineMatch.Groups[1].Value})" : "\u2717 Error",
-                QueryStatusSeverity.Error);
+            QueryFlash?.Invoke("\u2717 Error", QueryStatusSeverity.Error);
             AutoEnterEditMode = false;
         }
         finally
         {
-            StopElapsedTimer();
+            StopElapsedTimer(); // safe to call multiple times
             IsRunning = false;
             _cts?.Dispose();
             _cts = null;
@@ -394,7 +455,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         if (string.IsNullOrEmpty(TabConnectionString))
         {
-            Messages = "Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.";
+            SetMessageText("Error: No active connection.\nUse File → Manage Connections (Cmd+Shift+M) to connect to a server.");
             StatusText = "× Not connected";
             QueryStatusText = "Not connected";
             return;
@@ -402,7 +463,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         if (string.IsNullOrEmpty(SelectedDatabase))
         {
-            Messages = "Error: No database selected.\nSelect a database from the dropdown above.";
+            SetMessageText("Error: No database selected.\nSelect a database from the dropdown above.");
             StatusText = "× No database";
             QueryStatusText = "No database";
             return;
@@ -430,7 +491,7 @@ public partial class QueryTabViewModel : ObservableObject
         var serverConnStr = TabConnectionString ?? _db.GetConnectionStringForDatabase("master");
         if (!await traceService.HasTracePermissionAsync(serverConnStr))
         {
-            Messages = "Trace requires ALTER ANY EVENT SESSION permission on the server.";
+            SetMessageText("Trace requires ALTER ANY EVENT SESSION permission on the server.");
             QueryFlash?.Invoke("\u2717 No trace permission", QueryStatusSeverity.Error);
             return;
         }
@@ -441,7 +502,7 @@ public partial class QueryTabViewModel : ObservableObject
         QueryStatusText = "Tracing...";
         Results.Clear();
         TraceEvents.Clear();
-        Messages = "";
+        Messages = [];
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
         StartElapsedTimer();
@@ -450,11 +511,12 @@ public partial class QueryTabViewModel : ObservableObject
         try
         {
             var connStr = TabConnectionString ?? _db.GetConnectionStringForDatabase(SelectedDatabase!);
-            var (results, messages, traceEvents) = await _db.ExecuteWithTraceAsync(
+            var (execResult, traceEvents) = await _db.ExecuteWithTraceAsync(
                 TabConnectionString ?? connStr, SelectedDatabase!, sql, _cts.Token, traceService);
             sw.Stop();
+            StopElapsedTimer();
 
-            foreach (var r in results)
+            foreach (var r in execResult.Results)
             {
                 r.SourceSql = sql;
                 Results.Add(r);
@@ -463,27 +525,37 @@ public partial class QueryTabViewModel : ObservableObject
             foreach (var te in traceEvents)
                 TraceEvents.Add(te);
 
-            Messages = messages;
+            Messages = new ObservableCollection<QueryMessage>(execResult.Messages);
 
             if (Results.Count > 0)
                 SelectedResultIndex = 0;
 
-            var totalRows = results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var totalSelectRows = execResult.Results.Where(r => r.Error == null).Sum(r => r.RowCount);
+            var totalDmlRows = execResult.TotalRowsAffected;
             var elapsed = sw.ElapsedMilliseconds < 1000
                 ? $"{sw.ElapsedMilliseconds}ms"
                 : $"{sw.Elapsed.TotalSeconds:F1}s";
-            StatusText = $"{Results.Count} result(s), {totalRows:N0} rows, {TraceEvents.Count} traced";
-            QueryStatusText = $"{totalRows:N0} rows, {elapsed}, {TraceEvents.Count} traced";
+            StatusText = $"{Results.Count} result(s), {totalSelectRows:N0} rows, {TraceEvents.Count} traced";
+            QueryStatusText = $"{totalSelectRows:N0} rows, {elapsed}, {TraceEvents.Count} traced";
 
-            QueryFlash?.Invoke(
-                $"\u2713 {totalRows:N0} rows, {TraceEvents.Count} traced",
-                QueryStatusSeverity.Success);
+            if (execResult.HasErrors)
+            {
+                QueryFlash?.Invoke("Query completed with errors", QueryStatusSeverity.Error);
+                QueryStatusText = $"Errors, {elapsed}, {TraceEvents.Count} traced";
+            }
+            else
+            {
+                QueryFlash?.Invoke(
+                    $"\u2713 {totalSelectRows:N0} rows, {TraceEvents.Count} traced",
+                    QueryStatusSeverity.Success);
+            }
 
-            QueryExecuted?.Invoke(sql, SelectedDatabase, totalRows);
+            QueryExecuted?.Invoke(sql, SelectedDatabase, totalSelectRows > 0 ? totalSelectRows : totalDmlRows);
         }
         catch (OperationCanceledException)
         {
             sw.Stop();
+            StopElapsedTimer();
             StatusText = "Trace cancelled";
             QueryStatusText = "";
             QueryFlash?.Invoke("\u2298 Cancelled", QueryStatusSeverity.Warning);
@@ -491,7 +563,8 @@ public partial class QueryTabViewModel : ObservableObject
         catch (Exception ex)
         {
             sw.Stop();
-            Messages = $"Error: {ex.Message}";
+            StopElapsedTimer();
+            SetMessageText($"Error: {ex.Message}");
             StatusText = "Error";
             QueryStatusText = "";
             QueryFlash?.Invoke("\u2717 Error", QueryStatusSeverity.Error);

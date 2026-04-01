@@ -2,8 +2,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
              xmlns:vm="using:SqlVersionControl.ViewModels"
+             xmlns:conv="using:SqlVersionControl.Converters"
              x:Class="SqlVersionControl.Views.QueryTabView"
              x:DataType="vm:QueryTabViewModel">
+
+    <UserControl.Resources>
+        <conv:MessageTypeToColorConverter x:Key="MessageTypeToColor"/>
+    </UserControl.Resources>
 
     <!-- Editor (top) + Results (bottom) + Cell Detail — toolbar merged into tab strip in QueryEditorHost -->
     <Grid x:Name="EditorResultsGrid" RowDefinitions="*,Auto,*,Auto">
@@ -53,6 +58,7 @@
             <Grid Grid.Row="2" RowDefinitions="Auto,*">
                 <!-- Result Tabs Header + Edit Mode Toggle + Edit Buttons -->
                 <Border Grid.Row="0" x:Name="ResultsTabBar" Background="{DynamicResource PanelHeaderBackground}"
+                        BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,0,1"
                         Padding="5,0" Height="28">
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel x:Name="ResultTabHeaders" Grid.Column="0" Orientation="Horizontal" Spacing="2"/>
@@ -115,6 +121,13 @@
                                     Padding="8,2" Margin="2,2"
                                     FontSize="11" Height="22" MinHeight="0"
                                     ToolTip.Tip="Edit result rows"/>
+                            <!-- Cell Detail Panel Toggle -->
+                            <Button x:Name="CellDetailToggleButton"
+                                    Content="👁"
+                                    Classes="btn-secondary"
+                                    Padding="6,2" Margin="2,2"
+                                    FontSize="11" Height="22" MinHeight="0"
+                                    ToolTip.Tip="Toggle cell detail panel"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -156,9 +169,21 @@
                     <Border x:Name="MessagesPanel" IsVisible="False"
                             Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
                         <ScrollViewer>
-                            <TextBlock Text="{Binding Messages}" Padding="10"
-                                       FontFamily="Consolas, Menlo, Monaco, monospace"
-                                       FontSize="12" TextWrapping="Wrap"/>
+                            <ItemsControl x:Name="MessagesItemsControl"
+                                          ItemsSource="{Binding Messages}"
+                                          Padding="10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <SelectableTextBlock Text="{Binding Text}"
+                                                             Foreground="{Binding Type, Converter={StaticResource MessageTypeToColor}}"
+                                                             FontFamily="Consolas, Menlo, Monaco, monospace"
+                                                             FontSize="12" TextWrapping="Wrap"
+                                                             Margin="0,1"
+                                                             Tag="{Binding}"
+                                                             DoubleTapped="OnMessageDoubleTapped"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </ScrollViewer>
                     </Border>
 

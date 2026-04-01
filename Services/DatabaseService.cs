@@ -652,7 +652,7 @@ public class DatabaseService
     /// Executes one or more SQL batches (split on GO) against the given database.
     /// Uses a dedicated connection. Wires InfoMessage BEFORE OpenAsync so early PRINTs are captured.
     /// </summary>
-    public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
+    public async Task<QueryExecutionResult> ExecuteQueryAsync(
         string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
         => await ExecuteQueryCoreAsync(GetConnectionStringForDatabase(database), sql, ct, timeoutSeconds);
 
@@ -660,7 +660,7 @@ public class DatabaseService
     /// Per-tab overload: executes SQL against a specific server's database.
     /// connectionString = server-level conn string, database = target DB.
     /// </summary>
-    public async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryAsync(
+    public async Task<QueryExecutionResult> ExecuteQueryAsync(
         string connectionString, string database, string sql, CancellationToken ct, int timeoutSeconds = 120)
         => await ExecuteQueryCoreAsync(BuildConnectionString(connectionString, database), sql, ct, timeoutSeconds);
 
@@ -669,19 +669,22 @@ public class DatabaseService
     /// Uses a dedicated connection so SPID is guaranteed to match the XE filter.
     /// The XE session is always cleaned up, even on failure or cancellation.
     /// </summary>
-    public async Task<(List<QueryResult> Results, string Messages, List<SqlVersionControl.Models.TraceEvent> TraceEvents)>
+    public async Task<(QueryExecutionResult Result, List<SqlVersionControl.Models.TraceEvent> TraceEvents)>
         ExecuteWithTraceAsync(string connectionString, string database, string sql,
             CancellationToken ct, TraceService traceService, int timeoutSeconds = 120)
     {
         var dbConnStr = BuildConnectionString(connectionString, database);
         var results = new List<QueryResult>();
-        var messages = new List<string>();
+        var messages = new List<QueryMessage>();
         var traceEvents = new List<SqlVersionControl.Models.TraceEvent>();
+        var totalRowsAffected = 0;
+        var hasErrors = false;
+        var errorCount = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // Dedicated connection for the query (stays open so SPID is stable)
         using var queryConn = new SqlConnection(dbConnStr);
-        queryConn.InfoMessage += (_, e) => messages.Add(e.Message);
+        queryConn.InfoMessage += (_, e) => messages.Add(new QueryMessage { Type = MessageType.Print, Text = e.Message });
         await queryConn.OpenAsync(ct);
 
         // Get SPID from this connection
@@ -701,7 +704,7 @@ public class DatabaseService
 
             // Execute the query on the dedicated connection
             var batches = SplitOnGo(sql);
-            foreach (var batch in batches)
+            foreach (var (batch, batchStartLine) in batches)
             {
                 if (string.IsNullOrWhiteSpace(batch)) continue;
                 ct.ThrowIfCancellationRequested();
@@ -711,6 +714,20 @@ public class DatabaseService
                 {
                     using var cmd = new SqlCommand(batch, queryConn);
                     cmd.CommandTimeout = timeoutSeconds;
+
+                    cmd.StatementCompleted += (_, sce) =>
+                    {
+                        if (sce.RecordCount >= 0)
+                        {
+                            totalRowsAffected += sce.RecordCount;
+                            messages.Add(new QueryMessage
+                            {
+                                Type = MessageType.RowCount,
+                                Text = $"({sce.RecordCount} row(s) affected)"
+                            });
+                        }
+                    };
+
                     await using var reg = ct.Register(() =>
                     {
                         try { cmd.Cancel(); } catch { }
@@ -748,34 +765,55 @@ public class DatabaseService
                             ExecutionTimeMs = batchSw.ElapsedMilliseconds
                         });
                     } while (await reader.NextResultAsync(ct));
-
-                    if (reader.RecordsAffected >= 0)
-                        messages.Add($"({reader.RecordsAffected} rows affected)");
                 }
                 catch (OperationCanceledException)
                 {
-                    messages.Add("Query was cancelled by user.");
+                    messages.Add(new QueryMessage { Type = MessageType.Info, Text = "Query was cancelled by user." });
                     throw;
                 }
                 catch (SqlException ex)
                 {
-                    var errorMsg = ex.LineNumber > 0
-                        ? $"Error (Line {ex.LineNumber}): {ex.Message}"
-                        : $"Error: {ex.Message}";
-                    messages.Add(errorMsg);
-                    results.Add(new QueryResult { Error = errorMsg });
+                    hasErrors = true;
+                    errorCount++;
+
+                    foreach (SqlError err in ex.Errors)
+                    {
+                        var scriptLine = err.LineNumber > 0 ? batchStartLine + err.LineNumber - 1 : -1;
+                        var header = $"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {scriptLine}";
+                        messages.Add(new QueryMessage
+                        {
+                            Type = MessageType.Error,
+                            Text = $"{header}\n{err.Message}",
+                            LineNumber = scriptLine
+                        });
+                    }
+
+                    var primaryError = ex.Errors[0];
+                    var primaryLine = primaryError.LineNumber > 0 ? batchStartLine + primaryError.LineNumber - 1 : -1;
+                    results.Add(new QueryResult
+                    {
+                        Error = $"Msg {primaryError.Number}, Level {primaryError.Class}, State {primaryError.State}, Line {primaryLine}: {primaryError.Message}"
+                    });
                 }
             }
 
             sw.Stop();
-            messages.Insert(0, $"Total execution time: {sw.ElapsedMilliseconds}ms");
+            messages.Add(new QueryMessage
+            {
+                Type = MessageType.Timing,
+                Text = $"Total execution time: {sw.ElapsedMilliseconds}ms"
+            });
 
             // Small delay to let XE flush the ring buffer
             await Task.Delay(200, CancellationToken.None);
 
             // Read trace events
             traceEvents = await traceService.ReadEventsAsync(connectionString, sessionName);
-            messages.Add($"Trace captured {traceEvents.Count} statement(s)");
+            messages.Add(new QueryMessage
+            {
+                Type = MessageType.Info,
+                Text = $"Trace captured {traceEvents.Count} statement(s)"
+            });
         }
         finally
         {
@@ -784,26 +822,36 @@ public class DatabaseService
                 await traceService.StopTraceAsync(connectionString, sessionName);
         }
 
-        return (results, string.Join(Environment.NewLine, messages), traceEvents);
+        return (new QueryExecutionResult
+        {
+            Results = results,
+            Messages = messages,
+            TotalRowsAffected = totalRowsAffected,
+            HasErrors = hasErrors,
+            ErrorCount = errorCount
+        }, traceEvents);
     }
 
-    private async Task<(List<QueryResult> Results, string Messages)> ExecuteQueryCoreAsync(
+    private async Task<QueryExecutionResult> ExecuteQueryCoreAsync(
         string connStr, string sql, CancellationToken ct, int timeoutSeconds)
     {
         var results = new List<QueryResult>();
-        var messages = new List<string>();
+        var messages = new List<QueryMessage>();
+        var totalRowsAffected = 0;
+        var hasErrors = false;
+        var errorCount = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var conn = new SqlConnection(connStr);
 
         // Wire InfoMessage BEFORE OpenAsync so early PRINT messages are captured
-        conn.InfoMessage += (_, e) => messages.Add(e.Message);
+        conn.InfoMessage += (_, e) => messages.Add(new QueryMessage { Type = MessageType.Print, Text = e.Message });
 
         await conn.OpenAsync(ct);
 
         // Split on GO lines
         var batches = SplitOnGo(sql);
 
-        foreach (var batch in batches)
+        foreach (var (batch, batchStartLine) in batches)
         {
             if (string.IsNullOrWhiteSpace(batch)) continue;
             ct.ThrowIfCancellationRequested();
@@ -814,6 +862,20 @@ public class DatabaseService
             {
                 using var cmd = new SqlCommand(batch, conn);
                 cmd.CommandTimeout = timeoutSeconds;
+
+                // Track per-statement row counts (fires even if a later statement errors)
+                cmd.StatementCompleted += (_, sce) =>
+                {
+                    if (sce.RecordCount >= 0)
+                    {
+                        totalRowsAffected += sce.RecordCount;
+                        messages.Add(new QueryMessage
+                        {
+                            Type = MessageType.RowCount,
+                            Text = $"({sce.RecordCount} row(s) affected)"
+                        });
+                    }
+                };
 
                 // Register cancellation to call SqlCommand.Cancel()
                 await using var reg = ct.Register(() =>
@@ -856,63 +918,90 @@ public class DatabaseService
                         ExecutionTimeMs = batchSw.ElapsedMilliseconds
                     });
                 } while (await reader.NextResultAsync(ct));
-
-                // If no result sets but rows were affected, add a message
-                if (reader.RecordsAffected >= 0)
-                {
-                    messages.Add($"({reader.RecordsAffected} rows affected)");
-                }
             }
             catch (OperationCanceledException)
             {
-                messages.Add("Query was cancelled by user.");
+                messages.Add(new QueryMessage { Type = MessageType.Info, Text = "Query was cancelled by user." });
                 throw;
             }
             catch (SqlException ex)
             {
-                var errorMsg = ex.LineNumber > 0
-                    ? $"Error (Line {ex.LineNumber}): {ex.Message}"
-                    : $"Error: {ex.Message}";
-                messages.Add(errorMsg);
+                hasErrors = true;
+                errorCount++;
 
-                results.Add(new QueryResult { Error = errorMsg });
+                // SSMS-style: iterate SqlException.Errors for full metadata
+                foreach (SqlError err in ex.Errors)
+                {
+                    var scriptLine = err.LineNumber > 0 ? batchStartLine + err.LineNumber - 1 : -1;
+                    var header = $"Msg {err.Number}, Level {err.Class}, State {err.State}, Line {scriptLine}";
+                    messages.Add(new QueryMessage
+                    {
+                        Type = MessageType.Error,
+                        Text = $"{header}\n{err.Message}",
+                        LineNumber = scriptLine
+                    });
+                }
+
+                // Still add a QueryResult with error for the result tab indicator
+                var primaryError = ex.Errors[0];
+                var primaryLine = primaryError.LineNumber > 0 ? batchStartLine + primaryError.LineNumber - 1 : -1;
+                results.Add(new QueryResult
+                {
+                    Error = $"Msg {primaryError.Number}, Level {primaryError.Class}, State {primaryError.State}, Line {primaryLine}: {primaryError.Message}"
+                });
             }
         }
 
         sw.Stop();
-        messages.Insert(0, $"Total execution time: {sw.ElapsedMilliseconds}ms");
+        messages.Add(new QueryMessage
+        {
+            Type = MessageType.Timing,
+            Text = $"Total execution time: {sw.ElapsedMilliseconds}ms"
+        });
 
-        return (results, string.Join(Environment.NewLine, messages));
+        return new QueryExecutionResult
+        {
+            Results = results,
+            Messages = messages,
+            TotalRowsAffected = totalRowsAffected,
+            HasErrors = hasErrors,
+            ErrorCount = errorCount
+        };
     }
 
     /// <summary>
-    /// Splits SQL text on GO batch separators (line must be exactly GO, case-insensitive, with optional whitespace).
+    /// Splits SQL text on GO batch separators. Returns (batchSql, startLineNumber) tuples
+    /// where startLineNumber is 1-based line offset in the original script.
     /// </summary>
-    private static List<string> SplitOnGo(string sql)
+    private static List<(string Sql, int StartLine)> SplitOnGo(string sql)
     {
-        var batches = new List<string>();
+        var batches = new List<(string Sql, int StartLine)>();
         var lines = sql.Split('\n');
         var current = new System.Text.StringBuilder();
+        int batchStartLine = 1; // 1-based
 
-        foreach (var line in lines)
+        for (int i = 0; i < lines.Length; i++)
         {
-            if (System.Text.RegularExpressions.Regex.IsMatch(line.Trim(), @"^GO\s*$",
+            if (System.Text.RegularExpressions.Regex.IsMatch(lines[i].Trim(), @"^GO\s*$",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             {
                 if (current.Length > 0)
                 {
-                    batches.Add(current.ToString());
+                    batches.Add((current.ToString(), batchStartLine));
                     current.Clear();
                 }
+                batchStartLine = i + 2; // next line is start of next batch (1-based)
             }
             else
             {
-                current.AppendLine(line);
+                if (current.Length == 0)
+                    batchStartLine = i + 1; // 1-based
+                current.AppendLine(lines[i]);
             }
         }
 
         if (current.Length > 0)
-            batches.Add(current.ToString());
+            batches.Add((current.ToString(), batchStartLine));
 
         return batches;
     }
