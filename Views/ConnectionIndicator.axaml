@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SqlVersionControl.Views.ConnectionIndicator">
+    <Button x:Name="IndicatorButton"
+            Background="Transparent"
+            BorderThickness="0"
+            Padding="4,3"
+            Cursor="Hand"
+            MinHeight="0" MinWidth="0"
+            VerticalAlignment="Center"
+            HorizontalContentAlignment="Left">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <Ellipse x:Name="ConnectionDot" Width="8" Height="8"
+                     VerticalAlignment="Center"
+                     Fill="{DynamicResource TextSecondary}"/>
+            <TextBlock x:Name="ConnectionLabel"
+                       Text="Not connected"
+                       Foreground="{DynamicResource TextPrimary}"
+                       FontSize="11"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+    </Button>
+</UserControl>

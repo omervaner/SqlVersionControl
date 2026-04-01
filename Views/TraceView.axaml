@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SqlVersionControl.ViewModels"
+             xmlns:views="using:SqlVersionControl.Views"
              x:Class="SqlVersionControl.Views.TraceView"
              x:DataType="vm:TraceViewModel">
 
@@ -13,9 +14,7 @@
                     <TextBlock Text="Query Trace" FontSize="14" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextBright}"/>
                     <!-- Connection picker -->
-                    <ComboBox ItemsSource="{Binding ConnectionNames}"
-                              SelectedItem="{Binding SelectedConnectionName}"
-                              MinWidth="180" Height="26" FontSize="11" Padding="6,2"/>
+                    <views:ConnectionIndicator x:Name="TraceConnectionIndicator"/>
                 </StackPanel>
 
                 <!-- Recording indicator -->

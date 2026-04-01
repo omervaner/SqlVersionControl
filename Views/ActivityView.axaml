@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SqlVersionControl.ViewModels"
+             xmlns:views="using:SqlVersionControl.Views"
              x:Class="SqlVersionControl.Views.ActivityView"
              x:DataType="vm:ActivityViewModel">
 
@@ -10,13 +11,7 @@
         <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="15,8">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
                 <!-- Connection selector -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                    <Ellipse x:Name="ActivityConnectionDot" Width="8" Height="8"
-                             VerticalAlignment="Center" Fill="{DynamicResource AccentBlue}"/>
-                    <Button x:Name="ActivityConnectionButton" Content="Connection"
-                            Classes="btn-secondary" Padding="8,4" FontSize="11"
-                            ToolTip.Tip="Change Activity connection" Cursor="Hand"/>
-                </StackPanel>
+                <views:ConnectionIndicator Grid.Column="0" x:Name="ActivityConnectionIndicator"/>
 
                 <!-- Sub-tabs -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="20,0,0,0">

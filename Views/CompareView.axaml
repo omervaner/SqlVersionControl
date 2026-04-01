@@ -12,18 +12,7 @@
                 <!-- Source Connection -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Source:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
-                    <ComboBox ItemsSource="{Binding SourceConnections}"
-                              SelectedItem="{Binding SelectedSourceConnection}"
-                              MinWidth="160"
-                              PlaceholderText="Select source...">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding DisplayName}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Name="AddSourceButton" Content="+" Classes="btn-secondary"
-                            ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
+                    <views:ConnectionIndicator x:Name="SourceConnectionIndicator"/>
                 </StackPanel>
 
                 <!-- Mode Toggle + Search (centered) -->
@@ -46,18 +35,7 @@
                 <!-- Target1 Connection + T2 Toggle -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Target 1:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
-                    <ComboBox ItemsSource="{Binding TargetConnections}"
-                              SelectedItem="{Binding SelectedTargetConnection}"
-                              MinWidth="160"
-                              PlaceholderText="Select target...">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding DisplayName}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Name="AddTargetButton" Content="+" Classes="btn-secondary"
-                            ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
+                    <views:ConnectionIndicator x:Name="TargetConnectionIndicator"/>
                     <Button Command="{Binding ToggleTarget2Command}"
                             Content="{Binding ToggleTarget2ButtonText}"
                             Classes="btn-toggle"
@@ -72,18 +50,7 @@
         <Border Grid.Row="1" Background="{DynamicResource PanelHeaderBackground}" Padding="10,6" IsVisible="{Binding ShowTarget2}">
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
                 <TextBlock Text="Target 2:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
-                <ComboBox ItemsSource="{Binding Target2Connections}"
-                          SelectedItem="{Binding SelectedTarget2Connection}"
-                          MinWidth="160"
-                          PlaceholderText="Select target 2...">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DisplayName}"/>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <Button Name="AddTarget2Button" Content="+" Classes="btn-secondary"
-                        ToolTip.Tip="Add new connection" Padding="6,2" FontWeight="Bold"/>
+                <views:ConnectionIndicator x:Name="Target2ConnectionIndicator"/>
                 <TextBlock Text="{Binding Target2Status}" Foreground="{DynamicResource TextSecondary}"
                            VerticalAlignment="Center" FontSize="11" Margin="8,0,0,0"/>
             </StackPanel>

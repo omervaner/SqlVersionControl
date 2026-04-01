@@ -27,9 +27,42 @@ public partial class CompareView : UserControl
         _registry = registry;
         DataContext = new CompareViewModel(settings, registry);
 
-        AddSourceButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(true, false);
-        AddTargetButton.Click += async (s, e) => await ShowAddConnectionDialogAsync(false, false);
-        AddTarget2Button.Click += async (s, e) => await ShowAddConnectionDialogAsync(false, true);
+        // Wire connection indicators
+        if (_registry != null)
+        {
+            SourceConnectionIndicator.Initialize(_registry);
+            TargetConnectionIndicator.Initialize(_registry);
+            Target2ConnectionIndicator.Initialize(_registry);
+
+            SourceConnectionIndicator.ConnectionSelected += (managed) =>
+            {
+                var saved = managed.Config;
+                if (!ViewModel.SourceConnections.Contains(saved))
+                    ViewModel.SourceConnections.Add(saved);
+                ViewModel.SelectedSourceConnection = saved;
+                SourceConnectionIndicator.SetActiveConnection(saved);
+            };
+            TargetConnectionIndicator.ConnectionSelected += (managed) =>
+            {
+                var saved = managed.Config;
+                if (!ViewModel.TargetConnections.Contains(saved))
+                    ViewModel.TargetConnections.Add(saved);
+                ViewModel.SelectedTargetConnection = saved;
+                TargetConnectionIndicator.SetActiveConnection(saved);
+            };
+            Target2ConnectionIndicator.ConnectionSelected += (managed) =>
+            {
+                var saved = managed.Config;
+                if (!ViewModel.Target2Connections.Contains(saved))
+                    ViewModel.Target2Connections.Add(saved);
+                ViewModel.SelectedTarget2Connection = saved;
+                Target2ConnectionIndicator.SetActiveConnection(saved);
+            };
+
+            SourceConnectionIndicator.NewConnectionRequested += () => NewConnectionRequested?.Invoke();
+            TargetConnectionIndicator.NewConnectionRequested += () => NewConnectionRequested?.Invoke();
+            Target2ConnectionIndicator.NewConnectionRequested += () => NewConnectionRequested?.Invoke();
+        }
 
         // Wire up password prompt
         ViewModel.PasswordRequested += OnPasswordRequested;
@@ -80,6 +113,9 @@ public partial class CompareView : UserControl
         ViewModel.UpdateSelectedCount();
     }
 
+    /// <summary>Fired when user clicks "+ New Connection..." — handled by MainWindow.</summary>
+    public event Action? NewConnectionRequested;
+
     public CompareViewModel ViewModel => (CompareViewModel)DataContext!;
 
     public void FocusSearch()
@@ -98,26 +134,6 @@ public partial class CompareView : UserControl
         return dialog.Password;
     }
 
-    private async Task ShowAddConnectionDialogAsync(bool isSource, bool isTarget2)
-    {
-        var window = TopLevel.GetTopLevel(this) as Window;
-        if (window == null) return;
-
-        var dialog = new QuickConnectionDialog();
-        await dialog.ShowDialog(window);
-
-        if (dialog.Result != null)
-        {
-            if (isTarget2)
-            {
-                ViewModel.AddConnectionToTarget2(dialog.Result, dialog.Password);
-            }
-            else
-            {
-                ViewModel.AddConnection(dialog.Result, dialog.Password, isSource);
-            }
-        }
-    }
 
     public void RefreshTheme()
     {

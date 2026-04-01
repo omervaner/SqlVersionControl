@@ -141,6 +141,7 @@
                               HeadersVisibility="All"
                               GridLinesVisibility="All"
                               BorderThickness="0"
+                              Margin="0,-1,0,0"
                               CanUserResizeColumns="True"
                               CanUserSortColumns="True"
                               CanUserReorderColumns="True"

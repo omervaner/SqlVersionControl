@@ -71,6 +71,12 @@ public partial class TraceViewModel : ObservableObject
             _connectionString = connStr;
     }
 
+    /// <summary>Set connection string directly (from ConnectionIndicator).</summary>
+    public void SetConnectionDirect(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
     partial void OnSearchTextChanged(string value)
     {
         ApplySearch();

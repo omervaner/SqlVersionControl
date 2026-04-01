@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         {
             compareView.Initialize(_settings, _registry);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
+            compareView.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
             compareView.RefreshTheme();
         }
 
@@ -79,6 +80,8 @@ public partial class MainWindow : Window
         // Initialize TraceView with registry
         var traceView = this.FindControl<TraceView>("TraceViewControl");
         traceView?.Initialize(_registry);
+        if (traceView != null)
+            traceView.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
 
         // Initialize QueryEditorHost with shared services
         var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
@@ -110,15 +113,60 @@ public partial class MainWindow : Window
         // Wire up settings button
         SettingsButton.Click += async (s, e) => await ShowSettingsDialogAsync();
 
-        // Wire up History connection button
-        HistoryConnectionButton.Click += async (s, e) => await ChangeHistoryConnectionAsync();
+        // Wire up History connection indicator
+        HistoryConnectionIndicator.Initialize(_registry);
+        HistoryConnectionIndicator.ConnectionSelected += async (managed) =>
+        {
+            if (!managed.IsConnected)
+                await _registry.ConnectAsync(managed.Id);
+            if (managed.IsConnected && managed.ResolvedConnectionString != null)
+            {
+                var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(managed.ResolvedConnectionString);
+                var settings = new ConnectionSettings
+                {
+                    Server = managed.Config.Server,
+                    Database = managed.Config.Database,
+                    Username = managed.Config.Username,
+                    Password = builder.Password,
+                    UseWindowsAuth = managed.Config.UseWindowsAuth,
+                    TrustServerCertificate = managed.Config.TrustServerCertificate
+                };
+                _viewModel.SetHistoryConnection(settings, managed.Config);
+                HistoryConnectionIndicator.SetActiveConnection(managed);
+                UpdateStatusBar();
+            }
+        };
+        HistoryConnectionIndicator.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
 
-        // Wire up Activity connection button
+        // Wire up Activity connection indicator
         var actView = this.FindControl<ActivityView>("ActivityViewControl");
         if (actView != null)
         {
-            actView.FindControl<Button>("ActivityConnectionButton")!.Click += async (s, e) =>
-                await ChangeActivityConnectionAsync();
+            actView.ConnectionIndicator.Initialize(_registry);
+            actView.ConnectionIndicator.ConnectionSelected += async (managed) =>
+            {
+                if (!managed.IsConnected)
+                    await _registry.ConnectAsync(managed.Id);
+                if (managed.IsConnected && managed.ResolvedConnectionString != null)
+                {
+                    var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(managed.ResolvedConnectionString);
+                    var settings = new ConnectionSettings
+                    {
+                        Server = managed.Config.Server,
+                        Database = managed.Config.Database,
+                        Username = managed.Config.Username,
+                        Password = builder.Password,
+                        UseWindowsAuth = managed.Config.UseWindowsAuth,
+                        TrustServerCertificate = managed.Config.TrustServerCertificate
+                    };
+                    _viewModel.SetActivityConnection(settings, managed.Config);
+                    actView.ConnectionIndicator.SetActiveConnection(managed);
+                    await actView.InitializeConnectionAsync(managed.ResolvedConnectionString);
+                    UpdateStatusBar();
+                }
+            };
+            actView.ConnectionIndicator.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
+
             // Wire "Open in Editor" from Activity view
             if (actView.ViewModel != null)
             {
@@ -870,14 +918,12 @@ public partial class MainWindow : Window
                 host?.SetDefaultConnection(settings, config);
 
                 UpdateStatusBar();
-                UpdateHistoryConnectionDot();
+                UpdateHistoryConnectionIndicator();
 
                 if (host != null) _ = host.ReloadDatabasesAsync();
 
+                UpdateActivityConnectionIndicator();
                 var actView = this.FindControl<ActivityView>("ActivityViewControl");
-                actView?.UpdateConnectionDot(
-                    _viewModel.ActivityConnectionColor,
-                    _viewModel.ActivityConnectionProfile?.Name);
                 if (actView != null)
                     _ = actView.InitializeConnectionAsync(settings.ConnectionString);
 
@@ -917,16 +963,14 @@ public partial class MainWindow : Window
             host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
 
             UpdateStatusBar();
-            UpdateHistoryConnectionDot();
+            UpdateHistoryConnectionIndicator();
 
             // Load databases into Query Editor Host
             if (host != null) _ = host.ReloadDatabasesAsync();
 
             // Initialize Activity view with this connection
+            UpdateActivityConnectionIndicator();
             var actView = this.FindControl<ActivityView>("ActivityViewControl");
-            actView?.UpdateConnectionDot(
-                _viewModel.ActivityConnectionColor,
-                _viewModel.ActivityConnectionProfile?.Name);
             if (actView != null)
                 _ = actView.InitializeConnectionAsync(dialog.Result.ConnectionString);
 
@@ -1061,52 +1105,24 @@ public partial class MainWindow : Window
             host?.SetDefaultConnection(dialog.Result, dialog.ResultConnection);
 
             UpdateStatusBar();
-            UpdateHistoryConnectionDot();
+            UpdateHistoryConnectionIndicator();
 
             // Reload databases into Query Editor Host
             if (host != null) _ = host.ReloadDatabasesAsync();
         }
     }
 
-    private async Task ChangeHistoryConnectionAsync()
+    private void UpdateHistoryConnectionIndicator()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
-        await dialog.ShowDialog(this);
-
-        if (dialog.Result != null)
-        {
-            _viewModel.SetHistoryConnection(dialog.Result, dialog.ResultConnection);
-            UpdateStatusBar();
-            UpdateHistoryConnectionDot();
-        }
-    }
-
-    private void UpdateHistoryConnectionDot()
-    {
-        var color = Avalonia.Media.Color.Parse(_viewModel.HistoryConnectionColor);
-        HistoryConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(color);
         var profile = _viewModel.HistoryConnectionProfile;
-        HistoryConnectionButton.Content = profile?.Name ?? "Connection";
+        HistoryConnectionIndicator.SetActiveConnection(profile);
     }
 
-    private async Task ChangeActivityConnectionAsync()
+    private void UpdateActivityConnectionIndicator()
     {
-        var dialog = new ConnectionDialog(_viewModel.DatabaseService, _settings, _registry);
-        await dialog.ShowDialog(this);
-
-        if (dialog.Result != null)
-        {
-            _viewModel.SetActivityConnection(dialog.Result, dialog.ResultConnection);
-            UpdateStatusBar();
-
-            // Update Activity view's connection dot and initialize
-            var actView = this.FindControl<ActivityView>("ActivityViewControl");
-            actView?.UpdateConnectionDot(
-                _viewModel.ActivityConnectionColor,
-                _viewModel.ActivityConnectionProfile?.Name);
-            if (actView != null)
-                await actView.InitializeConnectionAsync(dialog.Result.ConnectionString);
-        }
+        var actView = this.FindControl<ActivityView>("ActivityViewControl");
+        var profile = _viewModel.ActivityConnectionProfile;
+        actView?.ConnectionIndicator.SetActiveConnection(profile);
     }
 
     private async void OnWokeFromSleep()
@@ -1349,8 +1365,8 @@ public partial class MainWindow : Window
             new() { Name = "Query Trace", Shortcut = $"{mod}+6", Description = "Switch to trace", Execute = () => TraceTab.IsChecked = true },
 
             // Run
-            new() { Name = "Run Query", Shortcut = "F5", Description = "Execute query", Execute = () => { } }, // handled by F5 key
-            new() { Name = "Run with Trace", Shortcut = "Ctrl+Shift+F5", Description = "Execute with XE tracing", Execute = () => { } },
+            new() { Name = "Run Query", Shortcut = "F5", Description = "Execute query", Execute = () => host?.RunActiveQuery() },
+            new() { Name = "Run with Trace", Shortcut = "Ctrl+Shift+F5", Description = "Execute with XE tracing", Execute = () => host?.RunActiveWithTrace() },
 
             // Help
             new() { Name = "Keyboard Shortcuts", Shortcut = "", Description = "View all shortcuts", Execute = () => _ = new KeyboardShortcutsDialog().ShowDialog(this) },

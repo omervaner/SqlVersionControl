@@ -118,15 +118,7 @@ public partial class ActivityView : UserControl
         _viewModel?.UpdateConnectionString(connectionString);
     }
 
-    public void UpdateConnectionDot(string color, string? profileName)
-    {
-        try
-        {
-            ActivityConnectionDot.Fill = new SolidColorBrush(Color.Parse(color));
-            ActivityConnectionButton.Content = profileName ?? "Connection";
-        }
-        catch { }
-    }
+    public ConnectionIndicator ConnectionIndicator => ActivityConnectionIndicator;
 
     // ── Context Menus ─────────────────────────────────────────────
 

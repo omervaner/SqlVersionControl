@@ -6,24 +6,39 @@
 
 ---
 
-## The Problem (by the numbers)
+## Progress Summary (April 2026)
 
-| File | Size | Role |
-|------|------|------|
-| `QueryTabView.axaml.cs` | 108 KB | Code-behind doing everything |
-| `QueryEditorHost.axaml.cs` | 88 KB | Code-behind (its ViewModel is 492 bytes) |
-| `DatabaseService.cs` | 107 KB | God class — every SQL operation |
-| `MainWindow.axaml.cs` | 69 KB | Code-behind |
-| `CompareViewModel.cs` | 61 KB | ViewModel |
-| `ObjectExplorerViewModel.cs` | 49 KB | ViewModel |
+Phases completed so far — all built, launched, and manually verified:
+
+| Step | What | Result |
+|------|------|--------|
+| Warm-up | Extracted `OccurrenceHighlighter`, `ExecutionFlashHighlighter`, `BracketHighlighter` from QueryTabView → `Rendering/` folder | 3 standalone classes in own files |
+| **Phase 1A** | Split `QueryTabView.axaml.cs` | 2,913 → 312 lines (8 files: `.axaml.cs`, `.Editor.cs`, `.Intellisense.cs`, `.EditMode.cs`, `.Export.cs`, `.DragDrop.cs`, `.Peek.cs`, `.Results.cs`) |
+| **Phase 1B** | Split `QueryEditorHost.axaml.cs` | 2,260 → 214 lines (6 files: `.axaml.cs`, `.Tabs.cs`, `.Session.cs`, `.OeRouting.cs`, `.Database.cs`, `.FileOps.cs`) + `HistoryDisplayItem` → `Models/` |
+| **Phase 1C** | Split `DatabaseService.cs` | 2,698 → 559 lines (8 files: `.cs`, `.Schema.cs`, `.VersionHistory.cs`, `.Compare.cs`, `.Jobs.cs`, `.Activity.cs`, `.Index.cs`, `.TableOps.cs`) |
+
+**Resume from: Phase 1D (MainWindow.axaml.cs)**
 
 ---
 
-## Phase 1: Partial Classes (Zero Risk)
+## The Problem (by the numbers)
+
+| File | Original Size | Current Size | Status |
+|------|---------------|--------------|--------|
+| `QueryTabView.axaml.cs` | 108 KB / 2,913 lines | 312 lines | DONE — split into 8 files |
+| `QueryEditorHost.axaml.cs` | 88 KB / 2,260 lines | 214 lines | DONE — split into 6 files |
+| `DatabaseService.cs` | 107 KB / 2,698 lines | 559 lines | DONE — split into 8 files |
+| `MainWindow.axaml.cs` | 69 KB / 1,744 lines | 1,744 lines | TODO |
+| `CompareViewModel.cs` | 61 KB / 1,907 lines | 1,907 lines | TODO |
+| `ObjectExplorerViewModel.cs` | 49 KB / 1,322 lines | 1,322 lines | Deferred — discuss after others |
+
+---
+
+## Phase 1: Partial Classes (Zero Risk) — 1A/1B/1C DONE, 1D/1E TODO
 
 C# `partial class` lets us split a class across files. Same class, same namespace, same behavior — just organized into files by responsibility. The compiler merges them. **Nothing changes at runtime.**
 
-### 1A. Split `QueryTabView.axaml.cs` (108 KB → ~8 files)
+### 1A. Split `QueryTabView.axaml.cs` (108 KB → 8 files) — DONE
 
 The file has clear section comments already. Split along those boundaries:
 
@@ -43,7 +58,7 @@ Also move these to their own files (they're separate classes, not partial):
 - `ExecutionFlashHighlighter` → `Rendering/ExecutionFlashHighlighter.cs`
 - `BracketHighlighter` → `Rendering/BracketHighlighter.cs`
 
-### 1B. Split `QueryEditorHost.axaml.cs` (88 KB → ~6 files)
+### 1B. Split `QueryEditorHost.axaml.cs` (88 KB → 6 files) — DONE
 
 | New File | Contents | Approx Size |
 |----------|----------|-------------|
@@ -57,7 +72,7 @@ Also move these to their own files (they're separate classes, not partial):
 Also move:
 - `HistoryDisplayItem` → `Models/HistoryDisplayItem.cs`
 
-### 1C. Split `DatabaseService.cs` (107 KB → ~7 files)
+### 1C. Split `DatabaseService.cs` (107 KB → 8 files) — DONE
 
 | New File | Contents | Approx Size |
 |----------|----------|-------------|
@@ -159,14 +174,12 @@ These are things noticed during the audit but would be higher risk or lower prio
 
 ## Execution Order
 
-1. **Phase 1A** — Split QueryTabView.axaml.cs → build & test
-2. **Phase 1B** — Split QueryEditorHost.axaml.cs → build & test
-3. **Phase 1C** — Split DatabaseService.cs → build & test
-4. **Phase 1D** — Split MainWindow.axaml.cs → build & test
+1. ~~**Phase 1A** — Split QueryTabView.axaml.cs → build & test~~ DONE
+2. ~~**Phase 1B** — Split QueryEditorHost.axaml.cs → build & test~~ DONE
+3. ~~**Phase 1C** — Split DatabaseService.cs → build & test~~ DONE
+4. **Phase 1D** — Split MainWindow.axaml.cs → build & test ← RESUME HERE
 5. **Phase 1E** — Split CompareViewModel.cs → build & test
 6. **Phase 2** — Small extractions → build & test
-
-Each phase is one commit. Each should take 15-30 minutes of mechanical work — it's moving code between files, not rewriting it.
 
 ---
 
