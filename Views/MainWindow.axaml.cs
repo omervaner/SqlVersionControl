@@ -94,12 +94,15 @@ public partial class MainWindow : Window
             qeHost.NewConnectionRequested += async () => await OnMenuManageConnectionsAsync();
         }
 
-        // Enable window dragging from title bar area (empty space not consumed by menus/buttons)
-        TitleBarBorder.PointerPressed += (s, e) =>
+        // Enable window dragging from title bar area (macOS only — Windows has its own title bar)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-                BeginMoveDrag(e);
-        };
+            TitleBarBorder.PointerPressed += (s, e) =>
+            {
+                if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                    BeginMoveDrag(e);
+            };
+        }
 
         // Wire up dependencies button
         DependenciesButton.Click += async (s, e) => await ShowDependenciesAsync();
