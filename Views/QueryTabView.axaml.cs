@@ -1120,9 +1120,8 @@ public partial class QueryTabView : UserControl
         if (_viewModel.IsEditMode && _viewModel.EditableRows != null &&
             resultIndex < _viewModel.Results.Count)
         {
-            // Enter edit mode: rebuild columns without converter + swap to EditableRows
-            var result = _viewModel.Results[resultIndex];
-            BuildColumns(result, isEditMode: true);
+            // Enter edit mode: toggle columns to writable, swap ItemsSource (no column rebuild)
+            SetColumnsReadOnly(false);
             ResultsGrid.IsReadOnly = false;
             ResultsGrid.CanUserSortColumns = false;
             ResultsGrid.ItemsSource = _viewModel.EditableRows;
@@ -1130,10 +1129,16 @@ public partial class QueryTabView : UserControl
         }
         else
         {
-            // Exit edit mode: delegate to SelectResultTab (single source of truth)
+            // Exit edit mode: toggle columns back to read-only, restore original rows
+            SetColumnsReadOnly(true);
+            ResultsGrid.IsReadOnly = true;
             ResultsGrid.CanUserSortColumns = true;
             if (resultIndex >= 0 && resultIndex < (_viewModel.Results?.Count ?? 0))
-                SelectResultTab(resultIndex);
+            {
+                var result = _viewModel.Results[resultIndex];
+                ResultsGrid.ItemsSource = result.Rows;
+            }
+            SetupReadOnlyContextMenu();
         }
 
         UpdateEditModeButton();
@@ -1231,23 +1236,21 @@ public partial class QueryTabView : UserControl
 
     private async void OnResultsGridDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_viewModel is not { CanEditMode: true, IsEditMode: false }) return;
+        if (_viewModel == null || !_viewModel.CanEditMode) return;
 
-        // Capture which row/column was double-clicked before edit mode rebuilds the grid
-        var rowIndex = ResultsGrid.SelectedIndex;
-        var colIndex = ResultsGrid.CurrentColumn is { } col
-            ? ResultsGrid.Columns.IndexOf(col) : -1;
+        if (_viewModel.IsEditMode)
+        {
+            // Already in edit mode — just begin editing the current cell
+            ResultsGrid.BeginEdit();
+            return;
+        }
 
-        // Enter edit mode (rebuilds columns + ItemsSource)
+        // Enter edit mode (no column rebuild — just toggles IsReadOnly + swaps ItemsSource)
         await _viewModel.ToggleEditModeCommand.ExecuteAsync(null);
 
-        // Wait a frame for the grid to rebuild, then select the cell and begin editing
+        // Post to let ItemsSource swap settle, then begin editing the clicked cell
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (rowIndex >= 0 && _viewModel?.EditableRows != null && rowIndex < _viewModel.EditableRows.Count)
-                ResultsGrid.SelectedIndex = rowIndex;
-            if (colIndex >= 0 && colIndex < ResultsGrid.Columns.Count)
-                ResultsGrid.CurrentColumn = ResultsGrid.Columns[colIndex];
             ResultsGrid.BeginEdit();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
@@ -1271,7 +1274,9 @@ public partial class QueryTabView : UserControl
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            _viewModel.CancelChangesCommand.Execute(null);
+            // Cancel current cell edit; if not editing a cell, exit edit mode entirely
+            if (!ResultsGrid.CancelEdit())
+                _viewModel.CancelChangesCommand.Execute(null);
             return;
         }
 
@@ -1425,8 +1430,9 @@ public partial class QueryTabView : UserControl
                 var tb = cells[i].FindDescendantOfType<TextBlock>();
                 if (tb == null) continue;
 
-                if (values[i] == null)
+                if (values[i] == null || values[i] == DBNull.Value)
                 {
+                    tb.Text = "NULL";
                     tb.FontStyle = FontStyle.Italic;
                     tb.Foreground = GetNullForeground();
                 }
@@ -2672,7 +2678,7 @@ public partial class QueryTabView : UserControl
     /// Read-only mode: TwoWay + NullDisplayConverter (shows "NULL" for nulls).
     /// Edit mode: TwoWay, no converter (raw values, empty = null).
     /// </summary>
-    private void BuildColumns(QueryResult result, bool isEditMode = false)
+    private void BuildColumns(QueryResult result)
     {
         ResultsGrid.Columns.Clear();
         ResultsGrid.AutoGenerateColumns = false;
@@ -2680,17 +2686,20 @@ public partial class QueryTabView : UserControl
 
         for (int i = 0; i < result.ColumnNames.Length; i++)
         {
-            var binding = new Binding($"[{i}]", BindingMode.TwoWay);
-            if (!isEditMode)
-                binding.Converter = _nullTextConverter;
-
             ResultsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
-                Binding = binding,
-                IsReadOnly = !isEditMode,
+                Binding = new Binding($"[{i}]", BindingMode.TwoWay),
+                IsReadOnly = true,
             });
         }
+    }
+
+    private void SetColumnsReadOnly(bool readOnly)
+    {
+        foreach (var col in ResultsGrid.Columns)
+            if (col is DataGridBoundColumn bc)
+                bc.IsReadOnly = readOnly;
     }
 
     private void OnColumnHeaderDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
