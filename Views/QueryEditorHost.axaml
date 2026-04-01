@@ -45,7 +45,7 @@
                 </Border>
 
                 <!-- Search/Filter Bar -->
-                <Border Grid.Row="1" Padding="6,2">
+                <Border Grid.Row="1" Padding="4,2">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0"
                                  x:Name="FilterBox"
@@ -69,7 +69,7 @@
                 </Border>
 
                 <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
-                          Padding="10,4,4,4"
+                          Padding="0,4,4,4" Margin="-8,0,0,0"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>

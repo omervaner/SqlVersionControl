@@ -8,9 +8,10 @@
 
     <Grid RowDefinitions="*,Auto" Margin="24">
         <TextBlock x:Name="MessageText" Grid.Row="0"
-                   TextWrapping="Wrap" VerticalAlignment="Center" FontSize="14"/>
+                   TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
+                   TextAlignment="Center" FontSize="14"/>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center"
                     Spacing="10" Margin="0,15,0,0">
             <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
             <Button x:Name="DontSaveButton" Content="Don't Save" Classes="btn-danger" Padding="16,8"/>

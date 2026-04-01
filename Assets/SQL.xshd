@@ -20,13 +20,10 @@
       <Begin>--</Begin>
     </Span>
 
-    <!-- Strings -->
-    <Span color="String">
+    <!-- Strings (single-quoted, '' is escaped quote) -->
+    <Span color="String" escapeCharacter="'">
       <Begin>'</Begin>
       <End>'</End>
-      <RuleSet>
-        <Span begin="'" end="'"/>
-      </RuleSet>
     </Span>
 
     <!-- Bracketed identifiers -->

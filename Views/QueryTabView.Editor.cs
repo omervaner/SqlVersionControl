@@ -138,9 +138,34 @@ public partial class QueryTabView
         }
     }
 
+    private static readonly string[] EditorHints =
+    [
+        "Write your SQL query here \u2014 press F5 to execute",
+        "Select text and press F5 to run just the selection",
+        "Cmd+Click on a proc or view name to peek its definition",
+        "Cmd+R to expand/collapse the results panel",
+        "Ctrl+Space to trigger autocomplete",
+        "Cmd+K to comment lines, Cmd+L to uncomment",
+        "Drag a table from Object Explorer to insert its name",
+        "Ctrl+Shift+F to format SQL, Ctrl+Shift+Q to quick-quote",
+        "Alt+Up/Down to move lines up or down",
+        "Cmd+G to go to a specific line number",
+        "Double-click a word to highlight all occurrences",
+        "Cmd+Shift+U to uppercase, Cmd+Shift+L to lowercase",
+        "Mouse wheel + Cmd to zoom the editor font",
+        "Type 2+ characters in the OE filter to search across all databases",
+    ];
+    private static int _hintIndex = Random.Shared.Next(EditorHints.Length);
+
     private void UpdatePlaceholder()
     {
-        EditorPlaceholder.IsVisible = string.IsNullOrEmpty(SqlEditor.Text) && !SqlEditor.TextArea.IsFocused;
+        var show = string.IsNullOrEmpty(SqlEditor.Text) && !SqlEditor.TextArea.IsFocused;
+        if (show)
+        {
+            EditorPlaceholder.Text = EditorHints[_hintIndex % EditorHints.Length];
+            _hintIndex++;
+        }
+        EditorPlaceholder.IsVisible = show;
     }
 
     private void ConfigureEditor()
