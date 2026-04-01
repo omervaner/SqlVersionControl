@@ -205,6 +205,10 @@
                 </TreeView>
 
                 <!-- No matches placeholder -->
+                <TextBlock Grid.Row="2" Text="Searching..."
+                           Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                           FontStyle="Italic" Margin="14,8"
+                           IsVisible="{Binding ObjectExplorer.IsSearching}"/>
                 <TextBlock Grid.Row="2" Text="No objects matching filter"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            FontStyle="Italic" Margin="14,8"

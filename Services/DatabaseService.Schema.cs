@@ -723,4 +723,56 @@ public partial class DatabaseService
         }
         return result;
     }
+
+    // ── Server-side Object Search (for OE filter) ───────────────────
+
+    /// <summary>
+    /// Search for objects matching a filter across all specified databases on a connection.
+    /// Returns (Database, Schema, Name, TypeCode) tuples.
+    /// TypeCode: U=Table, V=View, P=Proc, FN/TF/IF=Function, SO=Sequence, TR=Trigger
+    /// </summary>
+    public async Task<List<(string Database, string Schema, string Name, string TypeCode)>> SearchObjectsAsync(
+        string connectionString, IEnumerable<string> databases, string filter, CancellationToken ct)
+    {
+        var results = new List<(string, string, string, string)>();
+        if (string.IsNullOrWhiteSpace(filter)) return results;
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+
+        // Build a UNION ALL across all databases for a single round-trip
+        var unions = new List<string>();
+        foreach (var db in databases)
+        {
+            ct.ThrowIfCancellationRequested();
+            var safeDb = db.Replace("]", "]]");
+            unions.Add($@"
+                SELECT '{safeDb}' AS db, s.name AS [schema], o.name, o.type
+                FROM [{safeDb}].sys.objects o
+                JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
+                WHERE o.is_ms_shipped = 0
+                  AND o.type IN ('U','V','P','FN','TF','IF','SO','TR')
+                  AND o.name LIKE @filter");
+        }
+
+        if (unions.Count == 0) return results;
+
+        var sql = string.Join("\nUNION ALL\n", unions) + "\nORDER BY db, [schema], name";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 15 };
+        cmd.Parameters.AddWithValue("@filter", $"%{filter}%");
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3).Trim()
+            ));
+        }
+
+        return results;
+    }
 }

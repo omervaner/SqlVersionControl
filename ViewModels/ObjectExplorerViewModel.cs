@@ -12,10 +12,14 @@ public partial class ObjectExplorerViewModel : ObservableObject
     private readonly DatabaseService _db;
     private ConnectionRegistry? _registry;
     private Timer? _filterDebounce;
+    private CancellationTokenSource? _searchCts;
+    private List<ObjectExplorerNode>? _savedFilterNodes;
+    private bool _isServerSearchActive;
 
     [ObservableProperty] private ObservableCollection<ObjectExplorerNode> _rootNodes = [];
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private bool _showFilterEmptyState;
+    [ObservableProperty] private bool _isSearching;
 
     /// <summary>Fired when a context menu action wants to set editor text. (sql, autoRun, databaseName, connectionId)</summary>
     public event Action<string, bool, string?, string?>? InsertTextRequested;
@@ -181,19 +185,237 @@ public partial class ObjectExplorerViewModel : ObservableObject
     {
         _filterDebounce?.Dispose();
         _filterDebounce = new Timer(_ =>
-            Dispatcher.UIThread.Post(ApplyFilter), null, 200, Timeout.Infinite);
+            Dispatcher.UIThread.Post(() => _ = ApplyFilterAsync()), null, 200, Timeout.Infinite);
     }
 
-    public void ApplyFilter()
+    private async Task ApplyFilterAsync()
     {
         var filter = FilterText?.Trim() ?? "";
-        var anyVisible = false;
-        foreach (var db in RootNodes)
+
+        // Cancel any in-flight search immediately
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+
+        // Empty or single char: restore original tree and apply client-side filter
+        if (filter.Length < 2)
         {
-            if (ApplyFilterToNode(db, filter))
+            RestoreFromServerSearch();
+            if (string.IsNullOrEmpty(filter))
+            {
+                // Clear all visibility flags
+                foreach (var node in RootNodes)
+                    ApplyFilterToNode(node, "");
+                ShowFilterEmptyState = false;
+            }
+            else
+            {
+                // Single char: client-side only on loaded nodes
+                ApplyClientSideFilter(filter);
+            }
+            return;
+        }
+
+        // 2+ chars: server-side search
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        var ct = cts.Token;
+
+        IsSearching = true;
+        ShowFilterEmptyState = false;
+
+        try
+        {
+            // Save the original tree before first server search
+            if (!_isServerSearchActive)
+            {
+                _savedFilterNodes = RootNodes.ToList();
+                _isServerSearchActive = true;
+            }
+
+            // Gather all connections and their databases
+            var searchTasks = new List<Task<List<(string Database, string Schema, string Name, string TypeCode)>>>();
+            var connectionInfos = new List<(string ConnId, string? Color, string? ConnName)>();
+
+            if (_registry != null)
+            {
+                foreach (var managed in _registry.ActiveConnections)
+                {
+                    if (managed.ResolvedConnectionString == null || managed.Databases == null) continue;
+                    ct.ThrowIfCancellationRequested();
+
+                    connectionInfos.Add((managed.Id, managed.Color, managed.Config.Name ?? managed.Config.Server));
+                    searchTasks.Add(_db.SearchObjectsAsync(
+                        managed.ResolvedConnectionString, managed.Databases, filter, ct));
+                }
+            }
+            else if (_activeConnectionString != null)
+            {
+                // Legacy single-connection mode: search databases from current tree
+                var databases = _savedFilterNodes?
+                    .SelectMany(n => n.Children)
+                    .Where(n => n.NodeType == ObjectExplorerNodeType.Database)
+                    .Select(n => n.Name)
+                    .ToList() ?? [];
+
+                if (databases.Count > 0)
+                {
+                    connectionInfos.Add(("", null, null));
+                    searchTasks.Add(_db.SearchObjectsAsync(
+                        _activeConnectionString, databases, filter, ct));
+                }
+            }
+
+            if (searchTasks.Count == 0)
+            {
+                IsSearching = false;
+                ShowFilterEmptyState = true;
+                return;
+            }
+
+            var allResults = await Task.WhenAll(searchTasks);
+            ct.ThrowIfCancellationRequested();
+
+            // Build filtered tree from results
+            BuildFilteredTree(connectionInfos, allResults, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Search was superseded by a newer one — do nothing
+        }
+        catch
+        {
+            // Server error — fall back to client-side filter on original tree
+            RestoreFromServerSearch();
+            ApplyClientSideFilter(filter);
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+                IsSearching = false;
+        }
+    }
+
+    private void BuildFilteredTree(
+        List<(string ConnId, string? Color, string? ConnName)> connectionInfos,
+        List<(string Database, string Schema, string Name, string TypeCode)>[] allResults,
+        CancellationToken ct)
+    {
+        var newRoots = new ObservableCollection<ObjectExplorerNode>();
+
+        for (int i = 0; i < connectionInfos.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var (connId, color, connName) = connectionInfos[i];
+            var results = allResults[i];
+            if (results.Count == 0) continue;
+
+            // Group by database, then by type
+            var byDatabase = results.GroupBy(r => r.Database);
+
+            // Find the original connection node (for its properties)
+            ObjectExplorerNode? origConn = null;
+            if (!string.IsNullOrEmpty(connId))
+                origConn = _savedFilterNodes?.FirstOrDefault(n => n.ConnectionId == connId);
+
+            var connNode = new ObjectExplorerNode
+            {
+                Name = connName ?? "Connection",
+                NodeType = ObjectExplorerNodeType.Connection,
+                ConnectionId = connId,
+                ConnectionColor = color,
+                IsExpanded = true,
+                IsVisibleInFilter = true
+            };
+
+            foreach (var dbGroup in byDatabase)
+            {
+                ct.ThrowIfCancellationRequested();
+                var dbNode = new ObjectExplorerNode
+                {
+                    Name = dbGroup.Key,
+                    NodeType = ObjectExplorerNodeType.Database,
+                    DatabaseName = dbGroup.Key,
+                    ConnectionId = connId,
+                    ConnectionColor = color,
+                    IsExpanded = true,
+                    IsVisibleInFilter = true
+                };
+
+                var byType = dbGroup.GroupBy(r => TypeCodeToCategory(r.TypeCode));
+                foreach (var typeGroup in byType)
+                {
+                    var folderNode = new ObjectExplorerNode
+                    {
+                        Name = typeGroup.Key,
+                        NodeType = ObjectExplorerNodeType.Folder,
+                        DatabaseName = dbGroup.Key,
+                        ConnectionId = connId,
+                        IsExpanded = true,
+                        IsVisibleInFilter = true,
+                        ChildCount = typeGroup.Count()
+                    };
+
+                    foreach (var obj in typeGroup)
+                    {
+                        var objNode = new ObjectExplorerNode
+                        {
+                            Name = obj.Name,
+                            Schema = obj.Schema,
+                            DatabaseName = dbGroup.Key,
+                            NodeType = TypeCodeToNodeType(obj.TypeCode),
+                            ConnectionId = connId,
+                            ConnectionColor = color,
+                            IsVisibleInFilter = true
+                        };
+                        WireNode(objNode);
+                        folderNode.Children.Add(objNode);
+                    }
+
+                    dbNode.Children.Add(folderNode);
+                }
+
+                dbNode.ChildCount = dbGroup.Count();
+                connNode.Children.Add(dbNode);
+            }
+
+            connNode.ChildCount = connNode.Children.Sum(db => db.ChildCount);
+            WireNode(connNode);
+            newRoots.Add(connNode);
+        }
+
+        RootNodes = newRoots;
+        ShowFilterEmptyState = newRoots.Count == 0;
+    }
+
+    private void RestoreFromServerSearch()
+    {
+        if (!_isServerSearchActive) return;
+        _isServerSearchActive = false;
+
+        if (_savedFilterNodes != null)
+        {
+            RootNodes = new ObservableCollection<ObjectExplorerNode>(_savedFilterNodes);
+            _savedFilterNodes = null;
+        }
+    }
+
+    /// <summary>Client-side filter on the currently loaded tree (for short filters or fallback).</summary>
+    private void ApplyClientSideFilter(string filter)
+    {
+        var anyVisible = false;
+        foreach (var node in RootNodes)
+        {
+            if (ApplyFilterToNode(node, filter))
                 anyVisible = true;
         }
         ShowFilterEmptyState = !string.IsNullOrEmpty(filter) && !anyVisible;
+    }
+
+    /// <summary>Apply client-side visibility filter to the in-memory tree.</summary>
+    public void ApplyFilter()
+    {
+        ApplyClientSideFilter(FilterText?.Trim() ?? "");
     }
 
     private bool ApplyFilterToNode(ObjectExplorerNode node, string filter)
@@ -254,6 +476,28 @@ public partial class ObjectExplorerViewModel : ObservableObject
     {
         FilterText = "";
     }
+
+    private static string TypeCodeToCategory(string typeCode) => typeCode switch
+    {
+        "U" => "Tables",
+        "V" => "Views",
+        "P" => "Stored Procedures",
+        "FN" or "TF" or "IF" => "Functions",
+        "SO" => "Sequences",
+        "TR" => "Triggers",
+        _ => "Other"
+    };
+
+    private static ObjectExplorerNodeType TypeCodeToNodeType(string typeCode) => typeCode switch
+    {
+        "U" => ObjectExplorerNodeType.Table,
+        "V" => ObjectExplorerNodeType.View,
+        "P" => ObjectExplorerNodeType.Proc,
+        "FN" or "TF" or "IF" => ObjectExplorerNodeType.Function,
+        "SO" => ObjectExplorerNodeType.Sequence,
+        "TR" => ObjectExplorerNodeType.Trigger,
+        _ => ObjectExplorerNodeType.Folder
+    };
 
     // ── Legacy: single-connection database loading ───────────────────
 
