@@ -456,10 +456,19 @@
                 <Ellipse x:Name="ConnectionDot" Grid.Column="0"
                          Width="8" Height="8" VerticalAlignment="Center"
                          Fill="{DynamicResource DisconnectedDot}"/>
-                <TextBlock x:Name="ConnectionText" Grid.Column="1"
-                           Text="Disconnected" Margin="6,0,0,0"
-                           Foreground="{DynamicResource TextSecondary}" FontSize="11"
-                           VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                    <TextBlock x:Name="ConnectionText"
+                               Text="Disconnected"
+                               Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="ReconnectNowButton"
+                            Content="Reconnect" Margin="6,0,0,0"
+                            Background="Transparent" Foreground="{DynamicResource AccentBlue}"
+                            Padding="4,1" FontSize="10" MinHeight="0" MinWidth="0"
+                            BorderThickness="0" Cursor="Hand"
+                            IsVisible="False"
+                            VerticalAlignment="Center"/>
+                </StackPanel>
 
                 <!-- Quick-switch buttons -->
                 <StackPanel x:Name="QuickSwitchPanel" Grid.Column="2"

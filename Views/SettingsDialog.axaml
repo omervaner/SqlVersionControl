@@ -13,6 +13,7 @@
 
             <!-- === Appearance === -->
             <TextBlock Text="Appearance" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}"/>
+            <TextBlock Text="Changes apply immediately" FontSize="10" Foreground="{DynamicResource TextSecondary}" FontStyle="Italic" Margin="0,-4,0,0"/>
 
             <!-- Theme -->
             <StackPanel Spacing="8">
@@ -55,6 +56,7 @@
 
             <!-- === Version History === -->
             <TextBlock Text="Version History" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}"/>
+            <TextBlock Text="Applies on next sync" FontSize="10" Foreground="{DynamicResource TextSecondary}" FontStyle="Italic" Margin="0,-4,0,0"/>
 
             <StackPanel Spacing="8">
                 <TextBlock Text="DDL Audit Source" FontWeight="SemiBold"/>

@@ -118,9 +118,9 @@ public partial class QueryEditorHost
                 var columns = await _db.GetAllColumnsAsync(effectiveConn, tabVm.SelectedDatabase);
                 service.SetSchema(tables, views, columns);
             }
-            catch
+            catch (Exception ex)
             {
-                // Schema loading failed — intellisense will show keywords only
+                AppLogger.Log($"Schema loading failed for {tabVm.SelectedDatabase}: {ex.Message}");
             }
         }
 

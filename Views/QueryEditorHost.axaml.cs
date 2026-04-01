@@ -64,6 +64,9 @@ public partial class QueryEditorHost : UserControl
     /// <summary>Fired when user requests "New Connection" from OE empty-space context menu.</summary>
     public event Action? NewConnectionRequested;
 
+    /// <summary>Fired after session restore if some tabs couldn't reconnect.</summary>
+    public event Action<string>? SessionRestoreWarning;
+
     public QueryEditorHost()
     {
         InitializeComponent();

@@ -485,7 +485,7 @@ public partial class QueryEditorHost
             var isTabConnected = tabConnId == null || _registry == null ||
                 (_registry.GetById(tabConnId)?.IsConnected ?? false);
 
-            // Connection color dot (faded if disconnected)
+            // Connection color dot (faded if disconnected) + reconnect button
             if (vm?.TabConnectionProfile != null)
             {
                 var dotColor = Avalonia.Media.Color.Parse(vm.TabConnectionColor);
@@ -497,6 +497,45 @@ public partial class QueryEditorHost
                     Opacity = isTabConnected ? 1.0 : 0.5,
                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
                 });
+
+                if (!isTabConnected && tabConnId != null)
+                {
+                    var reconnIdx = idx;
+                    var reconnBtn = new Button
+                    {
+                        Content = "\u21bb", // ↻
+                        Padding = new Thickness(1, 0),
+                        Background = Brushes.Transparent,
+                        Foreground = FindBrush("AccentBlue"),
+                        FontSize = 11,
+                        Cursor = new Cursor(StandardCursorType.Hand),
+                        MinWidth = 0, MinHeight = 0,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                        BorderThickness = new Thickness(0)
+                    };
+                    ToolTip.SetTip(reconnBtn, "Reconnect");
+                    var capturedConnId = tabConnId;
+                    reconnBtn.Click += async (_, _) =>
+                    {
+                        var (success, _) = await _registry!.ConnectAsync(capturedConnId);
+                        if (success)
+                        {
+                            var managed = _registry.GetById(capturedConnId);
+                            if (managed?.ResolvedConnectionString != null && reconnIdx < _tabs.Count)
+                            {
+                                var tabVm = _tabs[reconnIdx].DataContext as QueryTabViewModel;
+                                if (tabVm != null)
+                                {
+                                    tabVm.TabConnectionString = managed.ResolvedConnectionString;
+                                    _ = LoadDatabasesForTabAsync(tabVm, managed.ResolvedConnectionString);
+                                }
+                            }
+                            RebuildTabStrip();
+                            ActiveTabChanged?.Invoke();
+                        }
+                    };
+                    headerPanel.Children.Add(reconnBtn);
+                }
             }
 
             // Close button (×)

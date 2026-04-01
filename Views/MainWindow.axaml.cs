@@ -95,6 +95,7 @@ public partial class MainWindow : Window
                 CursorPositionText.IsVisible = QueryEditorTab.IsChecked == true;
             };
             qeHost.NewConnectionRequested += async () => await OnMenuManageConnectionsAsync();
+            qeHost.SessionRestoreWarning += msg => _viewModel.StatusMessage = msg;
         }
 
         // Enable window dragging from title bar area (macOS only — Windows has its own title bar)
@@ -181,6 +182,7 @@ public partial class MainWindow : Window
         // Wire up reconnect overlay buttons
         RetryButton.Click += async (_, _) => await ReconnectAsync();
         DismissButton.Click += (_, _) => DismissReconnectOverlay();
+        ReconnectNowButton.Click += async (_, _) => await ReconnectAsync();
 
         // Wire menu items
         WireMenuItems();
@@ -1518,6 +1520,7 @@ public partial class MainWindow : Window
                 var grey = Avalonia.Media.Color.FromRgb(128, 128, 128);
                 ConnectionDot.Fill = new Avalonia.Media.SolidColorBrush(grey);
                 ConnectionText.Text = $"{displayText} (offline)";
+                ReconnectNowButton.IsVisible = true;
 
                 var dimColor = Avalonia.Media.Color.FromArgb(50, color.R, color.G, color.B);
                 var dimTransparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);
@@ -1542,6 +1545,7 @@ public partial class MainWindow : Window
                 var solidBrush = new Avalonia.Media.SolidColorBrush(color);
                 ConnectionDot.Fill = solidBrush;
                 ConnectionText.Text = displayText;
+                ReconnectNowButton.IsVisible = false;
 
                 // Gradient fade at both horizontal ends
                 var transparent = Avalonia.Media.Color.FromArgb(0, color.R, color.G, color.B);

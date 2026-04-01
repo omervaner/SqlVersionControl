@@ -82,7 +82,7 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 **Problem**: When all connections are disconnected, the OE is blank with no message.
 **Fix**: Show "No active connections" with a "Connect..." button.
 
-### 9. Reconnect — No Manual "Go Online" Button
+### 9. Reconnect — No Manual "Go Online" Button — DONE
 **Where**: MainWindow reconnect flow
 **Problem**: After dismissing the reconnect overlay, app enters offline mode with background retry every 10s. No way to manually trigger reconnect.
 **Fix**: Make the "(offline)" status bar text clickable, or add a "Reconnect Now" button.
@@ -92,12 +92,12 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 **Problem**: Closing the app while recording a trace orphans the XE session on the server.
 **Fix**: Check `TraceViewModel.State == TraceState.Recording` in OnClosing and auto-stop the trace or warn.
 
-### 11. Tab Reconnect — Only Available via Right-Click
+### 11. Tab Reconnect — Only Available via Right-Click — DONE
 **Where**: QueryEditorHost.BuildTabContextMenu()
 **Problem**: When a tab's connection is lost (faded dot), reconnect is only available via right-click context menu. Not discoverable.
 **Fix**: Make the faded dot clickable, or show an inline banner: "Connection lost. [Reconnect]"
 
-### 12. Session Restore — Silent Connection Loss
+### 12. Session Restore — Silent Connection Loss — DONE
 **Where**: QueryEditorHost.RestoreSession()
 **Problem**: If a saved connection was deleted, tabs silently lose their connection with no notification.
 **Fix**: After restore, notify: "2 tabs could not reconnect — their saved connection no longer exists."
@@ -116,12 +116,12 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 **Problem**: History grows indefinitely with no way to clear it.
 **Fix**: Add a "Clear History" button with confirmation.
 
-### 15. Intellisense — Silent Degradation
+### 15. Intellisense — Silent Degradation — DONE
 **Where**: QueryEditorHost.OnTabDatabaseChanged() — empty catch block
 **Problem**: If schema loading fails, intellisense silently falls back to keywords-only.
 **Fix**: Brief status message: "Schema loading failed — autocomplete limited to keywords."
 
-### 16. Settings — No Indication of Immediate vs Deferred
+### 16. Settings — No Indication of Immediate vs Deferred — DONE
 **Where**: SettingsDialog
 **Problem**: Some settings apply immediately, some need reconnect/sync. No visual distinction.
 **Fix**: Subtle labels: "Takes effect immediately" vs "Applies on next sync."
@@ -140,12 +140,12 @@ The existing PlanView.axaml and PlanViewModel become shared components used by b
 | 🔴 Do First | 1 | 1 | 0 |
 | 🔵 Do Second | 1 | 1 | 0 |
 | 🔴 High | 5 | 3 (#3, #5, #7) | 2 (#4, #6) |
-| 🟡 Medium | 6 | 3 (#8, #10, #13) | 3 (#9, #11, #12) |
-| 🟢 Low | 4 | 0 | 4 (#14-17) |
-| New | 1 | 0 | 1 (#18) |
+| 🟡 Medium | 6 | 6 | 0 |
+| 🟢 Low | 4 | 2 (#15, #16) | 2 (#14, #17) |
+| New | 1 | 1 (#18) | 0 |
 
-**Completed**: #1, #2, #3, #5, #7, #8, #10, #13 (8 of 18)
-**Next up**: #6 (edit mode escape), #9, #11, #12, #18, then low-priority polish.
+**Completed**: #1, #2, #3, #5, #7, #8, #9, #10, #11, #12, #13, #15, #16, #18 (14 of 18)
+**Remaining**: #4 (Exec Plan into Editor — deferred, big), #6 (edit mode escape), #14 (history clear), #17 (export progress).
 
 
 ### 18. Auto-Detect Environment from Connection Name

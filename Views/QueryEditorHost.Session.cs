@@ -64,6 +64,7 @@ public partial class QueryEditorHost
         }
 
         _restoringSession = true;
+        var disconnectedTabs = new List<string>();
         try
         {
             foreach (var tabState in data.Tabs)
@@ -86,6 +87,7 @@ public partial class QueryEditorHost
 
                 // Restore per-tab connection — try registry first, fall back to legacy
                 var restored = false;
+                var hasConnection = false;
                 if (_registry != null && tabState.ConnectionId != null)
                 {
                     var managed = _registry.GetById(tabState.ConnectionId);
@@ -96,6 +98,7 @@ public partial class QueryEditorHost
                         {
                             vm.TabConnectionString = managed.ResolvedConnectionString;
                             _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
+                            hasConnection = true;
                         }
                         restored = true;
                     }
@@ -113,6 +116,7 @@ public partial class QueryEditorHost
                             {
                                 vm.TabConnectionString = match.ResolvedConnectionString;
                                 _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
+                                hasConnection = true;
                             }
                             restored = true;
                         }
@@ -147,6 +151,15 @@ public partial class QueryEditorHost
 
                     // Load databases for this server async
                     _ = LoadDatabasesForTabAsync(vm, vm.TabConnectionString, tabState.SelectedDatabase);
+                    hasConnection = true;
+                }
+
+                // Track tabs that couldn't reconnect
+                if (!hasConnection && tabState.ConnectionServer != null)
+                {
+                    var tabName = tabState.QueryName ?? vm.TabTitle ?? "Query";
+                    var connName = tabState.ConnectionProfileName ?? tabState.ConnectionServer;
+                    disconnectedTabs.Add($"{tabName} ({connName})");
                 }
 
                 // Restore editor text
@@ -167,6 +180,16 @@ public partial class QueryEditorHost
         finally
         {
             _restoringSession = false;
+        }
+
+        // Notify user about tabs that couldn't reconnect
+        if (disconnectedTabs.Count > 0)
+        {
+            var count = disconnectedTabs.Count;
+            var msg = count == 1
+                ? $"1 tab could not reconnect: {disconnectedTabs[0]}"
+                : $"{count} tabs could not reconnect — their saved connections are unavailable. Use the ↻ button on each tab to retry.";
+            SessionRestoreWarning?.Invoke(msg);
         }
     }
 
