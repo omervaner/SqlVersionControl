@@ -543,6 +543,7 @@ public partial class QueryTabView
             // Disable edit mode in stacked view
             EditModeButton.IsEnabled = false;
             EditModeButton.Opacity = 0.4;
+            ToolTip.SetShowOnDisabled(EditModeButton, true);
             ToolTip.SetTip(EditModeButton, "Edit mode is not available for multi-result queries");
             return;
         }
