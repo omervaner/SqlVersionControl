@@ -66,6 +66,7 @@ public partial class KeyboardShortcutsDialog : Window
                 ($"{mod}+Space", "Code completion"),
                 ($"{mod}+G", "Go to line number"),
                 ($"{mod}+Click", "Peek definition"),
+                ($"{shift}+Click", "Generate EXEC (stored procedures)"),
             ]),
             ("Tools", [
                 ($"{mod}+{shift}+F", "Format SQL"),

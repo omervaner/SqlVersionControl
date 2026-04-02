@@ -367,15 +367,30 @@ public partial class QueryEditorHost
             e.Source is Visual visual)
         {
             var treeViewItem = visual.FindAncestorOfType<TreeViewItem>();
-            if (treeViewItem?.DataContext is ObjectExplorerNode node &&
-                node.NodeType is ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
-                    or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
-                    or ObjectExplorerNodeType.Column)
+            if (treeViewItem?.DataContext is ObjectExplorerNode node)
             {
-                _dragStartPoint = e.GetPosition(ObjectExplorerTree);
-                _dragNode = node;
-                _dragPending = true;
-                return;
+                // Shift+Click on a proc → Generate EXEC with parameters
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) &&
+                    node.NodeType == ObjectExplorerNodeType.Proc &&
+                    _viewModel?.ObjectExplorer != null)
+                {
+                    _ = _viewModel.ObjectExplorer.GenerateExecAsync(node);
+                    e.Handled = true;
+                    _dragPending = false;
+                    _dragNode = null;
+                    return;
+                }
+
+                // Normal click — start drag
+                if (node.NodeType is ObjectExplorerNodeType.Table or ObjectExplorerNodeType.View
+                        or ObjectExplorerNodeType.Proc or ObjectExplorerNodeType.Function
+                        or ObjectExplorerNodeType.Column)
+                {
+                    _dragStartPoint = e.GetPosition(ObjectExplorerTree);
+                    _dragNode = node;
+                    _dragPending = true;
+                    return;
+                }
             }
         }
         _dragPending = false;

@@ -498,6 +498,7 @@ dotnet run
 | `Cmd/Ctrl+Space` | Code completion |
 | `Cmd/Ctrl+G` | Go to line number |
 | `Cmd/Ctrl+Click` | Peek definition |
+| `Shift+Click` | Generate EXEC (stored procedures) |
 | **Tools** | |
 | `Cmd/Ctrl+Shift+F` | Format SQL |
 | `Cmd/Ctrl+Shift+Q` | Quick quote selection |
