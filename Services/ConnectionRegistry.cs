@@ -213,6 +213,99 @@ public class ConnectionRegistry
         return builder.ConnectionString;
     }
 
+    // ── Wake Reconnect ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Test all active connections and silently reconnect any that dropped.
+    /// Returns counts for status messaging.
+    /// </summary>
+    public async Task<(int Tested, int Reconnected, int Failed, List<string> FailedNames)> TestAndReconnectAllAsync()
+    {
+        var active = ActiveConnections.ToList();
+        int tested = 0, reconnected = 0, failed = 0;
+        var failedNames = new List<string>();
+
+        foreach (var managed in active)
+        {
+            tested++;
+            if (managed.ResolvedConnectionString == null) { failed++; failedNames.Add(managed.DisplayName); continue; }
+
+            // Clear stale pool
+            try { SqlConnection.ClearPool(new SqlConnection(managed.ResolvedConnectionString)); } catch { }
+
+            // Test current connection
+            try
+            {
+                using var testConn = new SqlConnection(managed.ResolvedConnectionString);
+                testConn.ConnectionString = new SqlConnectionStringBuilder(managed.ResolvedConnectionString)
+                    { ConnectTimeout = Math.Min(_settings.Settings.ConnectionTimeout, 5) }.ConnectionString;
+                await testConn.OpenAsync();
+                continue; // still alive
+            }
+            catch { }
+
+            // Dead — try silent reconnect (no password prompt)
+            var connStr = ResolveConnectionStringSilent(managed.Config);
+            if (connStr != null)
+            {
+                try
+                {
+                    using var conn = new SqlConnection(connStr);
+                    await conn.OpenAsync();
+
+                    managed.ResolvedConnectionString = connStr;
+                    managed.ConnectedAt = DateTime.Now;
+                    managed.IsConnected = true;
+                    ConnectionStateChanged?.Invoke(managed);
+                    reconnected++;
+                    continue;
+                }
+                catch { }
+            }
+
+            // Reconnect failed — mark disconnected
+            managed.IsConnected = false;
+            managed.ResolvedConnectionString = null;
+            ConnectionStateChanged?.Invoke(managed);
+            failed++;
+            failedNames.Add(managed.DisplayName);
+        }
+
+        return (tested, reconnected, failed, failedNames);
+    }
+
+    /// <summary>
+    /// Build connection string using only stored credentials — never prompts the user.
+    /// </summary>
+    private string? ResolveConnectionStringSilent(SavedConnection config)
+    {
+        var builder = new SqlConnectionStringBuilder
+        {
+            DataSource = config.Server,
+            InitialCatalog = config.Database,
+            TrustServerCertificate = config.TrustServerCertificate,
+            ConnectTimeout = _settings.Settings.ConnectionTimeout,
+            Pooling = true,
+            MinPoolSize = 0,
+            MaxPoolSize = 10
+        };
+
+        if (config.UseWindowsAuth)
+        {
+            builder.IntegratedSecurity = true;
+        }
+        else
+        {
+            builder.UserID = config.Username;
+            var password = PasswordStore.Get(config.Server, config.Database, config.Username);
+            if (string.IsNullOrEmpty(password))
+                return null; // No stored password — can't reconnect silently
+            builder.Password = password;
+        }
+
+        return builder.ConnectionString;
+    }
+
     // ── CRUD ─────────────────────────────────────────────────────────
 
     public ManagedConnection Add(SavedConnection config)

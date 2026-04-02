@@ -79,7 +79,7 @@ public partial class MainWindow
 
     private async void OnWokeFromSleep()
     {
-        if (!_viewModel.IsConnected) return;
+        if (_registry == null || !_registry.ActiveConnections.Any()) return;
         await ReconnectAsync();
     }
 
@@ -91,39 +91,43 @@ public partial class MainWindow
         RetryButton.IsVisible = false;
         DismissButton.IsVisible = true;
 
-        SqlConnection.ClearAllPools();
-
-        for (int i = 1; i <= 3; i++)
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            // If user dismissed the overlay, continue reconnecting in background
             if (!ReconnectOverlay.IsVisible)
             {
                 await BackgroundReconnectAsync();
                 return;
             }
 
-            ReconnectText.Text = $"Reconnecting... (attempt {i}/3)";
+            var connCount = _registry!.ActiveConnections.Count();
+            ReconnectText.Text = connCount > 1
+                ? $"Testing {connCount} connections... (attempt {attempt}/3)"
+                : $"Reconnecting... (attempt {attempt}/3)";
 
-            if (await _viewModel.DatabaseService.TestConnectionAsync())
+            var (tested, reconnected, failed, failedNames) = await _registry.TestAndReconnectAllAsync();
+
+            if (failed == 0)
             {
-                OnReconnected();
+                OnReconnected(tested, reconnected);
                 return;
             }
 
-            if (i < 3)
+            if (attempt < 3)
                 await Task.Delay(2000);
         }
 
-        // All 3 foreground attempts failed — show retry, keep dismiss available
+        // All 3 foreground attempts failed
         if (ReconnectOverlay.IsVisible)
         {
-            ReconnectText.Text = "Connection lost";
+            var (_, _, _, failedNames) = await _registry!.TestAndReconnectAllAsync();
+            ReconnectText.Text = failedNames.Count == 1
+                ? $"Connection lost: {failedNames[0]}"
+                : $"{failedNames.Count} connections lost";
             ReconnectProgress.IsVisible = false;
             RetryButton.IsVisible = true;
         }
         else
         {
-            // User dismissed during attempts — continue in background
             await BackgroundReconnectAsync();
         }
     }
@@ -141,17 +145,19 @@ public partial class MainWindow
         _isOffline = true;
         UpdateStatusBar();
 
-        // Retry every 10 seconds in the background until success
+        // Retry every 10 seconds in the background until all connections are back
         while (_isOffline)
         {
             await Task.Delay(10000);
-            if (!_isOffline) return; // Already reconnected or app closing
+            if (!_isOffline) return;
 
             try
             {
-                if (await _viewModel.DatabaseService.TestConnectionAsync())
+                if (_registry == null) return;
+                var (tested, reconnected, failed, _) = await _registry.TestAndReconnectAllAsync();
+                if (failed == 0)
                 {
-                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(OnReconnected);
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => OnReconnected(tested, reconnected));
                     return;
                 }
             }
@@ -162,11 +168,13 @@ public partial class MainWindow
         }
     }
 
-    private void OnReconnected()
+    private void OnReconnected(int tested, int reconnected)
     {
         _isOffline = false;
         ReconnectOverlay.IsVisible = false;
-        _viewModel.StatusMessage = "Reconnected";
+        _viewModel.StatusMessage = tested == 1
+            ? "Reconnected"
+            : $"All {tested} connections restored";
         UpdateStatusBar();
 
         // Clear per-server caches — tabs will re-validate on next query

@@ -98,9 +98,24 @@ public partial class QueryEditorHost : UserControl
         _viewModel.ObjectExplorer.ResetSequenceRequested += OnResetSequenceRequested;
         _viewModel.ObjectExplorer.StartJobRequested += OnStartJobRequested;
 
-        // Rebuild tab strip when connection state changes (dot fade/unfade)
+        // Update tabs when connection state changes (dot + connection string)
         if (_registry != null)
-            _registry.ConnectionStateChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(RebuildTabStrip);
+            _registry.ConnectionStateChanged += managed => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                // Update TabConnectionString on every tab referencing this connection
+                foreach (var tabView in _tabs)
+                {
+                    if (tabView.DataContext is QueryTabViewModel vm &&
+                        vm.TabConnectionProfile?.Id == managed.Id)
+                    {
+                        if (managed.IsConnected && managed.ResolvedConnectionString != null)
+                        {
+                            vm.TabConnectionString = managed.ResolvedConnectionString;
+                        }
+                    }
+                }
+                RebuildTabStrip();
+            });
 
         // Wire tree interactions
         ObjectExplorerTree.AddHandler(InputElement.DoubleTappedEvent, OnTreeDoubleTapped, handledEventsToo: true);

@@ -355,7 +355,9 @@ public partial class QueryTabView
         if (clipboard != null)
         {
             await clipboard.SetTextAsync(sb.ToString());
-            _viewModel.StatusText = $"Copied {rows.Count} row{(rows.Count == 1 ? "" : "s")} with headers";
+            var label = selected.Count > 0 ? $"{selected.Count} selected row" : $"{rows.Count} row";
+            if (rows.Count != 1) label += "s";
+            _viewModel.Flash($"\u2713 {label} copied", ViewModels.QueryStatusSeverity.Success);
         }
     }
 

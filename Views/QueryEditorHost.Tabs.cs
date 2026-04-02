@@ -91,8 +91,10 @@ public partial class QueryEditorHost
         // Refresh tab strip when unsaved changes indicator changes
         vm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(QueryTabViewModel.HasUnsavedChanges) or nameof(QueryTabViewModel.TabTitle))
+            if (e.PropertyName is nameof(QueryTabViewModel.HasUnsavedChanges))
                 RebuildTabStrip();
+            if (e.PropertyName == nameof(QueryTabViewModel.TabTitle))
+                UpdateTabButtonText(vm);
             if (e.PropertyName == nameof(QueryTabViewModel.SelectedDatabase))
                 OnTabDatabaseChanged(vm);
         };
@@ -613,6 +615,29 @@ public partial class QueryEditorHost
 
         // Update overflow arrows after layout
         Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateTabOverflowArrows(), Avalonia.Threading.DispatcherPriority.Render);
+    }
+
+    /// <summary>
+    /// Lightweight update of just the tab button text — avoids full RebuildTabStrip.
+    /// Used for elapsed time ticks during query execution.
+    /// </summary>
+    private void UpdateTabButtonText(QueryTabViewModel vm)
+    {
+        var tabIdx = -1;
+        for (int i = 0; i < _tabs.Count; i++)
+        {
+            if (_tabs[i].DataContext == vm) { tabIdx = i; break; }
+        }
+        if (tabIdx < 0 || tabIdx >= TabStrip.Children.Count) return;
+
+        // Navigate: TabStrip → Button → StackPanel (Content) → first TextBlock
+        if (TabStrip.Children[tabIdx] is Button btn &&
+            btn.Content is StackPanel panel &&
+            panel.Children.Count > 0 &&
+            panel.Children[0] is TextBlock tb)
+        {
+            tb.Text = vm.TabTitle;
+        }
     }
 
     private ContextMenu BuildTabContextMenu(int tabIndex)

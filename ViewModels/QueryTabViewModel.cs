@@ -16,6 +16,7 @@ public partial class QueryTabViewModel : ObservableObject
     private CancellationTokenSource? _cts;
     private Stopwatch? _runStopwatch;
     private Timer? _elapsedTimer;
+    private string? _savedTabTitle;
 
     [ObservableProperty] private ObservableCollection<string> _databases = [];
     [ObservableProperty] private string? _selectedDatabase;
@@ -40,6 +41,9 @@ public partial class QueryTabViewModel : ObservableObject
 
     /// <summary>Fired with (message, severity) for transient status flash in the status bar.</summary>
     public event Action<string, QueryStatusSeverity>? QueryFlash;
+
+    /// <summary>Trigger a transient flash from outside the VM (e.g. copy operations in the view).</summary>
+    public void Flash(string message, QueryStatusSeverity severity) => QueryFlash?.Invoke(message, severity);
 
     // SqlText and SelectedSqlText are set by the View (AvaloniaEdit doesn't support two-way binding)
     public string SelectedSqlText { get; set; } = "";
@@ -221,6 +225,7 @@ public partial class QueryTabViewModel : ObservableObject
     private void StartElapsedTimer()
     {
         _runStopwatch = Stopwatch.StartNew();
+        _savedTabTitle = TabTitle;
         _elapsedTimerActive = true;
         _elapsedTimer = new Timer(_ =>
         {
@@ -231,10 +236,14 @@ public partial class QueryTabViewModel : ObservableObject
             var text = elapsed.TotalSeconds < 60
                 ? $"Running... {elapsed.TotalSeconds:F1}s"
                 : $"Running... {elapsed:mm\\:ss}";
+            var elapsedShort = elapsed.TotalSeconds < 60
+                ? $"\u27F3 {elapsed.TotalSeconds:F0}s"
+                : $"\u27F3 {elapsed:mm\\:ss}";
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 if (!_elapsedTimerActive) return;
                 QueryStatusText = text;
+                TabTitle = $"{_savedTabTitle} {elapsedShort}";
             });
         }, null, 500, 500);
     }
@@ -245,6 +254,11 @@ public partial class QueryTabViewModel : ObservableObject
         _elapsedTimer?.Dispose();
         _elapsedTimer = null;
         _runStopwatch = null;
+        if (_savedTabTitle != null)
+        {
+            TabTitle = _savedTabTitle;
+            _savedTabTitle = null;
+        }
     }
 
     [RelayCommand]

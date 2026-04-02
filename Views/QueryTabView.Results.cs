@@ -337,6 +337,9 @@ public partial class QueryTabView
             pinBtn.Click += (_, _) => PinResultTab(capturedIdx, capturedLabel);
             panel.Children.Add(pinBtn);
 
+            // Copy button
+            panel.Children.Add(BuildCopyButton(r));
+
             var btn = new Button
             {
                 Content = panel,
@@ -657,7 +660,7 @@ public partial class QueryTabView
             if (Application.Current?.Resources.TryGetResource("PanelHeaderBackground", null, out var bg) == true && bg is IBrush bgBrush)
                 header.Background = bgBrush;
 
-            var headerGrid = new Grid { ColumnDefinitions = Avalonia.Controls.ColumnDefinitions.Parse("*,Auto") };
+            var headerGrid = new Grid { ColumnDefinitions = Avalonia.Controls.ColumnDefinitions.Parse("*,Auto,Auto") };
 
             var label = new TextBlock
             {
@@ -691,6 +694,12 @@ public partial class QueryTabView
             pinBtn.Click += (_, _) => PinResultTab(capturedIdx, capturedLabel);
             Grid.SetColumn(pinBtn, 1);
             headerGrid.Children.Add(pinBtn);
+
+            // Copy button
+            var copyBtn = BuildCopyButton(result);
+            copyBtn.Padding = new Thickness(4, 2);
+            Grid.SetColumn(copyBtn, 2);
+            headerGrid.Children.Add(copyBtn);
 
             header.Child = headerGrid;
             Grid.SetRow(header, 0);
@@ -847,6 +856,48 @@ public partial class QueryTabView
 
         menu.Open(header);
         e.Handled = true;
+    }
+
+    private Button BuildCopyButton(QueryResult result, DataGrid? targetGrid = null)
+    {
+        var btn = new Button
+        {
+            Content = "\uD83D\uDCCB", // 📋
+            FontSize = 9,
+            Padding = new Thickness(2, 0),
+            Margin = new Thickness(0),
+            Background = Brushes.Transparent,
+            Foreground = GetRowBrush("TextSecondary"),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            BorderThickness = new Thickness(0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Opacity = 0.5
+        };
+        ToolTip.SetTip(btn, "Copy result set");
+        btn.Click += async (_, _) =>
+        {
+            var grid = targetGrid ?? _activeResultsGrid;
+            var selected = new List<object?[]>();
+            foreach (var item in grid.SelectedItems)
+                if (item is object?[] row) selected.Add(row);
+
+            var rows = selected.Count > 0 ? selected : result.Rows;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(string.Join("\t", result.ColumnNames));
+            foreach (var row in rows)
+                sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(sb.ToString());
+                var label = selected.Count > 0 ? $"{selected.Count} selected row" : $"{rows.Count} row";
+                if (rows.Count != 1) label += "s";
+                _viewModel?.Flash($"\u2713 {label} copied", ViewModels.QueryStatusSeverity.Success);
+            }
+        };
+        return btn;
     }
 
     private void SelectMessagesTab()
