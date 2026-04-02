@@ -4,7 +4,21 @@ All version history in reverse chronological order.
 
 ---
 
-## v2.9.1 (April 2026)
+## v2.10.0 (April 2026)
+
+### Activity Tab — Dashboard Overhaul
+- **Server health stat cards**: 4 KPI tiles showing CPU %, Memory, Buffer Cache Hit Ratio, and TempDB usage from real DMV queries (`dm_os_ring_buffers`, `dm_os_process_memory`, `dm_os_performance_counters`, `dm_db_file_space_usage`)
+- **Dynamic color thresholds**: CPU and Buffer Cache cards change green/amber/red based on health
+- **Sessions grid visual polish**: status pills (running=blue, suspended=amber, sleeping=gray), right-aligned numbers, center-aligned status columns, monospace Current Statement, alternating rows, blocking highlight, rounded panel border
+- **Blocking chain tree walk**: walks transitive chains (A→B→C) to find true head blocker, shows depth, head blocker's query text, separate lines per chain
+- **Failed jobs alert badge**: "Jobs ⚠ 3" on sub-tab header when jobs failed in last 24h, red banner with job names, click to apply "Failed only" filter
+- **Theme resources**: Activity-specific colors added to both dark and light themes
+
+### UX Features (MISC-v4)
+- **One-click copy result set**: 📋 button on result tab headers and stacked result headers, copies all rows (or selected) as TSV with flash feedback
+- **Smart reconnect after sleep**: tests all registry connections on wake, silent reconnect with stored credentials, updates tab connection strings for reconnected servers
+- **Elapsed time in tab title**: running queries show "Query 1 ⟳ 5s" in tab title, reverts on completion
+- **Configurable connection timeout**: Settings dialog (1–120 seconds) replaces hardcoded 5s across all connection paths
 
 ### Bug Fixes (Code Audit)
 - **Fixed shared connection string mutation**: Query tabs no longer fall back to shared `DatabaseService._connectionString`; all execution paths use explicit per-tab connection strings, eliminating wrong-server risk

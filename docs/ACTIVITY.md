@@ -4,7 +4,7 @@ The Activity tab is currently a glorified sp_who2 with job CRUD bolted on. It sh
 
 ---
 
-## Visual Overhaul — Grafana-Lite Dashboard, Not a Results Grid
+## ✅ ~~Visual Overhaul — Grafana-Lite Dashboard, Not a Results Grid~~
 
 The current Activity grid uses the same dense, left-aligned, small-font layout as the query results grid. That's wrong — the results grid is for *reading data*, the activity monitor is for *scanning at a glance*. Different purpose, different visual language.
 
@@ -49,7 +49,7 @@ This isn't cosmetic — it's the difference between glancing at the tab and know
 
 ---
 
-## 1. Server Health Summary Bar
+## ✅ ~~1. Server Health Summary Bar~~ (implemented as stat cards)
 
 **Problem:** The view drops you straight into a grid of sessions. There's no top-level glance. You have to mentally aggregate the grid to answer "is the server okay?"
 
@@ -109,7 +109,7 @@ Sessions using >100MB of tempdb should be flagged. In the health bar, show total
 
 ---
 
-## 4. Blocking Chain Visualization — Fix the Logic
+## ✅ ~~4. Blocking Chain Visualization — Fix the Logic~~
 
 **Problem:** The current `UpdateBlockingChains` method is incomplete. It finds directly blocked sessions but doesn't walk transitive chains (A blocks B blocks C shows as two separate pairs instead of one chain). For warehouse operations where one long cycle count blocks 15 pick operations, the current display is misleading.
 
@@ -122,7 +122,7 @@ Sessions using >100MB of tempdb should be flagged. In the health bar, show total
 
 ---
 
-## 5. Failed Jobs Alert Badge
+## ✅ ~~5. Failed Jobs Alert Badge~~
 
 **Problem:** You have to actively navigate to the Jobs tab and apply the "Failed only" filter to discover failures. If a job failed at 3 AM, you won't know until you go looking.
 

@@ -88,6 +88,12 @@ public partial class ActivityView : UserControl
             }
         };
 
+        // Failed jobs banner click → apply "Failed only" filter
+        FailedJobsBanner.PointerPressed += (_, _) =>
+        {
+            OutcomeFilterCombo.SelectedIndex = 1; // "Failed only"
+        };
+
         // Wire session context menu
         SessionsGrid.DoubleTapped += OnSessionDoubleTapped;
 
@@ -96,7 +102,7 @@ public partial class ActivityView : UserControl
         BuildJobContextMenu();
         BuildJobStepContextMenu();
 
-        // Dynamic card coloring based on health thresholds
+        // Dynamic card coloring + jobs badge
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ActivityViewModel.StatCpu))
@@ -118,6 +124,11 @@ public partial class ActivityView : UserControl
                         : ratio < 99 ? (GetBrush("WarningSeverityWarning") ?? Brushes.Orange)
                         : (GetBrush("ScoreHealthy") ?? Brushes.Green);
                 }
+            }
+            else if (e.PropertyName == nameof(ActivityViewModel.FailedJobCount))
+            {
+                var count = _viewModel.FailedJobCount;
+                JobsSubTab.Content = count > 0 ? $"Jobs \u26a0 {count}" : "Jobs";
             }
         };
 

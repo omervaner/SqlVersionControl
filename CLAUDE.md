@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.9.1 (April 2026)
+## PROJECT STATUS: v2.10.0 (April 2026)
 
-Code audit fixes: eliminated shared connection string mutation (wrong-server risk), stale trace tab, batch-close cancel bug, silent edit-mode type errors. Configurable connection timeout setting. Dead code cleanup.
+Activity tab dashboard overhaul: server health stat cards (CPU %, Memory, Buffer Cache, TempDB) from real DMVs, status pills, blocking chain tree walk, failed jobs alert badge. MISC-v4: one-click copy result set, smart reconnect after sleep, elapsed time in tab titles. Code audit: connection safety, edit validation, batch close cancel, configurable timeout.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 

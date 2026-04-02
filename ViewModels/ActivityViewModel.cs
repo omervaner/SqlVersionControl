@@ -186,6 +186,12 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _statTempDb = "—";
     [ObservableProperty] private string _statTempDbDetail = "—";
 
+    // ── Failed Jobs Alert ────────────────────────────────────────
+
+    [ObservableProperty] private int _failedJobCount;
+    [ObservableProperty] private bool _hasFailedJobs;
+    [ObservableProperty] private string _failedJobsBannerText = "";
+
     // ── Raw unfiltered data ───────────────────────────────────────
 
     private List<SessionRow> _allSessions = new();
@@ -345,7 +351,31 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
         });
 
         ApplyJobFilters();
+        UpdateFailedJobsAlert();
         StatusMessage = $"Jobs: {_allJobs.Count} total, {Jobs.Count} shown — {DateTime.Now:HH:mm:ss}";
+    }
+
+    private void UpdateFailedJobsAlert()
+    {
+        var cutoff = DateTime.Now.AddHours(-24);
+        var recentFailed = _allJobs
+            .Where(j => j.LastRunOutcome == "Failed" && j.LastRunDate.HasValue && j.LastRunDate.Value > cutoff)
+            .ToList();
+
+        FailedJobCount = recentFailed.Count;
+        HasFailedJobs = recentFailed.Count > 0;
+
+        if (recentFailed.Count > 0)
+        {
+            var names = string.Join(", ", recentFailed.Select(j => j.JobName));
+            FailedJobsBannerText = recentFailed.Count == 1
+                ? $"1 job failed in the last 24 hours: {names}"
+                : $"{recentFailed.Count} jobs failed in the last 24 hours: {names}";
+        }
+        else
+        {
+            FailedJobsBannerText = "";
+        }
     }
 
     // ── Filters ───────────────────────────────────────────────────
@@ -420,38 +450,71 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
     private void UpdateBlockingChains()
     {
-        var blockers = _allSessions
-            .Where(s => s.BlockingSession > 0)
-            .ToList();
-
-        if (blockers.Count == 0)
+        var blocked = _allSessions.Where(s => s.BlockingSession > 0).ToList();
+        if (blocked.Count == 0)
         {
             HasBlockingChains = false;
             BlockingChainText = "";
             return;
         }
 
-        // Build chains: find the head of each blocking chain
+        var sessionMap = _allSessions.ToDictionary(s => s.SessionId);
+
+        // Find head blockers: SPIDs that block others but aren't themselves blocked
+        var allBlockedIds = new HashSet<int>(blocked.Select(s => s.SessionId));
+        var headBlockerIds = blocked
+            .Select(s => WalkToHead(s.BlockingSession, sessionMap))
+            .Distinct()
+            .ToList();
+
+        // Build chain text per head blocker
         var chains = new List<string>();
-        var visited = new HashSet<int>();
-
-        foreach (var session in blockers)
+        foreach (var headId in headBlockerIds)
         {
-            if (visited.Contains(session.SessionId)) continue;
+            // Walk down recursively to build the tree
+            var victims = new List<int>();
+            CollectVictims(headId, sessionMap, _allSessions, victims, depth: 0, maxDepth: 10);
 
-            // Walk up to find the head blocker
-            var head = session.BlockingSession;
-            var chainIds = new List<int> { session.SessionId };
-            visited.Add(session.SessionId);
+            var headSession = sessionMap.GetValueOrDefault(headId);
+            var headQuery = headSession?.CurrentStatement;
+            var queryPreview = !string.IsNullOrWhiteSpace(headQuery) && headQuery.Length > 80
+                ? headQuery[..80].Trim() + "..."
+                : headQuery?.Trim() ?? "";
 
-            // Walk down from head to find all blocked sessions
-            var blocked = _allSessions.Where(s => s.BlockingSession == head).Select(s => s.SessionId).ToList();
-            var chain = $"Session {head} \u2192 blocks \u2192 {string.Join(", ", blocked.Select(id => $"Session {id}"))}";
+            var victimText = string.Join(", ", victims.Select(id => id.ToString()));
+            var chain = $"SPID {headId} \u2192 blocking {victims.Count} session{(victims.Count == 1 ? "" : "s")} ({victimText})";
+            if (!string.IsNullOrWhiteSpace(queryPreview))
+                chain += $"  —  {queryPreview}";
             chains.Add(chain);
         }
 
         HasBlockingChains = true;
-        BlockingChainText = string.Join("  |  ", chains);
+        BlockingChainText = string.Join("\n", chains);
+    }
+
+    /// <summary>Walk up the blocking chain to find the root head blocker.</summary>
+    private static int WalkToHead(int spid, Dictionary<int, SessionRow> map)
+    {
+        var visited = new HashSet<int>();
+        var current = spid;
+        while (map.TryGetValue(current, out var session) && session.BlockingSession > 0 && !visited.Contains(current))
+        {
+            visited.Add(current);
+            current = session.BlockingSession;
+        }
+        return current;
+    }
+
+    /// <summary>Recursively collect all SPIDs blocked (directly or transitively) by a head blocker.</summary>
+    private static void CollectVictims(int headId, Dictionary<int, SessionRow> map, List<SessionRow> all, List<int> victims, int depth, int maxDepth)
+    {
+        if (depth > maxDepth) return;
+        var directVictims = all.Where(s => s.BlockingSession == headId).ToList();
+        foreach (var v in directVictims)
+        {
+            victims.Add(v.SessionId);
+            CollectVictims(v.SessionId, map, all, victims, depth + 1, maxDepth);
+        }
     }
 
     private async Task UpdateStatCardsAsync()
