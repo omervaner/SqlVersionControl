@@ -116,6 +116,11 @@ public static class ThemeManager
             Application.Current.Resources["GridRowHeight"] = (double)height;
     }
 
+    /// <summary>Look up a brush from the current theme's resource dictionary.</summary>
+    public static IBrush GetBrush(string key) =>
+        Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
+            ? b : Brushes.Transparent;
+
     // Helper methods to get current theme colors
     public static Color GetDiffBackground() => IsDarkTheme ? Dark.DiffBackground : Light.DiffBackground;
     public static Color GetLineNumberBackground() => IsDarkTheme ? Dark.LineNumberBackground : Light.LineNumberBackground;

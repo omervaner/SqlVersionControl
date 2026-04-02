@@ -367,9 +367,7 @@ public partial class QueryEditorHost
         }
     }
 
-    private IBrush FindBrush(string key) =>
-        Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
-            ? b : Brushes.Transparent;
+    private static IBrush FindBrush(string key) => ThemeManager.GetBrush(key);
 
     // ── Tab drag-to-reorder ──────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using SqlVersionControl.Services;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -114,10 +115,5 @@ public partial class KeyboardShortcutsDialog : Window
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
     }
 
-    private static IBrush GetBrush(string key)
-    {
-        if (Application.Current?.Resources.TryGetResource(key, null, out var res) == true && res is IBrush b)
-            return b;
-        return Brushes.White;
-    }
+    private static IBrush GetBrush(string key) => ThemeManager.GetBrush(key);
 }

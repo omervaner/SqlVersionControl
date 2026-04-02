@@ -214,7 +214,5 @@ public partial class MainWindow
         _queryStatusTimer.Start();
     }
 
-    private static Avalonia.Media.IBrush GetBrush(string key) =>
-        Avalonia.Application.Current?.Resources.TryGetResource(key, null, out var r) == true
-        && r is Avalonia.Media.IBrush b ? b : Avalonia.Media.Brushes.Gray;
+    private static Avalonia.Media.IBrush GetBrush(string key) => ThemeManager.GetBrush(key);
 }

@@ -105,14 +105,7 @@ public partial class QueryEditorHost
         var database = activeVm?.SelectedDatabase;
         if (connStr == null || database == null) return null;
 
-        // Try with schema prefix if it contains a dot (e.g., "dbo.MyProc")
-        string schema = "dbo", name = objectName;
-        if (objectName.Contains('.'))
-        {
-            var parts = objectName.Split('.', 2);
-            schema = parts[0].Trim('[', ']');
-            name = parts[1].Trim('[', ']');
-        }
+        var (schema, name) = Helpers.SqlNameParser.ParseSchemaQualifiedName(objectName);
 
         // Try exact match first
         var definition = await _db.GetObjectDefinitionAsync(connStr, database, schema, name);
@@ -141,14 +134,7 @@ public partial class QueryEditorHost
         var database = activeVm?.SelectedDatabase;
         if (connStr == null || database == null) return;
 
-        // Parse schema.name
-        string schema = "dbo", name = objectName;
-        if (objectName.Contains('.'))
-        {
-            var parts = objectName.Split('.', 2);
-            schema = parts[0].Trim('[', ']');
-            name = parts[1].Trim('[', ']');
-        }
+        var (schema, name) = Helpers.SqlNameParser.ParseSchemaQualifiedName(objectName);
 
         // Fetch parameters
         var parameters = await _db.GetProcParametersDetailedAsync(connStr, database, schema, name);
@@ -209,14 +195,7 @@ public partial class QueryEditorHost
         var database = activeVm?.SelectedDatabase;
         if (database == null) return;
 
-        // Parse schema.name
-        string schema = "dbo", name = objectName;
-        if (objectName.Contains('.'))
-        {
-            var parts = objectName.Split('.', 2);
-            schema = parts[0].Trim('[', ']');
-            name = parts[1].Trim('[', ']');
-        }
+        var (schema, name) = Helpers.SqlNameParser.ParseSchemaQualifiedName(objectName);
 
         // Create a temporary node for the dependency lookup
         var node = new ObjectExplorerNode

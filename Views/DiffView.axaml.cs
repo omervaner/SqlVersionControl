@@ -21,10 +21,6 @@ public partial class DiffView : UserControl
     private bool _syncingScroll;
     private SideBySideDiffModel? _lastModel;
 
-    private static IBrush FindBrush(string key) =>
-        Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b
-            ? b : Brushes.Transparent;
-
     public DiffView()
     {
         InitializeComponent();
@@ -45,8 +41,8 @@ public partial class DiffView : UserControl
 
     public void ApplyTheme()
     {
-        var bg = FindBrush("EditorBackground");
-        var splitterBg = FindBrush("SplitterBackground");
+        var bg = ThemeManager.GetBrush("EditorBackground");
+        var splitterBg = ThemeManager.GetBrush("SplitterBackground");
 
         LeftPanel.Background = bg;
         RightPanel.Background = bg;

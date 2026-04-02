@@ -73,16 +73,5 @@ public class RecentChange
     public string FullName => $"{SchemaName}.{ObjectName}";
     public string ChangedAtDisplay => ChangedAt.ToString("MMM dd, HH:mm");
 
-    public string TimeAgo
-    {
-        get
-        {
-            var diff = DateTime.Now - ChangedAt;
-            if (diff.TotalMinutes < 1) return "just now";
-            if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-            if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-            if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-            return ChangedAt.ToString("MMM dd");
-        }
-    }
+    public string TimeAgo => Helpers.TimeFormatter.FormatTimeAgo(ChangedAt);
 }
