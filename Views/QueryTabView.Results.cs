@@ -240,8 +240,27 @@ public partial class QueryTabView
             _pinnedTabIndices.Add(tabIdx);
 
             var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
-            panel.Children.Add(new TextBlock { Text = "\u25CF", FontSize = 9, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center }); // 📌
+            panel.Children.Add(new TextBlock { Text = "\uD83D\uDCCC", FontSize = 8, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Opacity = 0.7 }); // 📌
             panel.Children.Add(new TextBlock { Text = pinnedLabel, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
+
+            // × close button
+            var capturedPinnedIdx = p;
+            var closeBtn = new Button
+            {
+                Content = "\u00d7",
+                FontSize = 10,
+                Padding = new Thickness(2, 0),
+                Margin = new Thickness(2, 0, 0, 0),
+                Background = Brushes.Transparent,
+                Foreground = GetRowBrush("TextSecondary"),
+                BorderThickness = new Thickness(0),
+                Cursor = new Cursor(StandardCursorType.Hand),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                MinWidth = 0, MinHeight = 0,
+            };
+            closeBtn.Click += (_, _) => UnpinResultTab(capturedPinnedIdx);
+            ToolTip.SetTip(closeBtn, "Unpin");
+            panel.Children.Add(closeBtn);
 
             var pTag = pinnedTag;
             var btn = new Button
@@ -250,11 +269,11 @@ public partial class QueryTabView
                 Padding = new Thickness(10, 4),
                 Margin = new Thickness(0),
                 FontSize = 11,
-                Foreground = GetRowBrush("TextSecondary"),
-                Background = Brushes.Transparent,
+                Foreground = GetRowBrush("TextPrimary"),
+                Background = GetRowBrush("SidebarBackground"),
                 Cursor = new Cursor(StandardCursorType.Hand),
-                BorderThickness = new Thickness(0, 0, 0, 2),
-                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(1, 0, 1, 2),
+                BorderBrush = GetRowBrush("BorderDefault"),
                 Tag = pTag
             };
             btn.Click += (_, _) => SelectResultTab(pTag);

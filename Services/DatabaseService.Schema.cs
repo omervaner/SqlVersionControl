@@ -99,6 +99,7 @@ public partial class DatabaseService
             if (result.ContainsKey(cat)) result[cat] += cnt;
             else result[cat] = cnt;
         }
+        await reader.CloseAsync(); // Close before running additional queries on same connection
 
         // Sequences
         try

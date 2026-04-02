@@ -71,6 +71,7 @@
                 <TreeView Grid.Row="2" x:Name="ObjectExplorerTree"
                           Padding="0,4,4,4" Margin="-8,0,0,0"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Visible"
                           ItemsSource="{Binding ObjectExplorer.RootNodes}">
                     <TreeView.Styles>
                         <!-- Compact spacing + two-way expand binding + filter visibility -->

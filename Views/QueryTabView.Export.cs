@@ -21,21 +21,44 @@ public partial class QueryTabView
 
         var menu = new MenuFlyout();
 
-        var excelItem = new MenuItem { Header = "Export as Excel (.xlsx)" };
-        excelItem.Click += async (_, _) => await ExportResultsAsync("xlsx");
-        menu.Items.Add(excelItem);
+        // In stacked mode with multiple results, add a result picker sub-menu
+        if (_isStackedMode && _viewModel.Results.Count(r => r.Error == null) > 1)
+        {
+            var goodResults = _viewModel.Results.Where(r => r.Error == null).ToList();
 
-        var csvItem = new MenuItem { Header = "Export as CSV" };
-        csvItem.Click += async (_, _) => await ExportResultsAsync("csv");
-        menu.Items.Add(csvItem);
+            foreach (var format in new[] { ("xlsx", "Excel (.xlsx)"), ("csv", "CSV"), ("json", "JSON"), ("tsv", "Tab-Delimited") })
+            {
+                var formatItem = new MenuItem { Header = $"Export as {format.Item2}" };
+                for (int i = 0; i < goodResults.Count; i++)
+                {
+                    var resultIdx = _viewModel.Results.IndexOf(goodResults[i]);
+                    var capturedIdx = resultIdx;
+                    var subItem = new MenuItem { Header = $"Result {i + 1} ({goodResults[i].RowCount} rows)" };
+                    var fmt = format.Item1;
+                    subItem.Click += async (_, _) => await ExportResultsAsync(fmt, capturedIdx);
+                    formatItem.Items.Add(subItem);
+                }
+                menu.Items.Add(formatItem);
+            }
+        }
+        else
+        {
+            var excelItem = new MenuItem { Header = "Export as Excel (.xlsx)" };
+            excelItem.Click += async (_, _) => await ExportResultsAsync("xlsx");
+            menu.Items.Add(excelItem);
 
-        var jsonItem = new MenuItem { Header = "Export as JSON" };
-        jsonItem.Click += async (_, _) => await ExportResultsAsync("json");
-        menu.Items.Add(jsonItem);
+            var csvItem = new MenuItem { Header = "Export as CSV" };
+            csvItem.Click += async (_, _) => await ExportResultsAsync("csv");
+            menu.Items.Add(csvItem);
 
-        var tsvItem = new MenuItem { Header = "Export as Tab-Delimited" };
-        tsvItem.Click += async (_, _) => await ExportResultsAsync("tsv");
-        menu.Items.Add(tsvItem);
+            var jsonItem = new MenuItem { Header = "Export as JSON" };
+            jsonItem.Click += async (_, _) => await ExportResultsAsync("json");
+            menu.Items.Add(jsonItem);
+
+            var tsvItem = new MenuItem { Header = "Export as Tab-Delimited" };
+            tsvItem.Click += async (_, _) => await ExportResultsAsync("tsv");
+            menu.Items.Add(tsvItem);
+        }
 
         menu.ShowAt(ExportButton, true);
     }
@@ -83,12 +106,20 @@ public partial class QueryTabView
         ExportProgressText.Text = $"{pct}%";
     }
 
-    private async Task ExportResultsAsync(string format)
+    private async Task ExportResultsAsync(string format, int? overrideResultIndex = null)
     {
         if (_viewModel == null) return;
 
-        var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
-            ? _selectedTabIndex : 0;
+        int resultIndex;
+        if (overrideResultIndex.HasValue)
+        {
+            resultIndex = overrideResultIndex.Value;
+        }
+        else
+        {
+            resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
+                ? _selectedTabIndex : 0;
+        }
         if (resultIndex >= _viewModel.Results.Count) return;
 
         var result = _viewModel.Results[resultIndex];

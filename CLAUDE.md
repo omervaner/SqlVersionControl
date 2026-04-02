@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.8.1 (April 2026)
+## PROJECT STATUS: v2.9.0 (April 2026)
 
-Completed full refactoring plan: all 6 mega-files split into partial classes (Phase 1A–1E + OE split), shared helpers extracted (Phase 2), empty catch audit (Phase 3A). Compare tab UX overhaul: indicator sync, stale data prevention, connection stripe per-tab, empty state overlays, click-to-resolve status icons.
+Stacked results (SSMS-style): multiple result sets render in resizable stacked grids with pin-to-tab. Compare tab: swap button, deploy tooltips, row limit warning. In-app error log viewer, active connections tooltip, OE scrollbar, schema DataReader fix. Grid density: cell height down to 14px with auto-scaling font.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
