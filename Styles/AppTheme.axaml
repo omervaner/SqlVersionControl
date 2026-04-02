@@ -109,6 +109,7 @@
 
     <!-- === GRID === -->
     <x:Double x:Key="GridRowHeight">22</x:Double>
+    <x:Double x:Key="GridFontSize">12</x:Double>
 
     <!-- === OVERLAY === -->
     <SolidColorBrush x:Key="OverlayBackground" Color="#CC292c33"/>

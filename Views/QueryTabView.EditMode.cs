@@ -111,21 +111,22 @@ public partial class QueryTabView
             return;
         }
 
-        if (ResultsGrid.SelectedItem == null || ResultsGrid.CurrentColumn == null)
+        var grid = _activeResultsGrid;
+        if (grid.SelectedItem == null || grid.CurrentColumn == null)
         {
             CellDetailPanel.IsVisible = false;
             return;
         }
 
-        var colIndex = ResultsGrid.Columns.IndexOf(ResultsGrid.CurrentColumn);
+        var colIndex = grid.Columns.IndexOf(grid.CurrentColumn);
         if (colIndex < 0) { CellDetailPanel.IsVisible = false; return; }
 
-        var colName = ResultsGrid.CurrentColumn.Header?.ToString() ?? "";
+        var colName = grid.CurrentColumn.Header?.ToString() ?? "";
         object? cellValue = null;
 
-        if (ResultsGrid.SelectedItem is object?[] row && colIndex < row.Length)
+        if (grid.SelectedItem is object?[] row && colIndex < row.Length)
             cellValue = row[colIndex];
-        else if (ResultsGrid.SelectedItem is EditableRow editRow)
+        else if (grid.SelectedItem is EditableRow editRow)
             cellValue = editRow[colIndex];
 
         if (cellValue == null || cellValue == DBNull.Value)
@@ -212,6 +213,33 @@ public partial class QueryTabView
             e.Handled = true;
             await CopyWithHeadersAsync();
             return;
+        }
+
+        // Single-cell copy: Cmd/Ctrl+C copies just the focused cell value (not the whole row)
+        if (ctrl && !shift && e.Key == Key.C)
+        {
+            var grid = _activeResultsGrid;
+            if (grid.CurrentColumn != null && grid.SelectedItem != null)
+            {
+                var colIndex = grid.Columns.IndexOf(grid.CurrentColumn);
+                if (colIndex >= 0)
+                {
+                    object? cellValue = null;
+                    if (grid.SelectedItem is object?[] row && colIndex < row.Length)
+                        cellValue = row[colIndex];
+                    else if (grid.SelectedItem is EditableRow editRow)
+                        cellValue = editRow[colIndex];
+
+                    var text = cellValue == null || cellValue == DBNull.Value ? "" : cellValue.ToString() ?? "";
+                    var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                    if (clipboard != null)
+                    {
+                        e.Handled = true;
+                        await clipboard.SetTextAsync(text);
+                        return;
+                    }
+                }
+            }
         }
 
         if (_viewModel is not { IsEditMode: true }) return;

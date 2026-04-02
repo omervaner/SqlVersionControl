@@ -2,6 +2,7 @@ using System.Text;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using SqlVersionControl.Models;
 using SqlVersionControl.Services;
 
@@ -284,6 +285,17 @@ public partial class QueryTabView
     private QueryResult? GetCurrentResult()
     {
         if (_viewModel == null) return null;
+
+        // Stacked mode: find which result the active grid is showing
+        if (_isStackedMode && _activeResultsGrid != ResultsGrid)
+        {
+            var grids = StackedResultsPanel.GetVisualDescendants().OfType<DataGrid>().ToList();
+            var gridIdx = grids.IndexOf(_activeResultsGrid);
+            var goodResults = _viewModel.Results.Where(r => r.Error == null).ToList();
+            if (gridIdx >= 0 && gridIdx < goodResults.Count)
+                return goodResults[gridIdx];
+        }
+
         if (_selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count)
             return _viewModel.Results[_selectedTabIndex];
         if (_selectedTabIndex < 0 && _selectedTabIndex != MessagesTabTag)
@@ -318,8 +330,9 @@ public partial class QueryTabView
 
     private List<object?[]> GetSelectedRows()
     {
+        var grid = _activeResultsGrid;
         var list = new List<object?[]>();
-        foreach (var item in ResultsGrid.SelectedItems)
+        foreach (var item in grid.SelectedItems)
         {
             if (item is object?[] row) list.Add(row);
         }

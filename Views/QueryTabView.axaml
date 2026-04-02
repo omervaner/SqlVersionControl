@@ -171,23 +171,32 @@
                                 <Setter Property="MinHeight" Value="0"/>
                             </Style>
                             <Style Selector="DataGridCell TextBlock">
-                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontSize" Value="{DynamicResource GridFontSize}"/>
                                 <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
                                 <Setter Property="Margin" Value="0"/>
                             </Style>
                             <Style Selector="DataGridCell TextBox">
-                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontSize" Value="{DynamicResource GridFontSize}"/>
                                 <Setter Property="FontFamily" Value="Consolas, Menlo, Monaco, monospace"/>
                                 <Setter Property="MinHeight" Value="0"/>
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="Margin" Value="0"/>
                                 <Setter Property="BorderThickness" Value="0"/>
                             </Style>
+                            <Style Selector="DataGridColumnHeader">
+                                <Setter Property="FontSize" Value="{DynamicResource GridFontSize}"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                            </Style>
                             <Style Selector="DataGridRow">
                                 <Setter Property="MinHeight" Value="0"/>
                             </Style>
                         </DataGrid.Styles>
                     </DataGrid>
+
+                    <!-- Stacked Results (multiple result sets, read-only) -->
+                    <Grid x:Name="StackedResultsPanel" IsVisible="False">
+                        <!-- RowDefinitions built dynamically in ShowStackedResults() -->
+                    </Grid>
 
                     <!-- Messages Panel -->
                     <Border x:Name="MessagesPanel" IsVisible="False"

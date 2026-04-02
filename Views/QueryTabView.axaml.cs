@@ -88,6 +88,7 @@ public partial class QueryTabView : UserControl
         // Cmd/Ctrl+Mouse Wheel to zoom
         SqlEditor.AddHandler(InputElement.PointerWheelChangedEvent, OnEditorPointerWheelChanged, handledEventsToo: false);
 
+        _activeResultsGrid = ResultsGrid;
         vm.Results.CollectionChanged += OnResultsChanged;
         vm.ExpandResultsForMessages += () =>
         {
@@ -134,7 +135,7 @@ public partial class QueryTabView : UserControl
         ResultsGrid.DoubleTapped += OnResultsGridDoubleTapped;
 
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
-        ResultsGrid.KeyDown += OnResultsGridKeyDown;
+        ResultsGrid.AddHandler(KeyDownEvent, OnResultsGridKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         // Cell detail viewer — track both row changes and cell clicks
         ResultsGrid.SelectionChanged += OnResultsGridCellSelected;

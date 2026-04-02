@@ -113,7 +113,12 @@ public static class ThemeManager
     public static void ApplyGridRowHeight(int height)
     {
         if (Application.Current != null)
+        {
             Application.Current.Resources["GridRowHeight"] = (double)height;
+            // Auto-scale font: font = min(12, height - 4), floored at 7
+            var fontSize = (double)Math.Max(7, Math.Min(12, height - 4));
+            Application.Current.Resources["GridFontSize"] = fontSize;
+        }
     }
 
     /// <summary>Look up a brush from the current theme's resource dictionary.</summary>

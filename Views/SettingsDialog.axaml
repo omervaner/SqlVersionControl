@@ -29,7 +29,7 @@
                 <TextBlock Text="Grid Row Height" FontWeight="SemiBold"/>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <NumericUpDown x:Name="GridRowHeightUpDown"
-                                   Minimum="20" Maximum="32" Value="22"
+                                   Minimum="14" Maximum="32" Value="22"
                                    Width="100" FormatString="0" Increment="1"/>
                     <TextBlock Text="px" VerticalAlignment="Center" Foreground="{DynamicResource TextDisabled}"/>
                 </StackPanel>

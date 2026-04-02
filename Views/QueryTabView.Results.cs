@@ -24,7 +24,14 @@ public partial class QueryTabView
     private const int MessagesTabTag = -1000;
     private const int TraceTabTag = -2000;
     private const int PlanTabTag = -3000;
+    private const int StackedResultsTag = -4000;
     private bool _hasPlan;
+
+    /// <summary>Tracks the last-interacted DataGrid (for cell detail, export, copy in stacked mode).</summary>
+    private DataGrid _activeResultsGrid = null!; // Set in Initialize() to ResultsGrid
+
+    /// <summary>True when showing stacked multi-result view.</summary>
+    private bool _isStackedMode;
 
     private static IBrush GetNullForeground()
     {
@@ -51,13 +58,26 @@ public partial class QueryTabView
 
                 var totalHeight = EditorResultsGrid.Bounds.Height;
                 if (totalHeight <= 0) totalHeight = 600;
-                var maxResultsHeight = totalHeight * 0.5;
+                var resultCount = _viewModel.Results.Count(r => r.Error == null);
+                var maxResultsHeight = resultCount > 1 ? totalHeight * 0.65 : totalHeight * 0.5;
 
                 // Calculate height needed: header bar (28) + rows × row height
                 var rowHeight = _settings?.Settings.GridRowHeight ?? 22;
-                var firstResult = _viewModel.Results[0];
-                var rowCount = firstResult.RowCount;
-                var neededHeight = 28 + (rowCount + 2) * rowHeight + 10; // +1 header row, +1 buffer row, +10 chrome
+                var goodResults = _viewModel.Results.Where(r => r.Error == null).ToList();
+                double neededHeight;
+                if (goodResults.Count > 1)
+                {
+                    // Stacked: sum all results (header bar per result + rows + column header)
+                    neededHeight = 28; // tab bar
+                    foreach (var r in goodResults)
+                        neededHeight += 28 + (Math.Min(r.RowCount, 8) + 1) * rowHeight; // cap per-grid preview at 8 rows
+                    neededHeight += 10;
+                }
+                else
+                {
+                    var rowCount = goodResults.Count > 0 ? goodResults[0].RowCount : 0;
+                    neededHeight = 28 + (rowCount + 2) * rowHeight + 10; // +1 header row, +1 buffer row, +10 chrome
+                }
 
                 var resultHeight = Math.Min(neededHeight, maxResultsHeight);
                 var minHeight = Math.Max(150, totalHeight * 0.2); // at least 20% or 150px
@@ -242,25 +262,38 @@ public partial class QueryTabView
             ResultTabHeaders.Children.Add(btn);
         }
 
-        // Live result tabs (tag = positive index)
-        var resultNumber = 0;
-        for (int i = 0; i < results.Count; i++)
-        {
-            var r = results[i];
-            string label;
-            if (r.Error != null)
-            {
-                label = "Error";
-            }
-            else
-            {
-                resultNumber++;
-                label = results.Count(x => x.Error == null) == 1
-                    ? $"Result ({r.RowCount} rows)"
-                    : $"Result {resultNumber} ({r.RowCount} rows)";
-            }
+        // Live result tabs
+        var goodResults = results.Where(r => r.Error == null).ToList();
+        var hasErrors = results.Any(r => r.Error != null);
 
-            var idx = i;
+        if (goodResults.Count > 1)
+        {
+            // Multi-result: single combined "Results" tab → stacked view
+            var totalRows = goodResults.Sum(r => r.RowCount);
+            var label = $"Results ({goodResults.Count} sets, {totalRows:N0} rows)";
+
+            var btn = new Button
+            {
+                Content = label,
+                Padding = new Thickness(10, 4),
+                Margin = new Thickness(0),
+                FontSize = 11,
+                Foreground = GetRowBrush("TextSecondary"),
+                Background = Brushes.Transparent,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                BorderBrush = Brushes.Transparent,
+                Tag = StackedResultsTag
+            };
+            btn.Click += (_, _) => SelectResultTab(StackedResultsTag);
+            ResultTabHeaders.Children.Add(btn);
+        }
+        else if (goodResults.Count == 1)
+        {
+            // Single result: same as before — one tab with pin button
+            var singleIdx = results.IndexOf(goodResults[0]);
+            var r = goodResults[0];
+            var label = $"Result ({r.RowCount:N0} rows)";
 
             var panel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
@@ -268,7 +301,7 @@ public partial class QueryTabView
             // Pin button
             var pinBtn = new Button
             {
-                Content = "\u25CF", // 📌
+                Content = "\u25CF",
                 FontSize = 9,
                 Padding = new Thickness(2, 0),
                 Margin = new Thickness(0),
@@ -280,8 +313,8 @@ public partial class QueryTabView
                 Opacity = 0.5
             };
             ToolTip.SetTip(pinBtn, "Pin this result");
-            var capturedIdx = idx;
             var capturedLabel = label;
+            var capturedIdx = singleIdx;
             pinBtn.Click += (_, _) => PinResultTab(capturedIdx, capturedLabel);
             panel.Children.Add(pinBtn);
 
@@ -296,10 +329,10 @@ public partial class QueryTabView
                 Cursor = new Cursor(StandardCursorType.Hand),
                 BorderThickness = new Thickness(0, 0, 0, 2),
                 BorderBrush = Brushes.Transparent,
-                Tag = idx
+                Tag = singleIdx
             };
-            btn.Click += (_, _) => SelectResultTab(idx);
-            btn.ContextMenu = BuildResultTabContextMenu(r, idx);
+            btn.Click += (_, _) => SelectResultTab(singleIdx);
+            btn.ContextMenu = BuildResultTabContextMenu(r, singleIdx);
             ResultTabHeaders.Children.Add(btn);
         }
 
@@ -393,13 +426,18 @@ public partial class QueryTabView
         }
 
         // Auto-select first live result
-        if (results.Count > 0)
+        if (goodResults.Count > 1)
         {
-            var firstGood = results.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Error == null);
-            if (firstGood.r != null)
-                SelectResultTab(firstGood.i);
-            else
-                SelectMessagesTab();
+            SelectResultTab(StackedResultsTag);
+        }
+        else if (goodResults.Count == 1)
+        {
+            SelectResultTab(results.IndexOf(goodResults[0]));
+        }
+        else if (results.Count > 0)
+        {
+            // All results are errors
+            SelectMessagesTab();
         }
         else if (_pinnedResults.Count > 0)
         {
@@ -457,11 +495,33 @@ public partial class QueryTabView
     }
 
     /// <summary>
-    /// Select a result tab. Positive index = live result, negative = pinned (-(pinnedIdx+1)).
+    /// Select a result tab. Positive index = live result, negative = pinned (-(pinnedIdx+1)),
+    /// or StackedResultsTag for the combined stacked view.
     /// </summary>
     private void SelectResultTab(int index)
     {
         if (_viewModel == null) return;
+
+        // Stacked results view (multi-result combined tab)
+        if (index == StackedResultsTag)
+        {
+            if (_viewModel.IsEditMode)
+                _viewModel.CancelChangesCommand.Execute(null);
+
+            _selectedTabIndex = index;
+            _isStackedMode = true;
+            MessagesPanel.IsVisible = false;
+            TracePanel.IsVisible = false;
+            PlanPanel.IsVisible = false;
+            EmptyState.IsVisible = false;
+            CellDetailPanel.IsVisible = false;
+            ResultsGrid.IsVisible = false;
+
+            ShowStackedResults();
+            StackedResultsPanel.IsVisible = true;
+            UpdateTabHighlight(index);
+            return;
+        }
 
         QueryResult? result;
 
@@ -485,11 +545,13 @@ public partial class QueryTabView
         }
 
         _selectedTabIndex = index;
+        _isStackedMode = false;
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = false;
         PlanPanel.IsVisible = false;
         EmptyState.IsVisible = false;
         CellDetailPanel.IsVisible = false;
+        StackedResultsPanel.IsVisible = false;
 
         if (result.Error != null)
         {
@@ -501,8 +563,163 @@ public partial class QueryTabView
         ResultsGrid.ItemsSource = result.Rows;
         ResultsGrid.IsReadOnly = true;
         ResultsGrid.IsVisible = true;
+        _activeResultsGrid = ResultsGrid;
         SetupReadOnlyContextMenu();
         UpdateTabHighlight(index);
+    }
+
+    /// <summary>Build the stacked results view with one DataGrid per result set, with splitters.</summary>
+    private void ShowStackedResults()
+    {
+        if (_viewModel == null) return;
+
+        StackedResultsPanel.Children.Clear();
+        StackedResultsPanel.RowDefinitions.Clear();
+        var results = _viewModel.Results.Where(r => r.Error == null).ToList();
+        if (results.Count == 0) return;
+
+        var rowHeight = _settings?.Settings.GridRowHeight ?? 22;
+        var gridRow = 0;
+
+        for (int i = 0; i < results.Count; i++)
+        {
+            var result = results[i];
+            var resultNumber = i + 1;
+
+            // Splitter between results (not before first)
+            if (i > 0)
+            {
+                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                var splitter = new GridSplitter
+                {
+                    Height = 4,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                    Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeNorthSouth),
+                };
+                if (Application.Current?.Resources.TryGetResource("BorderDefault", null, out var splitterBg) == true && splitterBg is IBrush splitterBrush)
+                    splitter.Background = splitterBrush;
+                Grid.SetRow(splitter, gridRow);
+                StackedResultsPanel.Children.Add(splitter);
+                gridRow++;
+            }
+
+            // Container for header + grid — empty results get Auto (just header + column headers),
+            // others get Star weight proportional to row count (capped at 20)
+            if (result.RowCount == 0)
+            {
+                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            }
+            else
+            {
+                var weight = Math.Max(1, Math.Min(result.RowCount, 20));
+                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(new GridLength(weight, GridUnitType.Star)));
+            }
+
+            var container = new Grid
+            {
+                RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(new GridLength(1, GridUnitType.Star)) },
+            };
+            Grid.SetRow(container, gridRow);
+            gridRow++;
+
+            // Header bar
+            var header = new Border { Padding = new Thickness(10, 4) };
+            if (Application.Current?.Resources.TryGetResource("PanelHeaderBackground", null, out var bg) == true && bg is IBrush bgBrush)
+                header.Background = bgBrush;
+
+            var headerGrid = new Grid { ColumnDefinitions = Avalonia.Controls.ColumnDefinitions.Parse("*,Auto") };
+
+            var label = new TextBlock
+            {
+                Text = $"Result {resultNumber} — {result.RowCount:N0} rows",
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            if (Application.Current?.Resources.TryGetResource("TextPrimary", null, out var fg) == true && fg is IBrush fgBrush)
+                label.Foreground = fgBrush;
+            Grid.SetColumn(label, 0);
+            headerGrid.Children.Add(label);
+
+            // Pin button
+            var capturedIdx = i;
+            var capturedLabel = $"Result {resultNumber} ({result.RowCount} rows)";
+            var pinBtn = new Button
+            {
+                Content = "\u25CF",
+                FontSize = 9,
+                Padding = new Thickness(4, 2),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+                Opacity = 0.5,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            if (Application.Current?.Resources.TryGetResource("TextSecondary", null, out var pinFg) == true && pinFg is IBrush pinBrush)
+                pinBtn.Foreground = pinBrush;
+            ToolTip.SetTip(pinBtn, "Pin this result");
+            pinBtn.Click += (_, _) => PinResultTab(capturedIdx, capturedLabel);
+            Grid.SetColumn(pinBtn, 1);
+            headerGrid.Children.Add(pinBtn);
+
+            header.Child = headerGrid;
+            Grid.SetRow(header, 0);
+            container.Children.Add(header);
+
+            // DataGrid for this result
+            var gridFontSize = Application.Current?.Resources.TryGetResource("GridFontSize", null, out var fs) == true && fs is double d ? d : 12;
+            var grid = new DataGrid
+            {
+                IsReadOnly = true,
+                SelectionMode = DataGridSelectionMode.Extended,
+                HeadersVisibility = DataGridHeadersVisibility.All,
+                GridLinesVisibility = DataGridGridLinesVisibility.All,
+                BorderThickness = new Thickness(0),
+                CanUserResizeColumns = true,
+                CanUserSortColumns = true,
+                CanUserReorderColumns = true,
+                FrozenColumnCount = 0,
+                RowHeight = rowHeight,
+                FontSize = gridFontSize,
+                FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
+            };
+
+            BuildColumnsForGrid(grid, result);
+            grid.ItemsSource = result.Rows;
+
+            // Wire events for cell detail + active grid tracking
+            grid.SelectionChanged += (s, _) =>
+            {
+                var clickedGrid = (DataGrid)s!;
+                _activeResultsGrid = clickedGrid;
+                // Clear selection on all other stacked grids
+                foreach (var otherGrid in StackedResultsPanel.GetVisualDescendants().OfType<DataGrid>())
+                {
+                    if (otherGrid != clickedGrid)
+                        otherGrid.SelectedIndex = -1;
+                }
+                UpdateCellDetail();
+            };
+            grid.CellPointerPressed += (s, _) =>
+            {
+                _activeResultsGrid = (DataGrid)s!;
+                Avalonia.Threading.Dispatcher.UIThread.Post(UpdateCellDetail);
+            };
+
+            // Wire LoadingRow for NULL styling + keyboard handler for copy
+            grid.LoadingRow += OnDataGridLoadingRow;
+            grid.AddHandler(KeyDownEvent, OnResultsGridKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+            Grid.SetRow(grid, 1);
+            container.Children.Add(grid);
+
+            StackedResultsPanel.Children.Add(container);
+        }
+
+        // Set active to first grid
+        var firstGrid = StackedResultsPanel.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
+        if (firstGrid != null)
+            _activeResultsGrid = firstGrid;
     }
 
     /// <summary>
@@ -510,19 +727,25 @@ public partial class QueryTabView
     /// Read-only mode: TwoWay + NullDisplayConverter (shows "NULL" for nulls).
     /// Edit mode: TwoWay, no converter (raw values, empty = null).
     /// </summary>
-    private void BuildColumns(QueryResult result)
+    private void BuildColumns(QueryResult result) => BuildColumnsForGrid(ResultsGrid, result);
+
+    /// <summary>Build columns on any DataGrid — the actual single source of truth.</summary>
+    private static void BuildColumnsForGrid(DataGrid grid, QueryResult result)
     {
-        ResultsGrid.Columns.Clear();
-        ResultsGrid.AutoGenerateColumns = false;
-        ResultsGrid.FrozenColumnCount = 0;
+        grid.Columns.Clear();
+        grid.AutoGenerateColumns = false;
+        grid.FrozenColumnCount = 0;
+
+        var fontSize = Application.Current?.Resources.TryGetResource("GridFontSize", null, out var fs) == true && fs is double d ? d : 12.0;
 
         for (int i = 0; i < result.ColumnNames.Length; i++)
         {
-            ResultsGrid.Columns.Add(new DataGridTextColumn
+            grid.Columns.Add(new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
                 Binding = new Binding($"[{i}]", BindingMode.TwoWay),
                 IsReadOnly = true,
+                FontSize = fontSize,
             });
         }
     }
@@ -598,7 +821,9 @@ public partial class QueryTabView
     private void SelectMessagesTab()
     {
         _selectedTabIndex = MessagesTabTag;
+        _isStackedMode = false;
         ResultsGrid.IsVisible = false;
+        StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = true;
         TracePanel.IsVisible = false;
         PlanPanel.IsVisible = false;
@@ -610,7 +835,9 @@ public partial class QueryTabView
     private void SelectTraceTab()
     {
         _selectedTabIndex = TraceTabTag;
+        _isStackedMode = false;
         ResultsGrid.IsVisible = false;
+        StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = true;
         PlanPanel.IsVisible = false;
@@ -622,7 +849,9 @@ public partial class QueryTabView
     private void SelectPlanTab()
     {
         _selectedTabIndex = PlanTabTag;
+        _isStackedMode = false;
         ResultsGrid.IsVisible = false;
+        StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = false;
         PeekPanel.IsVisible = false;
