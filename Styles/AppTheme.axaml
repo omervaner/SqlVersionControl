@@ -122,4 +122,16 @@
     <SolidColorBrush x:Key="ScanProgressBackground" Color="#805c3a00"/>
     <SolidColorBrush x:Key="SummaryStatsBackground" Color="#402980b9"/>
 
+    <!-- === ACTIVITY MONITOR === -->
+    <SolidColorBrush x:Key="ActivityPanelBackground" Color="#22292c33"/>
+    <SolidColorBrush x:Key="ActivityPanelBorder" Color="#3a3d44"/>
+    <SolidColorBrush x:Key="ActivityAlternateRow" Color="#2e3138"/>
+    <SolidColorBrush x:Key="StatusRunning" Color="#83a5d6"/>
+    <SolidColorBrush x:Key="StatusSuspended" Color="#e9c880"/>
+    <SolidColorBrush x:Key="StatusSleeping" Color="#555555"/>
+    <SolidColorBrush x:Key="StatusPillRunningBg" Color="#2083a5d6"/>
+    <SolidColorBrush x:Key="StatusPillSuspendedBg" Color="#20e9c880"/>
+    <SolidColorBrush x:Key="StatusPillSleepingBg" Color="#15666666"/>
+    <SolidColorBrush x:Key="BlockingHighlight" Color="#30bf6b69"/>
+
 </ResourceDictionary>

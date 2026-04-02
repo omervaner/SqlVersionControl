@@ -76,6 +76,99 @@ public partial class DatabaseService
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // ── Activity Monitor — Server Health ─────────────────────────
+
+    public async Task<ServerHealth> GetServerHealthAsync(string connectionString)
+    {
+        var health = new ServerHealth();
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        // CPU % from sys.dm_os_ring_buffers (last sample from SystemHealth session)
+        try
+        {
+            using var cpuCmd = new SqlCommand(@"
+                SELECT TOP 1
+                    record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS SystemIdle,
+                    record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS SqlCpu
+                FROM (
+                    SELECT CAST(record AS xml) AS record
+                    FROM sys.dm_os_ring_buffers
+                    WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR'
+                      AND record LIKE '%<SystemHealth>%'
+                ) AS t
+                ORDER BY record DESC", conn) { CommandTimeout = 10 };
+            using var cpuReader = await cpuCmd.ExecuteReaderAsync();
+            if (await cpuReader.ReadAsync())
+            {
+                var sqlCpu = cpuReader.IsDBNull(1) ? 0 : cpuReader.GetInt32(1);
+                health.CpuPercent = sqlCpu;
+            }
+        }
+        catch { /* ring_buffers may not be accessible */ }
+
+        // Memory from sys.dm_os_process_memory
+        try
+        {
+            using var memCmd = new SqlCommand(@"
+                SELECT
+                    physical_memory_in_use_kb / 1024 AS MemoryUsedMB,
+                    locked_page_allocations_kb / 1024 AS LockedMB
+                FROM sys.dm_os_process_memory", conn) { CommandTimeout = 10 };
+            using var memReader = await memCmd.ExecuteReaderAsync();
+            if (await memReader.ReadAsync())
+            {
+                health.MemoryUsedMB = memReader.IsDBNull(0) ? 0 : memReader.GetInt64(0);
+            }
+        }
+        catch { }
+
+        // Buffer cache hit ratio from performance counters
+        try
+        {
+            using var bufCmd = new SqlCommand(@"
+                SELECT
+                    (SELECT cntr_value FROM sys.dm_os_performance_counters
+                     WHERE object_name LIKE '%Buffer Manager%' AND counter_name = 'Buffer cache hit ratio') * 100.0 /
+                    NULLIF((SELECT cntr_value FROM sys.dm_os_performance_counters
+                     WHERE object_name LIKE '%Buffer Manager%' AND counter_name = 'Buffer cache hit ratio base'), 0)
+                AS HitRatio", conn) { CommandTimeout = 10 };
+            var ratio = await bufCmd.ExecuteScalarAsync();
+            if (ratio != null && ratio != DBNull.Value)
+                health.BufferCacheHitRatio = Convert.ToDouble(ratio);
+        }
+        catch { }
+
+        // TempDB usage
+        try
+        {
+            using var tempCmd = new SqlCommand(@"
+                SELECT
+                    SUM(unallocated_extent_page_count) * 8 / 1024 AS FreeMB,
+                    SUM(total_page_count) * 8 / 1024 AS TotalMB,
+                    SUM(user_object_reserved_page_count + internal_object_reserved_page_count + version_store_reserved_page_count) * 8 / 1024 AS UsedMB
+                FROM tempdb.sys.dm_db_file_space_usage", conn) { CommandTimeout = 10 };
+            using var tempReader = await tempCmd.ExecuteReaderAsync();
+            if (await tempReader.ReadAsync())
+            {
+                health.TempDbUsedMB = tempReader.IsDBNull(2) ? 0 : tempReader.GetInt64(2);
+                health.TempDbTotalMB = tempReader.IsDBNull(1) ? 0 : tempReader.GetInt64(1);
+            }
+        }
+        catch { }
+
+        return health;
+    }
+
+    public class ServerHealth
+    {
+        public int CpuPercent { get; set; }
+        public long MemoryUsedMB { get; set; }
+        public double BufferCacheHitRatio { get; set; }
+        public long TempDbUsedMB { get; set; }
+        public long TempDbTotalMB { get; set; }
+    }
+
     // ── Activity Monitor — Jobs Dashboard ─────────────────────────
 
     public async Task<List<Dictionary<string, object?>>> GetJobsDashboardAsync(string connectionString)

@@ -172,6 +172,20 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isLoading;
 
+    // ── Dashboard Stat Cards ─────────────────────────────────────
+
+    [ObservableProperty] private string _statCpu = "—";
+    [ObservableProperty] private string _statCpuDetail = "—";
+
+    [ObservableProperty] private string _statMemory = "—";
+    [ObservableProperty] private string _statMemoryDetail = "—";
+
+    [ObservableProperty] private string _statBufferCache = "—";
+    [ObservableProperty] private string _statBufferCacheDetail = "—";
+
+    [ObservableProperty] private string _statTempDb = "—";
+    [ObservableProperty] private string _statTempDbDetail = "—";
+
     // ── Raw unfiltered data ───────────────────────────────────────
 
     private List<SessionRow> _allSessions = new();
@@ -284,6 +298,7 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
         ApplySessionFilters();
         UpdateBlockingChains();
+        _ = UpdateStatCardsAsync();
 
         StatusMessage = $"Sessions: {_allSessions.Count} total, {Sessions.Count} shown — {DateTime.Now:HH:mm:ss}";
     }
@@ -437,6 +452,46 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
         HasBlockingChains = true;
         BlockingChainText = string.Join("  |  ", chains);
+    }
+
+    private async Task UpdateStatCardsAsync()
+    {
+        if (string.IsNullOrEmpty(_connectionString)) return;
+
+        try
+        {
+            var health = await _db.GetServerHealthAsync(_connectionString);
+
+            StatCpu = $"{health.CpuPercent}%";
+            StatCpuDetail = health.CpuPercent > 90 ? "critical" : health.CpuPercent > 70 ? "elevated" : "normal";
+
+            StatMemory = health.MemoryUsedMB > 1024
+                ? $"{health.MemoryUsedMB / 1024.0:F1} GB"
+                : $"{health.MemoryUsedMB} MB";
+            StatMemoryDetail = "SQL Server process";
+
+            StatBufferCache = health.BufferCacheHitRatio > 0
+                ? $"{health.BufferCacheHitRatio:F1}%"
+                : "—";
+            StatBufferCacheDetail = health.BufferCacheHitRatio >= 99 ? "healthy"
+                : health.BufferCacheHitRatio >= 95 ? "acceptable"
+                : "low — check memory pressure";
+
+            if (health.TempDbTotalMB > 0)
+            {
+                var pct = (double)health.TempDbUsedMB / health.TempDbTotalMB * 100;
+                StatTempDb = health.TempDbUsedMB > 1024
+                    ? $"{health.TempDbUsedMB / 1024.0:F1} GB"
+                    : $"{health.TempDbUsedMB} MB";
+                StatTempDbDetail = $"{pct:F0}% of {health.TempDbTotalMB} MB";
+            }
+            else
+            {
+                StatTempDb = "—";
+                StatTempDbDetail = "unavailable";
+            }
+        }
+        catch { /* health stats are best-effort */ }
     }
 
     // ── Session Actions ───────────────────────────────────────────
@@ -966,6 +1021,7 @@ public class SessionRow
     public bool IsCurrentSession { get; set; }
 
     public bool IsBlocking => BlockingSession > 0;
+    public string BlockingDisplay => BlockingSession > 0 ? BlockingSession.ToString() : "\u2014";
     public string ElapsedDisplay => ElapsedSeconds > 0 ? JobScheduleFormatter.FormatDuration(ElapsedSeconds) : "";
     public string CurrentStatementPreview => CurrentStatement.Length > 200
         ? CurrentStatement[..200] + "..."

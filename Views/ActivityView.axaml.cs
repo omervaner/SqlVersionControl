@@ -1,6 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using SqlVersionControl.Services;
 using SqlVersionControl.ViewModels;
 
@@ -92,6 +95,31 @@ public partial class ActivityView : UserControl
         BuildSessionContextMenu();
         BuildJobContextMenu();
         BuildJobStepContextMenu();
+
+        // Dynamic card coloring based on health thresholds
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ActivityViewModel.StatCpu))
+            {
+                var text = _viewModel.StatCpu.Replace("%", "");
+                if (int.TryParse(text, out var cpu))
+                {
+                    CpuValueText.Foreground = cpu > 90 ? (GetBrush("ButtonDanger") ?? Brushes.Red)
+                        : cpu > 70 ? (GetBrush("WarningSeverityWarning") ?? Brushes.Orange)
+                        : (GetBrush("ScoreHealthy") ?? Brushes.Green);
+                }
+            }
+            else if (e.PropertyName == nameof(ActivityViewModel.StatBufferCache))
+            {
+                var text = _viewModel.StatBufferCache.Replace("%", "");
+                if (double.TryParse(text, out var ratio))
+                {
+                    BufferCacheValueText.Foreground = ratio < 95 ? (GetBrush("ButtonDanger") ?? Brushes.Red)
+                        : ratio < 99 ? (GetBrush("WarningSeverityWarning") ?? Brushes.Orange)
+                        : (GetBrush("ScoreHealthy") ?? Brushes.Green);
+                }
+            }
+        };
 
         // Color coding for grids
         SessionsGrid.LoadingRow += OnSessionRowLoading;
@@ -342,15 +370,120 @@ public partial class ActivityView : UserControl
 
     private void OnSessionRowLoading(object? sender, DataGridRowEventArgs e)
     {
-        if (e.Row.DataContext is SessionRow session)
+        if (e.Row.DataContext is not SessionRow session) return;
+
+        // Opacity for current session
+        e.Row.Opacity = session.IsCurrentSession ? 0.5 : 1.0;
+
+        // Row background: blocking highlight > alternating rows
+        if (session.BlockingSession > 0)
         {
-            if (session.IsCurrentSession)
-                e.Row.Opacity = 0.5;
-            else if (session.BlockingSession > 0)
-                e.Row.Background = new SolidColorBrush(Color.FromArgb(30, 255, 100, 100));
-            else
-                e.Row.Background = Brushes.Transparent;
+            e.Row.Background = GetBrush("BlockingHighlight") ?? new SolidColorBrush(Color.FromArgb(30, 255, 100, 100));
         }
+        else
+        {
+            var idx = e.Row.GetIndex();
+            e.Row.Background = idx % 2 == 1
+                ? (GetBrush("ActivityAlternateRow") ?? Brushes.Transparent)
+                : Brushes.Transparent;
+        }
+
+        // Defer cell styling to after layout
+        e.Row.LayoutUpdated += OnSessionRowLayout;
+        void OnSessionRowLayout(object? s, EventArgs args)
+        {
+            e.Row.LayoutUpdated -= OnSessionRowLayout;
+            StyleSessionCells(e.Row, session);
+        };
+    }
+
+    private void StyleSessionCells(DataGridRow row, SessionRow session)
+    {
+        var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
+
+        for (int colIdx = 0; colIdx < cells.Count; colIdx++)
+        {
+            var cell = cells[colIdx];
+            var tb = cell.FindDescendantOfType<TextBlock>();
+            if (tb == null) continue;
+
+            // Column indices: 0=SPID, 1=Login, 2=Database, 3=Status, 4=Command,
+            // 5=WaitType, 6=BlockedBy, 7=CPU, 8=Elapsed, 9=Statement
+
+            switch (colIdx)
+            {
+                case 0: // SPID — right-align, semi-bold
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Right;
+                    tb.FontWeight = FontWeight.SemiBold;
+                    tb.Margin = new Thickness(0, 0, 10, 0);
+                    break;
+
+                case 3: // Status — colored pill
+                    var status = session.RequestStatus.ToLower();
+                    IBrush? pillFg = null, pillBg = null;
+                    if (status.Contains("running"))
+                    {
+                        pillFg = GetBrush("StatusRunning");
+                        pillBg = GetBrush("StatusPillRunningBg");
+                    }
+                    else if (status.Contains("suspend"))
+                    {
+                        pillFg = GetBrush("StatusSuspended");
+                        pillBg = GetBrush("StatusPillSuspendedBg");
+                    }
+                    else
+                    {
+                        pillFg = GetBrush("StatusSleeping");
+                        pillBg = GetBrush("StatusPillSleepingBg");
+                    }
+                    if (pillFg != null) tb.Foreground = pillFg;
+                    tb.FontWeight = FontWeight.SemiBold;
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Center;
+                    if (pillBg != null) cell.Background = pillBg;
+                    break;
+
+                case 4: // Command — center-align
+                case 5: // Wait Type — center-align
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Center;
+                    break;
+
+                case 6: // Blocked By — center-align, red if non-zero
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Center;
+                    if (session.BlockingSession > 0)
+                    {
+                        tb.Foreground = GetBrush("ButtonDanger") ?? Brushes.Red;
+                        tb.FontWeight = FontWeight.Bold;
+                    }
+                    else
+                    {
+                        tb.Foreground = GetBrush("TextDisabled") ?? tb.Foreground;
+                    }
+                    break;
+
+                case 7: // CPU — right-align
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Right;
+                    tb.Margin = new Thickness(0, 0, 10, 0);
+                    break;
+
+                case 8: // Elapsed — right-align
+                    tb.TextAlignment = Avalonia.Media.TextAlignment.Right;
+                    tb.Margin = new Thickness(0, 0, 10, 0);
+                    break;
+
+                case 9: // Current Statement — monospace, dimmer
+                    tb.FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace");
+                    tb.Foreground = GetBrush("TextSecondary") ?? tb.Foreground;
+                    tb.Margin = new Thickness(6, 0, 0, 0);
+                    break;
+            }
+        }
+    }
+
+    private static IBrush? GetBrush(string key)
+    {
+        if (Avalonia.Application.Current?.Resources.TryGetResource(key, null, out var res) == true && res is IBrush b)
+            return b;
+        return null;
     }
 
     private void OnJobRowLoading(object? sender, DataGridRowEventArgs e)

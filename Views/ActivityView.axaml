@@ -52,7 +52,7 @@
         <!-- SESSIONS TAB -->
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsSessionsTabActive}"
-              RowDefinitions="Auto,Auto,*">
+              RowDefinitions="Auto,Auto,Auto,*">
 
             <!-- Session Filters -->
             <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="15,6">
@@ -66,35 +66,112 @@
                 </StackPanel>
             </Border>
 
+            <!-- ── Dashboard Stat Cards (2x2) ── -->
+            <Grid Grid.Row="1" Margin="10,8,10,0" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+
+                <!-- Card 1: CPU % -->
+                <Border Grid.Column="0" CornerRadius="6" Padding="14,10"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="SQL CPU" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="CpuValueText" Text="{Binding StatCpu}" FontSize="24" FontWeight="Bold"
+                                   Foreground="{DynamicResource ScoreHealthy}"/>
+                        <TextBlock Text="{Binding StatCpuDetail}" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Memory -->
+                <Border Grid.Column="1" CornerRadius="6" Padding="14,10"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Memory" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatMemory}" FontSize="24" FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentBlue}"/>
+                        <TextBlock Text="{Binding StatMemoryDetail}" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Buffer Cache -->
+                <Border Grid.Column="2" CornerRadius="6" Padding="14,10"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Buffer Cache" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="BufferCacheValueText" Text="{Binding StatBufferCache}" FontSize="24" FontWeight="Bold"
+                                   Foreground="{DynamicResource ScoreHealthy}"/>
+                        <TextBlock Text="{Binding StatBufferCacheDetail}" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 4: TempDB -->
+                <Border Grid.Column="3" CornerRadius="6" Padding="14,10"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="TempDB" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatTempDb}" FontSize="24" FontWeight="Bold"
+                                   Foreground="{DynamicResource WarningSeverityWarning}"/>
+                        <TextBlock Text="{Binding StatTempDbDetail}" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
             <!-- Blocking chain warning -->
-            <Border Grid.Row="1" Background="{DynamicResource ButtonDanger}" Padding="10,4"
-                    IsVisible="{Binding HasBlockingChains}" Opacity="0.9">
-                <TextBlock Text="{Binding BlockingChainText}" FontSize="11"
-                           Foreground="White" TextTrimming="CharacterEllipsis"/>
+            <Border Grid.Row="2" Background="{DynamicResource BlockingHighlight}"
+                    BorderBrush="{DynamicResource ButtonDanger}" BorderThickness="0,0,0,2"
+                    Padding="12,6" Margin="10,8,10,0"
+                    CornerRadius="6"
+                    IsVisible="{Binding HasBlockingChains}">
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0" Text="⚠" FontSize="13" Margin="0,0,8,0"
+                               Foreground="{DynamicResource ButtonDanger}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding BlockingChainText}" FontSize="11"
+                               Foreground="{DynamicResource TextPrimary}"
+                               TextWrapping="Wrap"/>
+                </Grid>
             </Border>
 
-            <!-- Sessions Grid -->
-            <DataGrid Grid.Row="2" x:Name="SessionsGrid"
-                      ItemsSource="{Binding Sessions}"
-                      SelectedItem="{Binding SelectedSession}"
-                      IsReadOnly="True"
-                      GridLinesVisibility="Horizontal"
-                      BorderThickness="0"
-                      CanUserResizeColumns="True"
-                      CanUserSortColumns="True">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="SPID" Binding="{Binding SessionId}" Width="55"/>
-                    <DataGridTextColumn Header="Login" Binding="{Binding Login}" Width="100"/>
-                    <DataGridTextColumn Header="Database" Binding="{Binding Database}" Width="100"/>
-                    <DataGridTextColumn Header="Status" Binding="{Binding RequestStatus}" Width="80"/>
-                    <DataGridTextColumn Header="Command" Binding="{Binding Command}" Width="80"/>
-                    <DataGridTextColumn Header="Wait Type" Binding="{Binding WaitType}" Width="90"/>
-                    <DataGridTextColumn Header="Blocking" Binding="{Binding BlockingSession}" Width="70"/>
-                    <DataGridTextColumn Header="CPU (ms)" Binding="{Binding CpuMs}" Width="70"/>
-                    <DataGridTextColumn Header="Elapsed" Binding="{Binding ElapsedDisplay}" Width="65"/>
-                    <DataGridTextColumn Header="Current Statement" Binding="{Binding CurrentStatementPreview}" Width="*"/>
-                </DataGrid.Columns>
-            </DataGrid>
+            <!-- Sessions Grid — Dashboard Style -->
+            <Border Grid.Row="3" Margin="10,8,10,4"
+                    BorderBrush="{DynamicResource ActivityPanelBorder}"
+                    BorderThickness="1" CornerRadius="6"
+                    Background="{DynamicResource EditorBackground}"
+                    ClipToBounds="True">
+                <DataGrid x:Name="SessionsGrid"
+                          ItemsSource="{Binding Sessions}"
+                          SelectedItem="{Binding SelectedSession}"
+                          IsReadOnly="True"
+                          GridLinesVisibility="Horizontal"
+                          BorderThickness="0"
+                          CanUserResizeColumns="True"
+                          CanUserSortColumns="True"
+                          HeadersVisibility="Column"
+                          HorizontalScrollBarVisibility="Auto">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="SPID" Binding="{Binding SessionId}" MinWidth="55" Width="Auto"/>
+                        <DataGridTextColumn Header="Login" Binding="{Binding Login}" MinWidth="80" Width="Auto"/>
+                        <DataGridTextColumn Header="Database" Binding="{Binding Database}" MinWidth="80" Width="Auto"/>
+                        <DataGridTextColumn Header="Status" Binding="{Binding RequestStatus}" MinWidth="80" Width="Auto"/>
+                        <DataGridTextColumn Header="Command" Binding="{Binding Command}" MinWidth="80" Width="Auto"/>
+                        <DataGridTextColumn Header="Wait Type" Binding="{Binding WaitType}" MinWidth="80" Width="Auto"/>
+                        <DataGridTextColumn Header="Blocked By" Binding="{Binding BlockingDisplay}" MinWidth="75" Width="Auto"/>
+                        <DataGridTextColumn Header="CPU" Binding="{Binding CpuMs}" MinWidth="55" Width="Auto"/>
+                        <DataGridTextColumn Header="Elapsed" Binding="{Binding ElapsedDisplay}" MinWidth="60" Width="Auto"/>
+                        <DataGridTextColumn Header="Current Statement" Binding="{Binding CurrentStatementPreview}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
         </Grid>
 
         <!-- ═══════════════════════════════════════════════════════════ -->
