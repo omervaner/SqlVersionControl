@@ -16,8 +16,10 @@ Phases completed so far — all built, launched, and manually verified:
 | **Phase 1A** | Split `QueryTabView.axaml.cs` | 2,913 → 312 lines (8 files: `.axaml.cs`, `.Editor.cs`, `.Intellisense.cs`, `.EditMode.cs`, `.Export.cs`, `.DragDrop.cs`, `.Peek.cs`, `.Results.cs`) |
 | **Phase 1B** | Split `QueryEditorHost.axaml.cs` | 2,260 → 214 lines (6 files: `.axaml.cs`, `.Tabs.cs`, `.Session.cs`, `.OeRouting.cs`, `.Database.cs`, `.FileOps.cs`) + `HistoryDisplayItem` → `Models/` |
 | **Phase 1C** | Split `DatabaseService.cs` | 2,698 → 559 lines (8 files: `.cs`, `.Schema.cs`, `.VersionHistory.cs`, `.Compare.cs`, `.Jobs.cs`, `.Activity.cs`, `.Index.cs`, `.TableOps.cs`) |
+| **Phase 1D** | Split `MainWindow.axaml.cs` | 1,757 → 310 lines (5 files: `.axaml.cs`, `.Menus.cs`, `.Connection.cs`, `.KeyBindings.cs`, `.StatusBar.cs`) |
+| **Phase 1E** | Split `CompareViewModel.cs` | 1,907 → 570 lines (4 files: `.cs`, `.Scan.cs`, `.Deploy.cs`, `.DataCompare.cs`) |
 
-**Resume from: Phase 1D (MainWindow.axaml.cs)**
+**Phase 1 complete. Resume from: Phase 2 (Small Extractions)**
 
 ---
 
@@ -28,13 +30,13 @@ Phases completed so far — all built, launched, and manually verified:
 | `QueryTabView.axaml.cs` | 108 KB / 2,913 lines | 312 lines | DONE — split into 8 files |
 | `QueryEditorHost.axaml.cs` | 88 KB / 2,260 lines | 214 lines | DONE — split into 6 files |
 | `DatabaseService.cs` | 107 KB / 2,698 lines | 559 lines | DONE — split into 8 files |
-| `MainWindow.axaml.cs` | 69 KB / 1,744 lines | 1,744 lines | TODO |
-| `CompareViewModel.cs` | 61 KB / 1,907 lines | 1,907 lines | TODO |
+| `MainWindow.axaml.cs` | 69 KB / 1,757 lines | 310 lines | DONE — split into 5 files |
+| `CompareViewModel.cs` | 61 KB / 1,907 lines | 570 lines | DONE — split into 4 files |
 | `ObjectExplorerViewModel.cs` | 49 KB / 1,322 lines | 1,322 lines | Deferred — discuss after others |
 
 ---
 
-## Phase 1: Partial Classes (Zero Risk) — 1A/1B/1C DONE, 1D/1E TODO
+## Phase 1: Partial Classes (Zero Risk) — ALL DONE
 
 C# `partial class` lets us split a class across files. Same class, same namespace, same behavior — just organized into files by responsibility. The compiler merges them. **Nothing changes at runtime.**
 
@@ -84,22 +86,24 @@ Also move:
 | `DatabaseService.Index.cs` | Index analysis: unused indexes, missing indexes, duplicate/overlapping indexes | ~15 KB |
 | `DatabaseService.TableOps.cs` | GetTableProperties, GenerateCreateTableScript, AlterSequenceRestart, ToggleTrigger | ~7 KB |
 
-### 1D. Split `MainWindow.axaml.cs` (69 KB)
+### 1D. Split `MainWindow.axaml.cs` (69 KB → 5 files) — DONE
 
 | New File | Contents |
 |----------|----------|
-| `MainWindow.axaml.cs` | Constructor, initialization, core lifecycle |
-| `MainWindow.Menus.cs` | File/Edit/View/Help/Tools menu handlers |
-| `MainWindow.Connection.cs` | Connection dialog flow, offline mode, reconnect, quick-switch buttons |
-| `MainWindow.KeyBindings.cs` | OnKeyDown, all keyboard shortcut routing |
+| `MainWindow.axaml.cs` | Fields, constructor, lifecycle (OnOpened, OnClosing), RestoreWindowPosition, helpers (GetActiveEditor, OpenSearchPanel, etc.) |
+| `MainWindow.Menus.cs` | WireMenuItems(), all File/Edit/View/Tools/Help menu handlers, RebuildRecentFilesMenu, RebuildQueryHistoryMenu, ExportToGit, dialogs |
+| `MainWindow.Connection.cs` | ShowConnectionDialogAsync, ChangeConnectionAsync, reconnect flow, quick-switch buttons, auto-update, crash banner handlers |
+| `MainWindow.KeyBindings.cs` | OnKeyDown (all keyboard shortcut routing), Command Palette (BuildCommandRegistry, Show/Hide/Filter/Execute) |
+| `MainWindow.StatusBar.cs` | UpdateStatusBar, BindActiveQueryTab, OnQueryFlash, GetBrush |
 
-### 1E. Split `CompareViewModel.cs` (61 KB)
+### 1E. Split `CompareViewModel.cs` (61 KB → 4 files) — DONE
 
 | New File | Contents |
 |----------|----------|
-| `CompareViewModel.cs` | Properties, connection management |
-| `CompareViewModel.Scan.cs` | Scan/compare logic |
-| `CompareViewModel.Deploy.cs` | Deploy/batch deploy logic |
+| `CompareViewModel.cs` | Fields, properties, constructor, connection management (Connect/Password/BuildConnectionString), toggle commands, Refresh, Copy, AddConnection, CompareObject class |
+| `CompareViewModel.Scan.cs` | LoadObjectsAsync, LoadCodeObjectsAsync, LoadTableObjectsAsync, ScanForDifferencesAsync, FilterObjects, LoadDefinitionsAsync, GetDefinitionAsync, UpdateDiff |
+| `CompareViewModel.Deploy.cs` | DeployAsync, Deploy2Async, DeployTableAsync, DeployColumnAsync, DeploySelectedAsync (batch), SelectAll/DeselectAll |
+| `CompareViewModel.DataCompare.cs` | CompareDataAsync, ApplyDataFilter, data row selection/fields, DeployDataRowsAsync, DeployFieldAsync, ShowDataDeploySql |
 
 ---
 
@@ -177,9 +181,9 @@ These are things noticed during the audit but would be higher risk or lower prio
 1. ~~**Phase 1A** — Split QueryTabView.axaml.cs → build & test~~ DONE
 2. ~~**Phase 1B** — Split QueryEditorHost.axaml.cs → build & test~~ DONE
 3. ~~**Phase 1C** — Split DatabaseService.cs → build & test~~ DONE
-4. **Phase 1D** — Split MainWindow.axaml.cs → build & test ← RESUME HERE
-5. **Phase 1E** — Split CompareViewModel.cs → build & test
-6. **Phase 2** — Small extractions → build & test
+4. ~~**Phase 1D** — Split MainWindow.axaml.cs → build & test~~ DONE
+5. ~~**Phase 1E** — Split CompareViewModel.cs → build & test~~ DONE
+6. **Phase 2** — Small extractions → build & test ← RESUME HERE
 
 ---
 
