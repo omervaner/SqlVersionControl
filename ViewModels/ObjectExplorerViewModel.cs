@@ -95,6 +95,13 @@ public partial class ObjectExplorerViewModel : ObservableObject
         }
     }
 
+    /// <summary>Add a connection node to OE if not already present.</summary>
+    public void AddConnectionNode(ManagedConnection managed)
+    {
+        if (RootNodes.Any(n => n.ConnectionId == managed.Id)) return;
+        RootNodes.Add(CreateConnectionNode(managed));
+    }
+
     private ObjectExplorerNode CreateConnectionNode(ManagedConnection managed)
     {
         var displayName = managed.Config.Name ?? managed.Config.Server;

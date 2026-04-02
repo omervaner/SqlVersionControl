@@ -230,4 +230,128 @@ public partial class MainWindow
     }
 
     private static Avalonia.Media.IBrush GetBrush(string key) => ThemeManager.GetBrush(key);
+
+    private void InitConnectionTooltip()
+    {
+        ConnectionArea.PointerEntered += (_, _) =>
+        {
+            var tooltip = BuildConnectionsTooltip();
+            ToolTip.SetTip(ConnectionArea, tooltip);
+            ToolTip.SetShowDelay(ConnectionArea, 300);
+        };
+    }
+
+    private object? BuildConnectionsTooltip()
+    {
+        var lines = new List<(string color, string name, string usage)>();
+
+        // Query Editor tabs
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        if (host != null)
+        {
+            // Group tabs by connection profile
+            var tabsByConnection = new Dictionary<string, List<string>>();
+            var tabColors = new Dictionary<string, string>();
+
+            foreach (var vm in GetAllQueryTabViewModels(host))
+            {
+                var key = vm.TabConnectionDisplay;
+                if (key == "Disconnected") continue;
+                if (!tabsByConnection.ContainsKey(key))
+                {
+                    tabsByConnection[key] = new List<string>();
+                    tabColors[key] = vm.TabConnectionColor;
+                }
+                tabsByConnection[key].Add(vm.TabTitle);
+            }
+
+            foreach (var kvp in tabsByConnection)
+                lines.Add((tabColors[kvp.Key], kvp.Key, $"Editor: {string.Join(", ", kvp.Value)}"));
+        }
+
+        // History
+        if (_viewModel.HistoryConnectionProfile != null)
+            lines.Add((_viewModel.HistoryConnectionColor, _viewModel.HistoryConnectionDisplay, "History"));
+
+        // Compare
+        var compareView = this.FindControl<CompareView>("CompareViewControl");
+        if (compareView?.ViewModel != null)
+        {
+            var cvm = compareView.ViewModel;
+            if (cvm.IsSourceConnected && cvm.SelectedSourceConnection != null)
+            {
+                var src = cvm.SelectedSourceConnection;
+                lines.Add((src.Color ?? "#88a1bb", src.Name ?? src.Server, "Compare Source"));
+            }
+            if (cvm.IsTargetConnected && cvm.SelectedTargetConnection != null)
+            {
+                var tgt = cvm.SelectedTargetConnection;
+                lines.Add((tgt.Color ?? "#88a1bb", tgt.Name ?? tgt.Server, "Compare Target"));
+            }
+            if (cvm.IsTarget2Connected && cvm.SelectedTarget2Connection != null)
+            {
+                var tgt2 = cvm.SelectedTarget2Connection;
+                lines.Add((tgt2.Color ?? "#88a1bb", tgt2.Name ?? tgt2.Server, "Compare Target 2"));
+            }
+        }
+
+        // Activity
+        if (_viewModel.ActivityConnectionProfile != null)
+            lines.Add((_viewModel.ActivityConnectionColor, _viewModel.ActivityConnectionDisplay, "Activity"));
+
+        // Trace (show when actively recording)
+        var traceView = this.FindControl<TraceView>("TraceViewControl");
+        if (traceView?.DataContext is ViewModels.TraceViewModel traceVm && traceVm.State == ViewModels.TraceState.Recording)
+            lines.Add(("#88a1bb", "Active Trace", "Trace"));
+
+        if (lines.Count == 0) return "No active connections";
+
+        // Build a styled tooltip panel
+        var panel = new Avalonia.Controls.StackPanel { Spacing = 3, MaxWidth = 600 };
+        panel.Children.Add(new Avalonia.Controls.TextBlock
+        {
+            Text = $"Active Connections ({lines.Count})",
+            FontWeight = Avalonia.Media.FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimary"),
+            Margin = new Avalonia.Thickness(0, 0, 0, 4)
+        });
+
+        foreach (var (color, name, usage) in lines)
+        {
+            var row = new Avalonia.Controls.StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            row.Children.Add(new Avalonia.Controls.Shapes.Ellipse
+            {
+                Width = 7, Height = 7,
+                Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse(color)),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            });
+            row.Children.Add(new Avalonia.Controls.TextBlock
+            {
+                Text = $"{name} — {usage}",
+                FontSize = 11,
+                FontFamily = new Avalonia.Media.FontFamily("Consolas, Menlo, monospace"),
+                Foreground = GetBrush("TextPrimary"),
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            });
+            panel.Children.Add(row);
+        }
+
+        return panel;
+    }
+
+    private static IEnumerable<QueryTabViewModel> GetAllQueryTabViewModels(QueryEditorHost host)
+    {
+        // Access the tab list via reflection-free public API — iterate the tab strip children
+        // QueryEditorHost exposes ActiveTabViewModel but not all tabs. Use the Tabs field.
+        var tabsField = typeof(QueryEditorHost).GetField("_tabs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (tabsField?.GetValue(host) is List<QueryTabView> tabs)
+        {
+            foreach (var tab in tabs)
+            {
+                if (tab.DataContext is QueryTabViewModel vm)
+                    yield return vm;
+            }
+        }
+    }
 }

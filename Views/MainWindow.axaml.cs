@@ -220,6 +220,9 @@ public partial class MainWindow : Window
             });
         };
 
+        // Active connections tooltip on status bar
+        InitConnectionTooltip();
+
         // Wire update bar buttons
         UpdateNowButton.Click += OnUpdateNowClicked;
         UpdateLaterButton.Click += (_, _) => UpdateBar.IsVisible = false;

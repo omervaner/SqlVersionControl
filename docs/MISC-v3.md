@@ -35,15 +35,15 @@ This is the most important of the three because it causes the user to look at wr
 
 ---
 
-### 1D. No "Swap Source ↔ Target" Button
+### 1D. No "Swap Source ↔ Target" Button ✅ DONE
 **What happens**: You accidentally set PROD as Target and DEV as Source. Now you'd have to manually change both dropdowns. Every database comparison tool (SSMS Schema Compare, Redgate, dbForge) has a swap button.
 **Fix**: Add a "⇄" swap button between the Source and Target ConnectionIndicators. One click swaps both connections and re-triggers the scan.
 
-### 1E. Deploy Direction Is Implicit
+### 1E. Deploy Direction Is Implicit ✅ DONE
 **What happens**: The deploy buttons say "Deploy to Target 1" but don't specify *from where*. The arrows on individual rows (→) help, but the bottom bar button doesn't make it explicit. If you've been staring at the screen for a while and lose track of which side is which, you could deploy the wrong direction.
 **Fix**: Keep the button text as-is ("Deploy to Target 1") but add a dynamic tooltip that shows the actual connection names: "Deploy from PROD TestDB → DEV TestDB". The tooltip updates whenever the Source or Target connection changes. This gives full clarity on hover without cluttering the button.
 
-### 1F. Data Compare on Large Tables — No Row Limit Warning
+### 1F. Data Compare on Large Tables — No Row Limit Warning ✅ DONE
 **What happens**: User clicks Data mode and selects a table with 5 million rows. Does it try to load all rows into memory for comparison? There's a Refresh button but no visible row limit.
 **Fix**: Either set a sensible default limit (e.g. TOP 10000 with a message "Showing first 10,000 rows — add WHERE clause for targeted comparison") or prompt before loading: "This table has ~5M rows. Compare first 10,000?"
 
@@ -75,7 +75,7 @@ Implementation: Add an in-memory `List<QueryMessage>` alongside the file log in 
 
 ---
 
-## 5. Status Bar — Active Connections Tooltip
+## 5. Status Bar — Active Connections Tooltip ✅ DONE
 **Where**: MainWindow status bar — the connection area (colored dot + connection name)
 **Problem**: The status bar only shows the primary/main editor connection. But the app can have 5+ active connections at once: multiple editor tabs on different servers, Activity on another, Compare with Source/Target, Trace on yet another. There's no single place to see all active connections at a glance.
 **Fix**: On hover over the status bar connection area, show a rich tooltip listing all active connections:

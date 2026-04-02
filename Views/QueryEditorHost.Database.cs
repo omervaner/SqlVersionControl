@@ -308,6 +308,21 @@ public partial class QueryEditorHost
     }
 
     /// <summary>
+    /// Ensure a specific connection appears in the Object Explorer.
+    /// Adds its node if missing (e.g. connected after startup via quick-switch).
+    /// </summary>
+    public void EnsureConnectionInObjectExplorer(string connectionId)
+    {
+        if (_registry == null || _viewModel == null) return;
+        var managed = _registry.GetById(connectionId);
+        if (managed == null || !managed.IsConnected) return;
+
+        var oe = _viewModel.ObjectExplorer;
+        if (oe.RootNodes.Any(n => n.ConnectionId == connectionId)) return;
+        oe.AddConnectionNode(managed);
+    }
+
+    /// <summary>
     /// Reload databases into Object Explorer and all tabs.
     /// In multi-connection mode, populates OE from registry connections.
     /// In single-connection mode, loads databases as root nodes (legacy).

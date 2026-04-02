@@ -448,13 +448,15 @@
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="8,2" Height="24">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
-                <!-- Connection indicator -->
-                <Ellipse x:Name="ConnectionDot" Grid.Column="0"
-                         Width="8" Height="8" VerticalAlignment="Center"
-                         Fill="{DynamicResource DisconnectedDot}"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                <!-- Connection indicator (with active connections tooltip) -->
+                <StackPanel x:Name="ConnectionArea" Grid.Column="0" Grid.ColumnSpan="2"
+                            Orientation="Horizontal" VerticalAlignment="Stretch"
+                            Background="Transparent">
+                    <Ellipse x:Name="ConnectionDot"
+                             Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{DynamicResource DisconnectedDot}"/>
                     <TextBlock x:Name="ConnectionText"
-                               Text="Disconnected"
+                               Text="Disconnected" Margin="6,0,0,0"
                                Foreground="{DynamicResource TextSecondary}" FontSize="11"
                                VerticalAlignment="Center"/>
                     <Button x:Name="ReconnectNowButton"

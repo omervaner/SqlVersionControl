@@ -341,6 +341,8 @@ public partial class MainWindow
         var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
         if (host != null)
         {
+            // Ensure OE shows this connection (may not be there if it connected after startup)
+            host.EnsureConnectionInObjectExplorer(conn.Id);
             host.AddNewTab(connStr, conn);
         }
 
