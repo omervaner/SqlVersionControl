@@ -151,7 +151,7 @@ public partial class QueryTabView
         catch (OperationCanceledException)
         {
             _viewModel.StatusText = "Export cancelled";
-            try { File.Delete(path); } catch { }
+            try { File.Delete(path); } catch (Exception ex) { AppLogger.LogError("Export.CleanupCancelled", ex); }
         }
         catch (Exception ex)
         {

@@ -41,7 +41,7 @@ public partial class MainWindow
                     var traceService = new TraceService();
                     await traceService.CleanupOrphanedSessionsAsync(dialog.Result.ConnectionString);
                 }
-                catch { }
+                catch (Exception ex) { AppLogger.LogError("Trace.CleanupOrphaned", ex); }
             });
 
             // Refresh trace view connections

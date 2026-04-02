@@ -14,7 +14,7 @@ public class HexToBrushConverter : IValueConverter
             {
                 return new SolidColorBrush(Color.Parse(hex));
             }
-            catch { }
+            catch (Exception ex) { Services.AppLogger.LogError("HexToBrush.Parse", ex); }
         }
         return new SolidColorBrush(Color.Parse("#88a1bb"));
     }

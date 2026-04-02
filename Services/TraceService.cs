@@ -144,7 +144,7 @@ WHERE s.name = '{sessionName.Replace("'", "''")}'
                             $"ALTER EVENT SESSION [{session}] ON SERVER STATE = STOP", conn);
                         await stopCmd.ExecuteNonQueryAsync();
                     }
-                    catch { }
+                    catch (Exception ex) { AppLogger.LogError("Trace.StopOrphanedSession", ex); }
 
                     using var dropCmd = new SqlCommand(
                         $"DROP EVENT SESSION [{session}] ON SERVER", conn);

@@ -389,7 +389,7 @@ public partial class MainWindow : Window
                         var traceService = new TraceService();
                         await traceService.CleanupOrphanedSessionsAsync(settings.ConnectionString);
                     }
-                    catch { }
+                    catch (Exception ex) { AppLogger.LogError("Trace.CleanupOrphaned", ex); }
                 });
 
                 var traceView = this.FindControl<TraceView>("TraceViewControl");

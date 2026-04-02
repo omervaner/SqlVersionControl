@@ -106,7 +106,7 @@ public partial class DatabaseService
             using var seqCmd = new SqlCommand("SELECT COUNT(*) FROM sys.sequences WHERE is_ms_shipped = 0", conn);
             result["Sequences"] = (int)(await seqCmd.ExecuteScalarAsync() ?? 0);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError("Schema.Sequences", ex); }
 
         // Jobs
         try
@@ -114,7 +114,7 @@ public partial class DatabaseService
             using var jobCmd = new SqlCommand("SELECT COUNT(*) FROM msdb.dbo.sysjobs", conn);
             result["Jobs"] = (int)(await jobCmd.ExecuteScalarAsync() ?? 0);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError("Schema.Jobs", ex); }
 
         // User-defined types
         try
@@ -122,7 +122,7 @@ public partial class DatabaseService
             using var typeCmd = new SqlCommand("SELECT COUNT(*) FROM sys.types WHERE is_user_defined = 1", conn);
             result["Types"] = (int)(await typeCmd.ExecuteScalarAsync() ?? 0);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError("Schema.Types", ex); }
 
         // Database triggers
         try
@@ -130,7 +130,7 @@ public partial class DatabaseService
             using var dtCmd = new SqlCommand("SELECT COUNT(*) FROM sys.triggers WHERE parent_class = 0", conn);
             result["Database Triggers"] = (int)(await dtCmd.ExecuteScalarAsync() ?? 0);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError("Schema.DatabaseTriggers", ex); }
 
         return result;
     }
