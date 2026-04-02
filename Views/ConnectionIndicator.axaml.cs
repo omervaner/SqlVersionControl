@@ -114,8 +114,9 @@ public partial class ConnectionIndicator : UserControl
             };
             panel.Children.Add(label);
 
-            // Show connected status
-            if (!managed.IsConnected)
+            // Show connected status (but not for the currently active connection — it may be
+            // connected via a different path like Compare tab's own connection flow)
+            if (!managed.IsConnected && managed.Id != _activeConnectionId)
             {
                 var status = new TextBlock
                 {

@@ -263,6 +263,35 @@ Common resources:
 - `SystemControlForegroundBaseMediumLowBrush` - borders, splitters
 - `SystemControlForegroundBaseMediumBrush` - secondary text
 
+### 5. New Features Go in ViewModels — Not Code-Behind
+
+Historically, most logic ended up in code-behind files (`.axaml.cs`) while ViewModels stayed thin. We're not migrating existing code (too risky, not worth it), but **all new features must follow proper MVVM**:
+
+- **New logic goes in ViewModels**: commands, state management, data operations, service calls.
+- **Code-behind only for pure UI concerns**: focus management, visual tree manipulation, drag-and-drop wiring, things that genuinely can't be done via XAML bindings.
+- **Use `[RelayCommand]` and `[ObservableProperty]`** from CommunityToolkit.Mvvm — don't wire `.Click += lambda` for new features.
+- **Use data bindings** instead of `FindControl<T>()` and direct property sets.
+
+This means over time, the ratio of ViewModel logic to code-behind logic shifts naturally. No big-bang migration, no risk, new code is just cleaner and testable.
+
+```csharp
+// BAD (old pattern — don't do this for NEW features):
+// In SomeView.axaml.cs:
+SomeButton.Click += async (_, _) => {
+    var result = await _db.DoSomethingAsync();
+    StatusLabel.Text = result;
+};
+
+// GOOD (new pattern — all new features like this):
+// In SomeViewModel.cs:
+[RelayCommand]
+private async Task DoSomethingAsync()
+{
+    var result = await _db.DoSomethingAsync();
+    StatusText = result; // [ObservableProperty] bound in XAML
+}
+```
+
 ---
 
 ## Build & Release

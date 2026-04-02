@@ -65,6 +65,12 @@ public partial class MainWindow : Window
         {
             compareView.Initialize(_settings, _registry);
             compareView.ViewModel.DeployRequested += OnDeployRequested;
+            compareView.ViewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(CompareViewModel.IsSourceConnected)
+                    or nameof(CompareViewModel.SelectedSourceConnection))
+                    UpdateStatusBar();
+            };
             compareView.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
             compareView.RefreshTheme();
         }

@@ -305,6 +305,28 @@ public partial class CompareViewModel : ViewModelBase
         }
     }
 
+    private void ClearComparisonResults()
+    {
+        Objects.Clear();
+        _allObjects.Clear();
+        _tableCompareResults.Clear();
+        TableCompareColumns.Clear();
+        SelectedObject = null;
+        SourceCode = "";
+        TargetCode = "";
+        Target2Code = "";
+        DiffModel = null;
+        DiffModel2 = null;
+        CanDeploy = false;
+        CanDeploy2 = false;
+        SourceOnlyCount = 0;
+        TargetOnlyCount = 0;
+        ModifiedCount = 0;
+        IdenticalCount = 0;
+        OnPropertyChanged(nameof(HasSummary));
+        OnPropertyChanged(nameof(HasObjects));
+    }
+
     private async Task ConnectSourceAsync(SavedConnection conn)
     {
         SourceStatus = "Connecting...";
@@ -346,6 +368,7 @@ public partial class CompareViewModel : ViewModelBase
 
     private async Task ConnectTargetAsync(SavedConnection conn)
     {
+        ClearComparisonResults();
         TargetStatus = "Connecting...";
 
         // Check if we need password and don't have it

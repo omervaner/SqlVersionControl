@@ -38,6 +38,21 @@ public partial class MainWindow
                 displayColor = activeTabVm.TabConnectionColor;
                 displayText = activeTabVm.TabConnectionDisplay;
             }
+            else if (isCompare)
+            {
+                var compareView = this.FindControl<CompareView>("CompareViewControl");
+                var sourceConn = compareView?.ViewModel.SelectedSourceConnection;
+                if (sourceConn != null && compareView?.ViewModel.IsSourceConnected == true)
+                {
+                    displayColor = sourceConn.Color ?? "#88a1bb";
+                    displayText = sourceConn.Name ?? sourceConn.Server;
+                }
+                else
+                {
+                    displayColor = _viewModel.ConnectionColor;
+                    displayText = _viewModel.ConnectionDisplay;
+                }
+            }
             else if (isHistory)
             {
                 displayColor = _viewModel.HistoryConnectionColor;

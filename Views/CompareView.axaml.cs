@@ -39,6 +39,7 @@ public partial class CompareView : UserControl
                 var saved = managed.Config;
                 if (!ViewModel.SourceConnections.Contains(saved))
                     ViewModel.SourceConnections.Add(saved);
+                ViewModel.SelectedSourceConnection = null;
                 ViewModel.SelectedSourceConnection = saved;
                 SourceConnectionIndicator.SetActiveConnection(saved);
             };
@@ -47,6 +48,7 @@ public partial class CompareView : UserControl
                 var saved = managed.Config;
                 if (!ViewModel.TargetConnections.Contains(saved))
                     ViewModel.TargetConnections.Add(saved);
+                ViewModel.SelectedTargetConnection = null;
                 ViewModel.SelectedTargetConnection = saved;
                 TargetConnectionIndicator.SetActiveConnection(saved);
             };
@@ -55,6 +57,7 @@ public partial class CompareView : UserControl
                 var saved = managed.Config;
                 if (!ViewModel.Target2Connections.Contains(saved))
                     ViewModel.Target2Connections.Add(saved);
+                ViewModel.SelectedTarget2Connection = null;
                 ViewModel.SelectedTarget2Connection = saved;
                 Target2ConnectionIndicator.SetActiveConnection(saved);
             };
@@ -90,11 +93,16 @@ public partial class CompareView : UserControl
             ViewModel.IsDataCompareMode = true;
         };
 
-        // Rebuild data compare grid columns when result changes
+        // Rebuild data compare grid columns when result changes, and sync indicators
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(CompareViewModel.DataCompareResult))
                 RebuildDataCompareColumns();
+
+            // Sync Source indicator for the silent auto-connect case
+            // (when source connects automatically after target, the user didn't click the indicator)
+            if (e.PropertyName == nameof(CompareViewModel.IsSourceConnected) && ViewModel.IsSourceConnected)
+                SourceConnectionIndicator.SetActiveConnection(ViewModel.SelectedSourceConnection);
         };
     }
 
