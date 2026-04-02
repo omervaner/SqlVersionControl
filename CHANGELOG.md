@@ -4,6 +4,27 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.8.1 (April 2026)
+
+### Refactoring (Phase 1D/1E/2/3)
+- Split MainWindow.axaml.cs (1,757 → 310 lines, 5 partial files: Menus, Connection, KeyBindings, StatusBar)
+- Split CompareViewModel.cs (1,907 → 570 lines, 4 partial files: Scan, Deploy, DataCompare)
+- Split ObjectExplorerViewModel.cs (1,574 → 510 lines, 4 partial files: NodeExpand, ContextMenu, Dependencies)
+- Extracted shared helpers: TimeFormatter, ThemeManager.GetBrush, SqlNameParser
+- Empty catch audit: added AppLogger.LogError to 9 silent catch blocks across 6 files
+
+### Compare Tab UX Fixes
+- Connection indicator sync: Source indicator now updates when auto-connected silently after target
+- Stale data prevention: comparison results clear immediately when target connection changes
+- Connection stripe: now reflects the Compare tab's source connection color/name when on Compare tab
+- Flyout fix: active connection no longer shows "(disconnected)" in indicator dropdown
+- First-select fix: selecting a restored connection now always triggers comparison load
+- Empty state overlay: dark semi-transparent overlay with contextual message when connections incomplete
+- Code mode: target panel shows "Select a target" overlay while source definition remains visible
+- Click-to-resolve: clicking an object in code mode now resolves its Identical/Modified status icon immediately
+
+---
+
 ## v2.7.0 (April 2026)
 
 ### Refactoring

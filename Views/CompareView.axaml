@@ -145,6 +145,16 @@
 
             <!-- Detail Panel Container -->
             <Grid Grid.Column="2">
+                <!-- Overlay when connections are incomplete (tables/data modes) -->
+                <Border IsVisible="{Binding ShowCompareOverlay}" ZIndex="1"
+                        Background="#80000000" IsHitTestVisible="False">
+                    <TextBlock Text="{Binding CompareOverlayMessage}"
+                               Foreground="#cccccc"
+                               FontSize="14" TextWrapping="Wrap" TextAlignment="Center"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               MaxWidth="300"/>
+                </Border>
+
                 <!-- Table Structure Comparison Grid (table mode, not data mode) -->
                 <Grid RowDefinitions="Auto,*" IsVisible="{Binding IsTableCompareMode}">
                     <Border Grid.Row="0" Padding="10" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
@@ -320,6 +330,19 @@
                     <!-- Side by Side Diff (single) -->
                     <views:DiffView Grid.Row="1" DiffModel="{Binding DiffModel}" x:Name="CompareDiffView"
                                     IsVisible="{Binding !ShowTarget2}"/>
+
+                    <!-- Target-side overlay in code mode when target not connected -->
+                    <Grid Grid.Row="0" Grid.RowSpan="2" ColumnDefinitions="*,*"
+                          IsVisible="{Binding !IsTargetConnected}" IsHitTestVisible="False"
+                          ZIndex="1">
+                        <Border Grid.Column="1" Background="#80000000">
+                            <TextBlock Text="Select a target database to compare against"
+                                       Foreground="#cccccc"
+                                       FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       MaxWidth="200"/>
+                        </Border>
+                    </Grid>
 
                     <!-- Three-way diff view (when Target2 shown) -->
                     <Grid Grid.Row="0" Grid.RowSpan="2" RowDefinitions="*,Auto,*" IsVisible="{Binding ShowTarget2}">

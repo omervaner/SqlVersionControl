@@ -73,6 +73,18 @@ public partial class CompareViewModel : ViewModelBase
 
     public string ToggleTarget2ButtonText => ShowTarget2 ? "- Target 2" : "+ Target 2";
 
+    partial void OnIsSourceConnectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CompareOverlayMessage));
+        OnPropertyChanged(nameof(ShowCompareOverlay));
+    }
+
+    partial void OnIsTargetConnectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CompareOverlayMessage));
+        OnPropertyChanged(nameof(ShowCompareOverlay));
+    }
+
     partial void OnShowTarget2Changed(bool value)
     {
         OnPropertyChanged(nameof(ToggleTarget2ButtonText));
@@ -91,6 +103,9 @@ public partial class CompareViewModel : ViewModelBase
         {
             _ = LoadObjectsAsync();
         }
+
+        OnPropertyChanged(nameof(CompareOverlayMessage));
+        OnPropertyChanged(nameof(ShowCompareOverlay));
     }
 
     private string _target2ConnectionString = "";
@@ -208,6 +223,23 @@ public partial class CompareViewModel : ViewModelBase
     private int _selectedCount;
 
     public bool HasSelection => SelectedCount > 0;
+
+    // Overlay message for comparison area when not ready
+    public string? CompareOverlayMessage
+    {
+        get
+        {
+            if (!IsSourceConnected && !IsTargetConnected)
+                return "Select a source and target database to compare";
+            if (IsSourceConnected && !IsTargetConnected)
+                return IsTableCompareMode ? "Select a target database to compare against" : null;
+            if (!IsSourceConnected && IsTargetConnected)
+                return "Select a source database to compare from";
+            return null; // Both connected — no overlay
+        }
+    }
+
+    public bool ShowCompareOverlay => CompareOverlayMessage != null;
 
     // Event for deployment confirmation
     public event Func<string, string, Task<bool>>? DeployRequested;

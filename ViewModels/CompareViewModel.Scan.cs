@@ -428,6 +428,17 @@ public partial class CompareViewModel
         UpdateDiff();
         UpdateDiff2();
 
+        // Resolve status icon when both sides have been fetched
+        if (IsSourceConnected && IsTargetConnected && !obj.HasBeenCompared)
+        {
+            obj.SourceDefinition = SourceCode;
+            obj.TargetDefinition = TargetCode;
+            obj.HasBeenCompared = true;
+            var sourceNorm = NormalizeForComparison(SourceCode);
+            var targetNorm = NormalizeForComparison(TargetCode);
+            obj.Status = sourceNorm == targetNorm ? "Identical" : "Modified";
+        }
+
         // Can deploy if source has code and target is connected
         CanDeploy = IsTargetConnected && !string.IsNullOrEmpty(SourceCode);
 
