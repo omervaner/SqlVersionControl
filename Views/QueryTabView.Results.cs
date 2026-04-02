@@ -710,6 +710,7 @@ public partial class QueryTabView
                 CanUserReorderColumns = true,
                 FrozenColumnCount = 0,
                 RowHeight = rowHeight,
+                ColumnHeaderHeight = rowHeight + 4,
                 FontSize = gridFontSize,
                 FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
             };

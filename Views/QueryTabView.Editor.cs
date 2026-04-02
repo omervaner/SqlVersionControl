@@ -24,6 +24,7 @@ public partial class QueryTabView
     {
         var height = _settings?.Settings.GridRowHeight ?? 22;
         ResultsGrid.RowHeight = height;
+        ResultsGrid.ColumnHeaderHeight = height + 4;
     }
 
     private void UpdateEmptyStateText()
