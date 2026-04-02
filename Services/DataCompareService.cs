@@ -69,7 +69,7 @@ public class DataCompareService
     /// <summary>
     /// Fetch all rows from a table (up to maxRows). Returns column names and row data.
     /// </summary>
-    public async Task<(string[] ColumnNames, List<object?[]> Rows)> FetchRowsAsync(
+    public async Task<(string[] ColumnNames, List<object?[]> Rows, bool WasTruncated)> FetchRowsAsync(
         string connectionString, string schema, string table, int maxRows = 1000)
     {
         var safeSchema = schema.Replace("]", "]]");
@@ -78,7 +78,8 @@ public class DataCompareService
         using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
-        var sql = $"SELECT TOP ({maxRows}) * FROM [{safeSchema}].[{safeName}] WITH (NOLOCK)";
+        // Fetch one extra row to detect truncation
+        var sql = $"SELECT TOP ({maxRows + 1}) * FROM [{safeSchema}].[{safeName}] WITH (NOLOCK)";
         using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 60 };
         using var reader = await cmd.ExecuteReaderAsync();
 
@@ -96,7 +97,11 @@ public class DataCompareService
             rows.Add(values);
         }
 
-        return (columnNames, rows);
+        var wasTruncated = rows.Count > maxRows;
+        if (wasTruncated)
+            rows.RemoveAt(rows.Count - 1); // Drop the extra detection row
+
+        return (columnNames, rows, wasTruncated);
     }
 
     /// <summary>
@@ -127,8 +132,8 @@ public class DataCompareService
 
         var identityColumn = identityTask.Result;
 
-        var (sourceColumns, sourceRows) = sourceTask.Result;
-        var (targetColumns, targetRows) = targetTask.Result;
+        var (sourceColumns, sourceRows, sourceTruncated) = sourceTask.Result;
+        var (targetColumns, targetRows, targetTruncated) = targetTask.Result;
 
         // Use source column names as canonical (they should match)
         var columnNames = sourceColumns.Length > 0 ? sourceColumns : targetColumns;
@@ -157,6 +162,8 @@ public class DataCompareService
             PkColumnNames = pkColumns.ToArray(),
             PkColumnIndices = pkIndices,
             HasIdentityColumn = identityColumn != null,
+            WasTruncated = sourceTruncated || targetTruncated,
+            MaxRows = maxRows,
             Rows = []
         };
 

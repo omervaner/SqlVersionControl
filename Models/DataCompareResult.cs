@@ -23,13 +23,27 @@ public class DataCompareResult
     public bool HasIdentityColumn { get; set; }
     public List<DataCompareRow> Rows { get; set; } = [];
 
+    /// <summary>True if either source or target hit the row limit (more data exists).</summary>
+    public bool WasTruncated { get; set; }
+
+    /// <summary>The max rows limit that was applied.</summary>
+    public int MaxRows { get; set; }
+
     public int IdenticalCount => Rows.Count(r => r.Status == DataRowStatus.Identical);
     public int DifferentCount => Rows.Count(r => r.Status == DataRowStatus.Different);
     public int SourceOnlyCount => Rows.Count(r => r.Status == DataRowStatus.SourceOnly);
     public int TargetOnlyCount => Rows.Count(r => r.Status == DataRowStatus.TargetOnly);
 
-    public string Summary =>
-        $"{Rows.Count} rows compared: {IdenticalCount} identical, {DifferentCount} different, {SourceOnlyCount} source only, {TargetOnlyCount} target only";
+    public string Summary
+    {
+        get
+        {
+            var s = $"{Rows.Count} rows compared: {IdenticalCount} identical, {DifferentCount} different, {SourceOnlyCount} source only, {TargetOnlyCount} target only";
+            if (WasTruncated)
+                s += $" (showing first {MaxRows:N0} rows)";
+            return s;
+        }
+    }
 }
 
 /// <summary>

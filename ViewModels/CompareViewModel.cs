@@ -315,6 +315,8 @@ public partial class CompareViewModel : ViewModelBase
 
     partial void OnSelectedSourceConnectionChanged(SavedConnection? value)
     {
+        OnPropertyChanged(nameof(DeployTooltip));
+        OnPropertyChanged(nameof(Deploy2Tooltip));
         if (value != null)
         {
             _ = ConnectSourceAsync(value);
@@ -323,6 +325,7 @@ public partial class CompareViewModel : ViewModelBase
 
     partial void OnSelectedTargetConnectionChanged(SavedConnection? value)
     {
+        OnPropertyChanged(nameof(DeployTooltip));
         if (value != null)
         {
             _ = ConnectTargetAsync(value);
@@ -331,6 +334,7 @@ public partial class CompareViewModel : ViewModelBase
 
     partial void OnSelectedTarget2ConnectionChanged(SavedConnection? value)
     {
+        OnPropertyChanged(nameof(Deploy2Tooltip));
         if (value != null)
         {
             _ = ConnectTarget2Async(value);
@@ -583,6 +587,30 @@ public partial class CompareViewModel : ViewModelBase
     private string GetTargetDescription(SavedConnection? conn)
         => IsProductionConnection(conn) ? "PRODUCTION" : conn?.Server ?? "target";
 
+    /// <summary>Dynamic tooltip for Deploy to Target 1 button.</summary>
+    public string DeployTooltip
+    {
+        get
+        {
+            var src = SelectedSourceConnection;
+            var tgt = SelectedTargetConnection;
+            if (src == null || tgt == null) return "Deploy selected object to target";
+            return $"Deploy from {src.Name ?? src.Server}/{src.Database} → {tgt.Name ?? tgt.Server}/{tgt.Database}";
+        }
+    }
+
+    /// <summary>Dynamic tooltip for Deploy to Target 2 button.</summary>
+    public string Deploy2Tooltip
+    {
+        get
+        {
+            var src = SelectedSourceConnection;
+            var tgt2 = SelectedTarget2Connection;
+            if (src == null || tgt2 == null) return "Deploy selected object to target 2";
+            return $"Deploy from {src.Name ?? src.Server}/{src.Database} → {tgt2.Name ?? tgt2.Server}/{tgt2.Database}";
+        }
+    }
+
     private string? _lastConnectionError;
 
     private async Task<bool> TestConnectionAsync(string connectionString)
@@ -606,6 +634,58 @@ public partial class CompareViewModel : ViewModelBase
     {
         IsTableCompareMode = !IsTableCompareMode;
     }
+
+    /// <summary>
+    /// Swap Source ↔ Target connections and re-trigger scan.
+    /// Uses backing fields to avoid triggering OnChanged reconnect handlers.
+    /// </summary>
+    [RelayCommand]
+    #pragma warning disable MVVMTK0034 // Backing field access is intentional — avoids triggering OnChanged reconnect
+    private async Task SwapConnectionsAsync()
+    {
+        // Swap backing fields to avoid triggering OnChanged handlers (which would reconnect)
+        var tempConn = _selectedSourceConnection;
+        var tempConnStr = _sourceConnectionString;
+        var tempStatus = _sourceStatus;
+        var tempConnected = _isSourceConnected;
+
+        _selectedSourceConnection = _selectedTargetConnection;
+        _sourceConnectionString = _targetConnectionString;
+        _sourceStatus = _targetStatus;
+        _isSourceConnected = _isTargetConnected;
+
+        _selectedTargetConnection = tempConn;
+        _targetConnectionString = tempConnStr;
+        _targetStatus = tempStatus;
+        _isTargetConnected = tempConnected;
+
+        // Notify UI of all swapped properties
+        OnPropertyChanged(nameof(SelectedSourceConnection));
+        OnPropertyChanged(nameof(SelectedTargetConnection));
+        OnPropertyChanged(nameof(SourceStatus));
+        OnPropertyChanged(nameof(TargetStatus));
+        OnPropertyChanged(nameof(IsSourceConnected));
+        OnPropertyChanged(nameof(IsTargetConnected));
+        OnPropertyChanged(nameof(CompareOverlayMessage));
+        OnPropertyChanged(nameof(ShowCompareOverlay));
+        OnPropertyChanged(nameof(DeployTooltip));
+        OnPropertyChanged(nameof(Deploy2Tooltip));
+
+        // Notify the ConnectionSwapped event so the view can update indicators + stripe
+        ConnectionSwapped?.Invoke();
+
+        SaveLastComparison();
+
+        // Re-scan if both sides are connected
+        if (IsSourceConnected && IsTargetConnected)
+        {
+            await LoadObjectsAsync();
+        }
+    }
+    #pragma warning restore MVVMTK0034
+
+    /// <summary>Raised after a swap so the view can sync indicators and stripe.</summary>
+    public event Action? ConnectionSwapped;
 
     [RelayCommand]
     private void ToggleTarget2()

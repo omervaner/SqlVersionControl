@@ -104,6 +104,13 @@ public partial class CompareView : UserControl
             if (e.PropertyName == nameof(CompareViewModel.IsSourceConnected) && ViewModel.IsSourceConnected)
                 SourceConnectionIndicator.SetActiveConnection(ViewModel.SelectedSourceConnection);
         };
+
+        // Sync both indicators after a swap
+        ViewModel.ConnectionSwapped += () =>
+        {
+            SourceConnectionIndicator.SetActiveConnection(ViewModel.SelectedSourceConnection);
+            TargetConnectionIndicator.SetActiveConnection(ViewModel.SelectedTargetConnection);
+        };
     }
 
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)

@@ -8,15 +8,20 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- Top Bar Row 1: Source, Search, Target1 -->
         <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="10,8">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                 <!-- Source Connection -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Source:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <views:ConnectionIndicator x:Name="SourceConnectionIndicator"/>
                 </StackPanel>
 
+                <!-- Swap Source ↔ Target -->
+                <Button Grid.Column="1" Content="⇄" Command="{Binding SwapConnectionsCommand}"
+                        Classes="btn-secondary" Padding="6,3" FontSize="13" Margin="6,0,0,0"
+                        ToolTip.Tip="Swap Source ↔ Target" VerticalAlignment="Center"/>
+
                 <!-- Mode Toggle + Search (centered) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                     <Border Background="{DynamicResource SidebarBackground}" CornerRadius="4" Padding="2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
                             <RadioButton x:Name="ModeCode" GroupName="CompareMode" IsChecked="True"
@@ -33,7 +38,7 @@
                 </StackPanel>
 
                 <!-- Target1 Connection + T2 Toggle -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Target 1:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <views:ConnectionIndicator x:Name="TargetConnectionIndicator"/>
                     <Button Command="{Binding ToggleTarget2Command}"
@@ -430,6 +435,7 @@
                         Classes="btn-primary"
                         Command="{Binding DeployCommand}"
                         IsEnabled="{Binding CanDeploy}"
+                        ToolTip.Tip="{Binding DeployTooltip}"
                         Margin="0,0,10,0"
                         IsVisible="{Binding !IsDataCompareMode}"/>
 
@@ -437,6 +443,7 @@
                         Classes="btn-toggle"
                         Command="{Binding Deploy2Command}"
                         IsEnabled="{Binding CanDeploy2}"
+                        ToolTip.Tip="{Binding Deploy2Tooltip}"
                         IsVisible="{Binding ShowTarget2}"/>
             </Grid>
         </Border>
