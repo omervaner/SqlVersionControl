@@ -32,7 +32,7 @@ Phases completed so far — all built, launched, and manually verified:
 | `DatabaseService.cs` | 107 KB / 2,698 lines | 559 lines | DONE — split into 8 files |
 | `MainWindow.axaml.cs` | 69 KB / 1,757 lines | 310 lines | DONE — split into 5 files |
 | `CompareViewModel.cs` | 61 KB / 1,907 lines | 570 lines | DONE — split into 4 files |
-| `ObjectExplorerViewModel.cs` | 49 KB / 1,322 lines | 1,322 lines | Deferred — discuss after others |
+| `ObjectExplorerViewModel.cs` | 49 KB / 1,574 lines | 510 lines | DONE — split into 4 files |
 
 ---
 
@@ -166,13 +166,23 @@ public static (string Schema, string Name) ParseSchemaQualifiedName(string objec
 
 ---
 
-## Phase 3: Future Consideration (Not Now)
+## Phase 3: Future Consideration
 
-These are things noticed during the audit but would be higher risk or lower priority:
+### 3A. Empty catch audit — DONE
+Added `AppLogger.LogError()` to 9 silent `catch { }` blocks across 6 files (DatabaseService.Schema, TraceService, HexToBrushConverter, QueryTabView.Export, MainWindow.Connection, MainWindow.axaml.cs). Left alone: transaction rollbacks, cmd.Cancel, CrashLogger, AppLogger (legitimately silent).
 
-- **QueryEditorHostViewModel is 492 bytes** while its code-behind is 88KB. Eventually some of the tab management and OE routing logic could migrate to the ViewModel for better testability. But this is a major refactor — not for today.
-- **Empty catch blocks** — there are several `catch { }` that silently swallow errors. These should at minimum get `AppLogger.Log()` calls, but that's a separate sweep.
-- **Event subscription cleanup** — many `.Click +=` and `.PropertyChanged +=` lambda subscriptions that never get unsubscribed. Not causing visible bugs, but technically a memory concern for long sessions.
+### 3 OE. Split `ObjectExplorerViewModel.cs` (49 KB → 4 files) — DONE
+
+| New File | Contents |
+|----------|----------|
+| `ObjectExplorerViewModel.cs` | Fields, properties, events, constructor, registry wiring, connection resolution, filter/search |
+| `ObjectExplorerViewModel.NodeExpand.cs` | WireNode, OnNodeExpandedAsync, RefreshNode, all Load*ChildrenAsync, AddChildrenInBatchesAsync, FormatColumnType |
+| `ObjectExplorerViewModel.ContextMenu.cs` | All scripting/context menu actions (SelectTop100, ViewDefinition, ScriptAs*, EditData, job steps/history) |
+| `ObjectExplorerViewModel.Dependencies.cs` | ShowDependenciesAsync, BackFromDependencies, MapObjectType |
+
+### Remaining (deferred):
+- **QueryEditorHostViewModel migration** — ViewModel is 492 bytes while code-behind is 88KB. Moving logic to ViewModel would improve testability but is a major refactor.
+- **Event subscription cleanup** — Lambda subscriptions that never get unsubscribed. Low priority for a desktop app that gets restarted regularly.
 
 ---
 
@@ -183,7 +193,9 @@ These are things noticed during the audit but would be higher risk or lower prio
 3. ~~**Phase 1C** — Split DatabaseService.cs → build & test~~ DONE
 4. ~~**Phase 1D** — Split MainWindow.axaml.cs → build & test~~ DONE
 5. ~~**Phase 1E** — Split CompareViewModel.cs → build & test~~ DONE
-6. **Phase 2** — Small extractions → build & test ← RESUME HERE
+6. ~~**Phase 2** — Small extractions → build & test~~ DONE
+7. ~~**Phase 3A** — Empty catch audit → build & test~~ DONE
+8. ~~**Phase 3 OE** — Split ObjectExplorerViewModel → build & test~~ DONE
 
 ---
 
