@@ -539,6 +539,11 @@ public partial class QueryTabView
             ShowStackedResults();
             StackedResultsPanel.IsVisible = true;
             UpdateTabHighlight(index);
+
+            // Disable edit mode in stacked view
+            EditModeButton.IsEnabled = false;
+            EditModeButton.Opacity = 0.4;
+            ToolTip.SetTip(EditModeButton, "Edit mode is not available for multi-result queries");
             return;
         }
 
@@ -571,6 +576,11 @@ public partial class QueryTabView
         EmptyState.IsVisible = false;
         CellDetailPanel.IsVisible = false;
         StackedResultsPanel.IsVisible = false;
+
+        // Restore edit button state (may have been disabled for stacked mode)
+        EditModeButton.IsEnabled = true;
+        EditModeButton.Opacity = 1.0;
+        ToolTip.SetTip(EditModeButton, "Edit result rows");
 
         if (result.Error != null)
         {
