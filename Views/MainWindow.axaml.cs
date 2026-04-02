@@ -209,6 +209,17 @@ public partial class MainWindow : Window
         CompareTab.Click += (_, _) => UpdateStatusBar();
         ActivityTab.Click += (_, _) => UpdateStatusBar();
 
+        // Error counter in status bar
+        ErrorCountButton.Click += (_, _) => OpenSessionErrorsInNewTab();
+        AppLogger.ErrorLogged += count =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                ErrorCountText.Text = count.ToString();
+                ErrorCountButton.IsVisible = true;
+            });
+        };
+
         // Wire update bar buttons
         UpdateNowButton.Click += OnUpdateNowClicked;
         UpdateLaterButton.Click += (_, _) => UpdateBar.IsVisible = false;
@@ -421,6 +432,48 @@ public partial class MainWindow : Window
     {
         var dialog = new AboutDialog();
         await dialog.ShowDialog(this);
+    }
+
+    private void OpenLogInNewTab()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        if (host == null) return;
+
+        string content;
+        try
+        {
+            content = File.Exists(AppLogger.FilePath)
+                ? File.ReadAllText(AppLogger.FilePath)
+                : "-- No log file found";
+        }
+        catch (Exception ex)
+        {
+            content = $"-- Could not read log file: {ex.Message}";
+        }
+
+        // Switch to Editor tab and open log content
+        QueryEditorTab.IsChecked = true;
+        UpdateStatusBar();
+        host.OpenScriptInNewTab($"-- Log file: {AppLogger.FilePath}\n-- Opened: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n{content}");
+        if (host.ActiveTabViewModel != null)
+            host.ActiveTabViewModel.TabTitle = "Log";
+    }
+
+    private void OpenSessionErrorsInNewTab()
+    {
+        var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+        if (host == null) return;
+
+        var errors = AppLogger.GetSessionErrors();
+        var content = string.IsNullOrEmpty(errors)
+            ? "-- No errors this session"
+            : $"-- Session errors ({AppLogger.SessionErrorCount})\n-- {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n{errors}";
+
+        QueryEditorTab.IsChecked = true;
+        UpdateStatusBar();
+        host.OpenScriptInNewTab(content);
+        if (host.ActiveTabViewModel != null)
+            host.ActiveTabViewModel.TabTitle = "Errors";
     }
 
     private void RefreshDiffViews()

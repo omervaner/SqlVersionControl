@@ -58,7 +58,7 @@ This is the most important of the three because it causes the user to look at wr
 
 ---
 
-## 4. In-App Error Log Viewer
+## 4. In-App Error Log Viewer ✅ DONE
 
 Now that all silent catch blocks are logged via `AppLogger`, users should be able to see these logs without finding the file on disk. Two levels:
 

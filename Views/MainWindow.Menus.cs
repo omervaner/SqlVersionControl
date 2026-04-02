@@ -90,6 +90,7 @@ public partial class MainWindow
         MenuIndexAnalysis.Click += async (_, _) => await ShowIndexAnalysisDialogAsync();
 
         // Help menu
+        MenuViewLog.Click += (_, _) => OpenLogInNewTab();
         MenuKeyboardShortcuts.Click += async (_, _) => await new KeyboardShortcutsDialog().ShowDialog(this);
         MenuAbout.Click += async (_, _) => await ShowAboutDialogAsync();
         MenuCheckUpdates.Click += async (_, _) =>

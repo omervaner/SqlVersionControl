@@ -8,6 +8,18 @@ public static class AppLogger
     private const long MaxLogSize = 5 * 1024 * 1024; // 5MB
     private static readonly object Lock = new();
 
+    /// <summary>In-memory error log for the current session.</summary>
+    private static readonly List<string> SessionErrors = new();
+
+    /// <summary>Full path to the log file, for opening in UI.</summary>
+    public static string FilePath => LogPath;
+
+    /// <summary>Number of errors logged this session.</summary>
+    public static int SessionErrorCount { get { lock (Lock) return SessionErrors.Count; } }
+
+    /// <summary>Raised when a new error is logged (carries the new total count).</summary>
+    public static event Action<int>? ErrorLogged;
+
     static AppLogger()
     {
         try
@@ -38,7 +50,16 @@ public static class AppLogger
 
     public static void LogError(string context, Exception ex)
     {
+        var entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERROR [{context}] {ex.Message}";
+        lock (Lock) SessionErrors.Add(entry);
         Log($"ERROR [{context}] {ex.Message}");
+        try { ErrorLogged?.Invoke(SessionErrorCount); } catch { }
+    }
+
+    /// <summary>Get all session errors as a single string.</summary>
+    public static string GetSessionErrors()
+    {
+        lock (Lock) return string.Join(Environment.NewLine, SessionErrors);
     }
 
     private static void RotateIfNeeded()

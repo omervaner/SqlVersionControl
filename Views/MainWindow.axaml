@@ -77,6 +77,7 @@
                         </MenuItem>
                         <MenuItem Header="_Help">
                             <MenuItem x:Name="MenuKeyboardShortcuts" Header="Keyboard Shortcuts"/>
+                            <MenuItem x:Name="MenuViewLog" Header="View Log File"/>
                             <Separator/>
                             <MenuItem x:Name="MenuAbout" Header="About..."/>
                             <MenuItem x:Name="MenuCheckUpdates" Header="Check for Updates..."/>
@@ -446,7 +447,7 @@
         <Border Grid.Row="4" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="8,2" Height="24">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <!-- Connection indicator -->
                 <Ellipse x:Name="ConnectionDot" Grid.Column="0"
                          Width="8" Height="8" VerticalAlignment="Center"
@@ -470,29 +471,42 @@
                             Orientation="Horizontal" Spacing="4" Margin="12,0"
                             VerticalAlignment="Center"/>
 
+                <!-- Error counter (hidden when 0) -->
+                <Button x:Name="ErrorCountButton" Grid.Column="3"
+                        Background="Transparent" BorderThickness="0" Padding="4,1"
+                        MinHeight="0" MinWidth="0" Cursor="Hand" Margin="8,0,0,0"
+                        IsVisible="False" VerticalAlignment="Center"
+                        ToolTip.Tip="Click to view session errors">
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <TextBlock Text="⚠" Foreground="#e74c3c" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ErrorCountText" Text="0" Foreground="#e74c3c" FontSize="11"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
                 <!-- Separator -->
-                <TextBlock Grid.Column="3" Text="|" Margin="12,0"
+                <TextBlock Grid.Column="4" Text="|" Margin="12,0"
                            Foreground="{DynamicResource TextDisabled}" FontSize="11"
                            VerticalAlignment="Center"
                            x:Name="QueryStatusSeparator" IsVisible="False"/>
 
                 <!-- Query timing (permanent, only on Query Editor tab) -->
-                <TextBlock x:Name="QueryStatusText" Grid.Column="4"
+                <TextBlock x:Name="QueryStatusText" Grid.Column="5"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" IsVisible="False"/>
 
                 <!-- Query flash message (colored, fades after 3s) -->
-                <TextBlock x:Name="QueryFlashText" Grid.Column="5"
+                <TextBlock x:Name="QueryFlashText" Grid.Column="6"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
 
                 <!-- Cursor position (Ln/Col) -->
-                <TextBlock x:Name="CursorPositionText" Grid.Column="6"
+                <TextBlock x:Name="CursorPositionText" Grid.Column="7"
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
 
                 <!-- General status (right-aligned) -->
-                <TextBlock Grid.Column="7" Text="{Binding StatusMessage}"
+                <TextBlock Grid.Column="8" Text="{Binding StatusMessage}"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center"/>
             </Grid>
