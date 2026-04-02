@@ -108,6 +108,9 @@ public partial class SettingsDialog : Window
         // Max connections
         MaxConnectionsUpDown.Value = s.MaxRecentConnections;
 
+        // Connection timeout
+        ConnectionTimeoutUpDown.Value = s.ConnectionTimeout;
+
         // Data folder
         var folder = s.DataFolderPath ?? SettingsService.DefaultDataFolder;
         DataFolderTextBox.Text = folder;
@@ -144,6 +147,9 @@ public partial class SettingsDialog : Window
 
         // Max connections
         s.MaxRecentConnections = (int)(MaxConnectionsUpDown.Value ?? 5);
+
+        // Connection timeout
+        s.ConnectionTimeout = (int)(ConnectionTimeoutUpDown.Value ?? 5);
 
         // Data folder (null means use default)
         var folder = DataFolderTextBox.Text;

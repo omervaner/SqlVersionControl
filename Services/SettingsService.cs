@@ -196,6 +196,7 @@ public class AppSettings
     public string? DataFolderPath { get; set; }
     public bool AutocompleteEnabled { get; set; } = true;
     public int GridRowHeight { get; set; } = 22;
+    public int ConnectionTimeout { get; set; } = 5;
 
     // DDL Audit Source (Version History)
     public string? DdlAuditServer { get; set; }

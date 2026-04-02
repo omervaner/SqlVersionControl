@@ -320,7 +320,7 @@ public partial class ConnectionManagerViewModel : ViewModelBase
             DataSource = EditServer.Trim(),
             InitialCatalog = EditDatabase.Trim(),
             TrustServerCertificate = EditTrustServerCertificate,
-            ConnectTimeout = 5,
+            ConnectTimeout = _registry.ConnectionTimeout,
         };
 
         if (EditUseWindowsAuth)

@@ -635,8 +635,10 @@ public partial class QueryEditorHost
             var tabsToClose = _tabs.Where(t => t != targetTab).ToList();
             foreach (var tab in tabsToClose)
             {
+                var countBefore = _tabs.Count;
                 var idx = _tabs.IndexOf(tab);
                 if (idx >= 0) await CloseTabAsync(idx);
+                if (_tabs.Count == countBefore) break; // User cancelled — abort batch
             }
         };
         menu.Items.Add(closeOthers);
@@ -649,8 +651,10 @@ public partial class QueryEditorHost
             var tabsToClose = _tabs.Skip(idx + 1).ToList();
             foreach (var tab in tabsToClose)
             {
+                var countBefore = _tabs.Count;
                 var i = _tabs.IndexOf(tab);
                 if (i >= 0) await CloseTabAsync(i);
+                if (_tabs.Count == countBefore) break; // User cancelled — abort batch
             }
         };
         menu.Items.Add(closeRight);
@@ -661,8 +665,10 @@ public partial class QueryEditorHost
             var tabsToClose = _tabs.ToList();
             foreach (var tab in tabsToClose)
             {
+                var countBefore = _tabs.Count;
                 var idx = _tabs.IndexOf(tab);
                 if (idx >= 0) await CloseTabAsync(idx);
+                if (_tabs.Count == countBefore) break; // User cancelled — abort batch
             }
         };
         menu.Items.Add(closeAll);

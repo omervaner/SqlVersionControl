@@ -15,7 +15,7 @@ public partial class QueryTabView
 {
     private bool _resultsMaximized;
 
-    private static readonly NullDisplayConverter _nullTextConverter = new();
+    // NULL styling is handled by OnDataGridLoadingRow → StyleNullCells (text + italic + foreground)
     private static IBrush? _nullForeground;
 
     /// <summary>Fired when user wants to open a source query in a new tab.</summary>

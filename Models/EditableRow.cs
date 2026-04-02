@@ -144,6 +144,38 @@ public class EditableRow : INotifyPropertyChanged, IEditableObject
         }
     }
 
+    // ── Validation ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns error messages for cells where a string value doesn't match the column type.
+    /// </summary>
+    public List<(int ColumnIndex, string Error)> GetTypeErrors()
+    {
+        var errors = new List<(int, string)>();
+        var indicesToCheck = State == RowEditState.New
+            ? Enumerable.Range(0, Values.Length).ToList()
+            : GetChangedColumnIndices();
+
+        foreach (var i in indicesToCheck)
+        {
+            if (i >= ColumnTypes.Length) continue;
+            if (Values[i] is string s && !string.IsNullOrEmpty(s) && ColumnTypes[i] != typeof(string))
+            {
+                errors.Add((i, $"'{s}' is not a valid {GetFriendlyTypeName(ColumnTypes[i])}"));
+            }
+        }
+        return errors;
+    }
+
+    private static string GetFriendlyTypeName(Type t) =>
+        t == typeof(int) || t == typeof(long) || t == typeof(short) || t == typeof(byte) ? "integer" :
+        t == typeof(decimal) || t == typeof(double) || t == typeof(float) ? "number" :
+        t == typeof(bool) ? "boolean" :
+        t == typeof(DateTime) || t == typeof(DateTimeOffset) ? "date/time" :
+        t == typeof(Guid) ? "GUID" :
+        t == typeof(TimeSpan) ? "time span" :
+        t.Name.ToLower();
+
     // ── Type Conversion ─────────────────────────────────────────────
 
     private static object? ConvertValue(string text, Type targetType)

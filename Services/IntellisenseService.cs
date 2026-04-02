@@ -384,6 +384,4 @@ public class IntellisenseService
         return text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string Tail(string s, int n) =>
-        s.Length <= n ? s.ReplaceLineEndings(" ") : s[^n..].ReplaceLineEndings(" ");
 }

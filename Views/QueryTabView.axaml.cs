@@ -107,6 +107,7 @@ public partial class QueryTabView : UserControl
             RebuildResultTabs();
             SelectMessagesTab();
         };
+        vm.ShowMessagesRequested += () => SelectMessagesTab();
 
         // Edit mode state changes
         vm.EditModeChanged += OnEditModeChanged;

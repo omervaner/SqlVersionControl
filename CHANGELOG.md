@@ -4,6 +4,37 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.9.1 (April 2026)
+
+### Bug Fixes (Code Audit)
+- **Fixed shared connection string mutation**: Query tabs no longer fall back to shared `DatabaseService._connectionString`; all execution paths use explicit per-tab connection strings, eliminating wrong-server risk
+- **Fixed stale trace tab**: `RunQueryAsync` now clears `TraceEvents`, preventing stale trace data from appearing after a normal query follows a trace query
+- **Fixed Close Others/Close All batch cancel**: Cancelling one tab's unsaved-changes prompt now aborts the entire batch close operation
+- **Fixed silent edit-mode type errors**: Pre-Apply validation catches type mismatches (e.g. string in INT column) with friendly messages, auto-switches to Messages tab with details
+- **Removed dead code**: Unused `NullDisplayConverter` field in QueryTabView, unused `Tail()` method in IntellisenseService
+
+### Enhancements
+- **Configurable connection timeout**: New "Connection Timeout" setting in Settings dialog (1–120 seconds, default 5) replaces hardcoded 5-second timeout in ConnectionSettings, ConnectionRegistry, and ConnectionManager
+
+---
+
+## v2.9.0 (April 2026)
+
+### Stacked Results (SSMS-style)
+- Multiple result sets render in resizable stacked grids with individual headers
+- Pin-to-tab support for result sets
+- Cell copy and grid density in stacked mode
+- Edit button disabled in stacked mode with tooltip explanation
+
+### UX Improvements
+- Compare tab: swap button, deploy tooltips, row limit warning
+- Help → View Log File menu item + status bar error counter
+- Active connections tooltip, Object Explorer quick-switch fix
+- Object Explorer scrollbar fix, schema DataReader fix
+- Grid density: cell height down to 14px with auto-scaling font, compact column headers
+
+---
+
 ## v2.8.1 (April 2026)
 
 ### Refactoring (Phase 1D/1E/2/3)

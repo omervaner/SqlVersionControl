@@ -52,6 +52,8 @@ public class ConnectionRegistry
     /// </summary>
     public event Func<SavedConnection, Task<string?>>? PasswordRequested;
 
+    public int ConnectionTimeout => _settings.Settings.ConnectionTimeout;
+
     public ConnectionRegistry(SettingsService settings)
     {
         _settings = settings;
@@ -172,7 +174,7 @@ public class ConnectionRegistry
             DataSource = config.Server,
             InitialCatalog = config.Database,
             TrustServerCertificate = config.TrustServerCertificate,
-            ConnectTimeout = 5,
+            ConnectTimeout = _settings.Settings.ConnectionTimeout,
             Pooling = true,
             MinPoolSize = 0,
             MaxPoolSize = 10

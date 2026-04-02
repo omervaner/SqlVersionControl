@@ -10,6 +10,7 @@ public class ConnectionSettings
     public string Password { get; set; } = "";
     public bool UseWindowsAuth { get; set; }
     public bool TrustServerCertificate { get; set; } = true;
+    public int ConnectTimeout { get; set; } = 5;
 
     public string ConnectionString
     {
@@ -20,7 +21,7 @@ public class ConnectionSettings
                 DataSource = Server,
                 InitialCatalog = Database,
                 TrustServerCertificate = TrustServerCertificate,
-                ConnectTimeout = 5,
+                ConnectTimeout = ConnectTimeout,
                 Pooling = true,
                 MinPoolSize = 0,
                 MaxPoolSize = 10

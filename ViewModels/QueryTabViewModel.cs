@@ -160,6 +160,9 @@ public partial class QueryTabViewModel : ObservableObject
     /// <summary>Fired when results panel should expand to show messages (DML with no result sets).</summary>
     public event Action? ExpandResultsForMessages;
 
+    /// <summary>Fired when the Messages tab should be selected (e.g. validation errors).</summary>
+    public event Action? ShowMessagesRequested;
+
     // ── Per-Tab Connection (v1.6.0) ─────────────────────────────────
 
     /// <summary>Full connection string for this tab's server (null = use global).</summary>
@@ -190,9 +193,7 @@ public partial class QueryTabViewModel : ObservableObject
 
     public string GetEffectiveConnectionString(string database)
     {
-        if (TabConnectionString != null)
-            return DatabaseService.BuildConnectionString(TabConnectionString, database);
-        return _db.GetConnectionStringForDatabase(database);
+        return DatabaseService.BuildConnectionString(TabConnectionString!, database);
     }
 
     public QueryTabViewModel(DatabaseService db)
@@ -304,6 +305,7 @@ public partial class QueryTabViewModel : ObservableObject
         QueryStatusText = "Running...";
         Services.CrashLogger.LastQuery = sql;
         Results.Clear();
+        TraceEvents.Clear();
         Messages = [];
         _cts = new CancellationTokenSource();
         _lastExecutedSql = sql;
@@ -312,9 +314,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         try
         {
-            var execResult = TabConnectionString != null
-                ? await _db.ExecuteQueryAsync(TabConnectionString, SelectedDatabase!, sql, _cts.Token)
-                : await _db.ExecuteQueryAsync(SelectedDatabase!, sql, _cts.Token);
+            var execResult = await _db.ExecuteQueryAsync(TabConnectionString!, SelectedDatabase!, sql, _cts.Token);
             sw.Stop();
             StopElapsedTimer(); // Stop before setting final status to prevent race with timer's Post
 
@@ -488,7 +488,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         // Check permission first
         var traceService = new TraceService();
-        var serverConnStr = TabConnectionString ?? _db.GetConnectionStringForDatabase("master");
+        var serverConnStr = TabConnectionString!;
         if (!await traceService.HasTracePermissionAsync(serverConnStr))
         {
             SetMessageText("Trace requires ALTER ANY EVENT SESSION permission on the server.");
@@ -616,11 +616,8 @@ public partial class QueryTabViewModel : ObservableObject
         try
         {
             // Fetch PK columns
-            _editPkColumns = TabConnectionString != null
-                ? await _editService.GetPrimaryKeyColumnsFromConnAsync(
-                      GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName)
-                : await _editService.GetPrimaryKeyColumnsAsync(
-                      SelectedDatabase!, _editTableSchema, _editTableName);
+            _editPkColumns = await _editService.GetPrimaryKeyColumnsFromConnAsync(
+                      GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName);
 
             if (_editPkColumns.Count == 0)
             {
@@ -799,14 +796,31 @@ public partial class QueryTabViewModel : ObservableObject
             return;
         }
 
+        // Validate types before sending to the database
+        var validationErrors = new List<string>();
+        for (int r = 0; r < pendingRows.Count; r++)
+        {
+            var row = pendingRows[r];
+            foreach (var (colIdx, error) in row.GetTypeErrors())
+            {
+                var colName = colIdx < EditColumnNames.Length ? EditColumnNames[colIdx] : $"Column {colIdx}";
+                validationErrors.Add($"Row {r + 1}, [{colName}]: {error}");
+            }
+        }
+        if (validationErrors.Count > 0)
+        {
+            var summary = string.Join("\n", validationErrors);
+            SetMessageText($"Type errors — fix these before applying:\n\n{summary}");
+            StatusText = $"× {validationErrors.Count} type error{(validationErrors.Count == 1 ? "" : "s")}";
+            QueryFlash?.Invoke($"\u2717 {validationErrors.Count} type error{(validationErrors.Count == 1 ? "" : "s")}", QueryStatusSeverity.Error);
+            ShowMessagesRequested?.Invoke();
+            return;
+        }
+
         StatusText = "Applying changes...";
 
-        var (success, message) = TabConnectionString != null
-            ? await _editService.ApplyChangesFromConnAsync(
+        var (success, message) = await _editService.ApplyChangesFromConnAsync(
                   GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName,
-                  EditColumnNames, _editPkColumns, pendingRows)
-            : await _editService.ApplyChangesAsync(
-                  SelectedDatabase!, _editTableSchema, _editTableName,
                   EditColumnNames, _editPkColumns, pendingRows);
 
         if (success)

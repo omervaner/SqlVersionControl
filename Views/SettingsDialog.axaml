@@ -90,6 +90,17 @@
                 </StackPanel>
             </StackPanel>
 
+            <!-- Connection Timeout -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Connection Timeout" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <NumericUpDown x:Name="ConnectionTimeoutUpDown"
+                                   Minimum="1" Maximum="120" Value="5"
+                                   Width="100" FormatString="0" Increment="1"/>
+                    <TextBlock Text="seconds" VerticalAlignment="Center" Foreground="{DynamicResource TextDisabled}"/>
+                </StackPanel>
+            </StackPanel>
+
             <!-- Data Folder -->
             <StackPanel Spacing="8">
                 <TextBlock Text="Data Folder" FontWeight="SemiBold"/>

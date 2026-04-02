@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.9.0 (April 2026)
+## PROJECT STATUS: v2.9.1 (April 2026)
 
-Stacked results (SSMS-style): multiple result sets render in resizable stacked grids with pin-to-tab. Compare tab: swap button, deploy tooltips, row limit warning. In-app error log viewer, active connections tooltip, OE scrollbar, schema DataReader fix. Grid density: cell height down to 14px with auto-scaling font.
+Code audit fixes: eliminated shared connection string mutation (wrong-server risk), stale trace tab, batch-close cancel bug, silent edit-mode type errors. Configurable connection timeout setting. Dead code cleanup.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
