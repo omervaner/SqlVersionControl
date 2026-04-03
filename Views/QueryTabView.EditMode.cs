@@ -215,27 +215,33 @@ public partial class QueryTabView
             return;
         }
 
-        // Single-cell copy: Cmd/Ctrl+C copies just the focused cell value (not the whole row)
+        // Cell copy: Cmd/Ctrl+C copies the focused column value from all selected rows
         if (ctrl && !shift && e.Key == Key.C)
         {
             var grid = _activeResultsGrid;
-            if (grid.CurrentColumn != null && grid.SelectedItem != null)
+            if (grid.CurrentColumn != null && grid.SelectedItems != null && grid.SelectedItems.Count > 0)
             {
                 var colIndex = grid.Columns.IndexOf(grid.CurrentColumn);
                 if (colIndex >= 0)
                 {
-                    object? cellValue = null;
-                    if (grid.SelectedItem is object?[] row && colIndex < row.Length)
-                        cellValue = row[colIndex];
-                    else if (grid.SelectedItem is EditableRow editRow)
-                        cellValue = editRow[colIndex];
+                    var values = new System.Text.StringBuilder();
+                    foreach (var item in grid.SelectedItems)
+                    {
+                        object? cellValue = null;
+                        if (item is object?[] row && colIndex < row.Length)
+                            cellValue = row[colIndex];
+                        else if (item is EditableRow editRow)
+                            cellValue = editRow[colIndex];
 
-                    var text = cellValue == null || cellValue == DBNull.Value ? "" : cellValue.ToString() ?? "";
+                        if (values.Length > 0) values.AppendLine();
+                        values.Append(cellValue == null || cellValue == DBNull.Value ? "" : cellValue.ToString() ?? "");
+                    }
+
                     var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
                     if (clipboard != null)
                     {
                         e.Handled = true;
-                        await clipboard.SetTextAsync(text);
+                        await clipboard.SetTextAsync(values.ToString());
                         return;
                     }
                 }
