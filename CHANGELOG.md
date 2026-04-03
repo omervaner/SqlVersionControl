@@ -4,6 +4,24 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.11.0 (April 2026)
+
+### Jobs Tab — Visual Overhaul
+- **Dashboard stat cards**: 4 KPI tiles — Total Jobs, Failed (24h) in red, Running Now in blue, Disabled in gray — click any card to filter the grid by that category (toggle on/off)
+- **Split enabled/disabled grids**: Enabled jobs in the main grid (what you monitor), disabled jobs in a collapsible section below ("69 disabled jobs ▸"), collapsed by default with max 200px when expanded
+- **Compact detail panel**: Bottom overlay with draggable resize handle (100–500px), doesn't affect grid layout. General tab as property inspector: Name + Category + Enabled on one row, Description below, Save button
+- **Grid density**: 11px font matching query results, tighter row height for 20+ visible rows
+- **Merged toolbar**: Filters and action buttons (Start/Stop/Enable-Disable) in a single row
+
+### Query Results — Multi-Cell Copy
+- **Cmd/Ctrl+C copies column values from all selected rows**: Shift+Click to select a range of rows, then Cmd+C copies the focused column's value from every selected row (newline-separated), not just the last clicked cell
+
+### Bug Fixes
+- **Fixed Activity tab dark theme**: Alternating row backgrounds moved to XAML styles with DynamicResource, fixing washed-out rows in dark mode caused by Avalonia's built-in row styling overriding code-behind brushes
+- **Fixed Enable/Disable job crash**: Confirm dialog accessed `Children[2]` but the grid only had 2 children when `detail` was null — now uses `Children.OfType<StackPanel>().First()` for safe lookup
+
+---
+
 ## v2.10.0 (April 2026)
 
 ### Activity Tab — Dashboard Overhaul

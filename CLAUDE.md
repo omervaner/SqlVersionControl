@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.10.0 (April 2026)
+## PROJECT STATUS: v2.11.0 (April 2026)
 
-Activity tab dashboard overhaul: server health stat cards (CPU %, Memory, Buffer Cache, TempDB) from real DMVs, status pills, blocking chain tree walk, failed jobs alert badge. MISC-v4: one-click copy result set, smart reconnect after sleep, elapsed time in tab titles. Code audit: connection safety, edit validation, batch close cancel, configurable timeout.
+Jobs tab visual overhaul: dashboard stat cards (Total, Failed 24h, Running, Disabled) with click-to-filter, split enabled/disabled grids with collapsible disabled section, compact detail panel as bottom overlay with drag-resize handle. Multi-cell copy (Cmd+C copies focused column from all selected rows). Activity tab dark theme fix for alternating rows. Enable/Disable job crash fix.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 

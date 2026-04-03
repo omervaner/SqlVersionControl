@@ -48,9 +48,21 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private ObservableCollection<string> _sessionDatabases = new() { "(All)" };
 
-    // Jobs
+    // Jobs (split into enabled/disabled)
     [ObservableProperty]
     private ObservableCollection<JobRow> _jobs = new();
+
+    [ObservableProperty]
+    private ObservableCollection<JobRow> _enabledJobs = new();
+
+    [ObservableProperty]
+    private ObservableCollection<JobRow> _disabledJobs = new();
+
+    [ObservableProperty]
+    private bool _isDisabledJobsExpanded;
+
+    [ObservableProperty]
+    private string _disabledJobsHeaderText = "Disabled jobs";
 
     [ObservableProperty]
     private JobRow? _selectedJob;
@@ -185,6 +197,14 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] private string _statTempDb = "—";
     [ObservableProperty] private string _statTempDbDetail = "—";
+
+    // ── Job Dashboard Cards ─────────────────────────────────────
+
+    [ObservableProperty] private string _statTotalJobs = "0";
+    [ObservableProperty] private string _statFailedJobs = "0";
+    [ObservableProperty] private string _statRunningJobs = "0";
+    [ObservableProperty] private string _statDisabledJobs = "0";
+    [ObservableProperty] private bool _hasRunningJobs;
 
     // ── Failed Jobs Alert ────────────────────────────────────────
 
@@ -352,7 +372,23 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
         ApplyJobFilters();
         UpdateFailedJobsAlert();
+        UpdateJobStatCards();
         StatusMessage = $"Jobs: {_allJobs.Count} total, {Jobs.Count} shown — {DateTime.Now:HH:mm:ss}";
+    }
+
+    private void UpdateJobStatCards()
+    {
+        StatTotalJobs = _allJobs.Count.ToString();
+
+        var cutoff = DateTime.Now.AddHours(-24);
+        var failed = _allJobs.Count(j => j.LastRunOutcome == "Failed" && j.LastRunDate.HasValue && j.LastRunDate.Value > cutoff);
+        StatFailedJobs = failed.ToString();
+
+        var running = _allJobs.Count(j => j.CurrentStatus == "Executing");
+        StatRunningJobs = running.ToString();
+        HasRunningJobs = running > 0;
+
+        StatDisabledJobs = _allJobs.Count(j => !j.IsEnabled).ToString();
     }
 
     private void UpdateFailedJobsAlert()
@@ -388,6 +424,38 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
     partial void OnJobOutcomeFilterChanged(string value) => ApplyJobFilters();
     partial void OnJobCategoryFilterChanged(string value) => ApplyJobFilters();
     partial void OnShowOnlyRunningChanged(bool value) => ApplyJobFilters();
+
+    [RelayCommand]
+    private void FilterByAllJobs()
+    {
+        JobEnabledFilter = "All";
+        JobOutcomeFilter = "All";
+        ShowOnlyRunning = false;
+    }
+
+    [RelayCommand]
+    private void FilterByFailedJobs()
+    {
+        JobEnabledFilter = "All";
+        JobOutcomeFilter = JobOutcomeFilter == "Failed only" ? "All" : "Failed only";
+        ShowOnlyRunning = false;
+    }
+
+    [RelayCommand]
+    private void FilterByRunningJobs()
+    {
+        JobEnabledFilter = "All";
+        JobOutcomeFilter = "All";
+        ShowOnlyRunning = !ShowOnlyRunning;
+    }
+
+    [RelayCommand]
+    private void FilterByDisabledJobs()
+    {
+        JobOutcomeFilter = "All";
+        ShowOnlyRunning = false;
+        JobEnabledFilter = JobEnabledFilter == "Disabled only" ? "All" : "Disabled only";
+    }
 
     private void ApplySessionFilters()
     {
@@ -439,10 +507,22 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
         if (ShowOnlyRunning)
             filtered = filtered.Where(j => j.CurrentStatus == "Executing");
 
+        var all = filtered.ToList();
+        var enabled = all.Where(j => j.IsEnabled).ToList();
+        var disabled = all.Where(j => !j.IsEnabled).ToList();
+
         Dispatcher.UIThread.Post(() =>
         {
             Jobs.Clear();
-            foreach (var j in filtered) Jobs.Add(j);
+            foreach (var j in all) Jobs.Add(j);
+
+            EnabledJobs.Clear();
+            foreach (var j in enabled) EnabledJobs.Add(j);
+
+            DisabledJobs.Clear();
+            foreach (var j in disabled) DisabledJobs.Add(j);
+
+            DisabledJobsHeaderText = $"{disabled.Count} disabled jobs";
         });
     }
 

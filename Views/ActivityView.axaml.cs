@@ -12,6 +12,9 @@ namespace SqlVersionControl.Views;
 public partial class ActivityView : UserControl
 {
     private ActivityViewModel? _viewModel;
+    private bool _isDetailResizing;
+    private double _detailResizeStartY;
+    private double _detailResizeStartHeight;
 
     public ActivityView()
     {
@@ -135,14 +138,33 @@ public partial class ActivityView : UserControl
         // Color coding for grids
         SessionsGrid.LoadingRow += OnSessionRowLoading;
         JobsGrid.LoadingRow += OnJobRowLoading;
+        DisabledJobsGrid.LoadingRow += OnJobRowLoading;
         JobHistoryGrid.LoadingRow += OnJobHistoryRowLoading;
+
+        // Card click filters
+        CardTotalJobs.PointerPressed += (_, _) => _viewModel.FilterByAllJobsCommand.Execute(null);
+        CardFailedJobs.PointerPressed += (_, _) => _viewModel.FilterByFailedJobsCommand.Execute(null);
+        CardRunningJobs.PointerPressed += (_, _) => _viewModel.FilterByRunningJobsCommand.Execute(null);
+        CardDisabledJobs.PointerPressed += (_, _) => _viewModel.FilterByDisabledJobsCommand.Execute(null);
+
+        // Disabled jobs collapsible header
+        DisabledJobsHeader.PointerPressed += (_, _) =>
+        {
+            _viewModel.IsDisabledJobsExpanded = !_viewModel.IsDisabledJobsExpanded;
+            DisabledJobsArrow.Text = _viewModel.IsDisabledJobsExpanded ? "▾" : "▸";
+        };
+
+        // Detail panel resize handle (drag to change height)
+        JobDetailResizeHandle.PointerPressed += OnDetailResizePressed;
+        JobDetailResizeHandle.PointerMoved += OnDetailResizeMoved;
+        JobDetailResizeHandle.PointerReleased += OnDetailResizeReleased;
 
         // Theme changes
         ThemeManager.ThemeChanged += () =>
         {
-            // Force grid refresh on theme change
             SessionsGrid.InvalidateVisual();
             JobsGrid.InvalidateVisual();
+            DisabledJobsGrid.InvalidateVisual();
         };
     }
 
@@ -201,6 +223,20 @@ public partial class ActivityView : UserControl
         menu.Items.Add(toggleItem);
 
         JobsGrid.ContextMenu = menu;
+
+        // Clone for disabled grid
+        var menu2 = new ContextMenu();
+        var startItem2 = new MenuItem { Header = "Start Job" };
+        startItem2.Click += async (_, _) => await ConfirmAndStartJobAsync();
+        menu2.Items.Add(startItem2);
+        var stopItem2 = new MenuItem { Header = "Stop Job" };
+        stopItem2.Click += async (_, _) => await ConfirmAndStopJobAsync();
+        menu2.Items.Add(stopItem2);
+        menu2.Items.Add(new Separator());
+        var toggleItem2 = new MenuItem { Header = "Enable/Disable" };
+        toggleItem2.Click += async (_, _) => await ConfirmAndToggleJobAsync();
+        menu2.Items.Add(toggleItem2);
+        DisabledJobsGrid.ContextMenu = menu2;
     }
 
     private void BuildJobStepContextMenu()
@@ -517,6 +553,33 @@ public partial class ActivityView : UserControl
                 _ => Brushes.Transparent
             };
         }
+    }
+
+    // ── Detail Panel Resize ──────────────────────────────────────
+
+    private void OnDetailResizePressed(object? sender, PointerPressedEventArgs e)
+    {
+        _isDetailResizing = true;
+        _detailResizeStartY = e.GetPosition(this).Y;
+        _detailResizeStartHeight = JobDetailPanel.Height;
+        e.Pointer.Capture(JobDetailResizeHandle);
+        e.Handled = true;
+    }
+
+    private void OnDetailResizeMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isDetailResizing) return;
+        var delta = _detailResizeStartY - e.GetPosition(this).Y;
+        var newHeight = Math.Clamp(_detailResizeStartHeight + delta, 100, 500);
+        JobDetailPanel.Height = newHeight;
+        e.Handled = true;
+    }
+
+    private void OnDetailResizeReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _isDetailResizing = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
     }
 
     // ── Misc Events ───────────────────────────────────────────────

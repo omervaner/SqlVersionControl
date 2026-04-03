@@ -186,36 +186,98 @@
         <!-- JOBS TAB -->
         <!-- ═══════════════════════════════════════════════════════════ -->
         <Grid Grid.Row="1" Grid.RowSpan="2" IsVisible="{Binding IsJobsTabActive}"
-              RowDefinitions="Auto,Auto,Auto,*,Auto,200">
+              RowDefinitions="Auto,Auto,Auto,*">
 
-            <!-- Job Filters -->
+            <!-- Row 0: Filters + Action Buttons (merged into one bar) -->
             <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="15,6">
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <TextBox Text="{Binding JobSearchText}" Watermark="Search job name..."
-                             Width="180" FontSize="11"/>
-                    <ComboBox x:Name="EnabledFilterCombo" MinWidth="110" FontSize="11"
-                              SelectedIndex="0">
-                        <ComboBoxItem Content="All"/>
-                        <ComboBoxItem Content="Enabled only"/>
-                        <ComboBoxItem Content="Disabled only"/>
-                    </ComboBox>
-                    <ComboBox x:Name="OutcomeFilterCombo" MinWidth="120" FontSize="11"
-                              SelectedIndex="0">
-                        <ComboBoxItem Content="All outcomes"/>
-                        <ComboBoxItem Content="Failed only"/>
-                        <ComboBoxItem Content="Succeeded only"/>
-                    </ComboBox>
-                    <ComboBox ItemsSource="{Binding JobCategories}"
-                              SelectedItem="{Binding JobCategoryFilter}"
-                              MinWidth="120" FontSize="11"/>
-                    <CheckBox Content="Running only" IsChecked="{Binding ShowOnlyRunning}" FontSize="11"/>
-                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+                        <TextBox Text="{Binding JobSearchText}" Watermark="Search job name..."
+                                 Width="180" FontSize="11"/>
+                        <ComboBox x:Name="EnabledFilterCombo" MinWidth="110" FontSize="11"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All"/>
+                            <ComboBoxItem Content="Enabled only"/>
+                            <ComboBoxItem Content="Disabled only"/>
+                        </ComboBox>
+                        <ComboBox x:Name="OutcomeFilterCombo" MinWidth="120" FontSize="11"
+                                  SelectedIndex="0">
+                            <ComboBoxItem Content="All outcomes"/>
+                            <ComboBoxItem Content="Failed only"/>
+                            <ComboBoxItem Content="Succeeded only"/>
+                        </ComboBox>
+                        <ComboBox ItemsSource="{Binding JobCategories}"
+                                  SelectedItem="{Binding JobCategoryFilter}"
+                                  MinWidth="120" FontSize="11"/>
+                        <CheckBox Content="Running only" IsChecked="{Binding ShowOnlyRunning}" FontSize="11"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="StartJobButton" Content="Start" Classes="btn-secondary"
+                                Padding="10,3" FontSize="11" Cursor="Hand"/>
+                        <Button x:Name="StopJobButton" Content="Stop" Classes="btn-secondary"
+                                Padding="10,3" FontSize="11" Cursor="Hand"/>
+                        <Button x:Name="ToggleEnabledButton" Content="Enable/Disable" Classes="btn-secondary"
+                                Padding="10,3" FontSize="11" Cursor="Hand"/>
+                    </StackPanel>
+                </Grid>
             </Border>
 
-            <!-- Failed Jobs Banner -->
-            <Border Grid.Row="1" Background="{DynamicResource BlockingHighlight}"
+            <!-- Row 1: Dashboard Stat Cards -->
+            <Grid Grid.Row="1" Margin="10,8,10,0" ColumnDefinitions="*,*,*,*" ColumnSpacing="8">
+                <Border Grid.Column="0" CornerRadius="6" Padding="14,10" Cursor="Hand"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}"
+                        x:Name="CardTotalJobs">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Total Jobs" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatTotalJobs}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" CornerRadius="6" Padding="14,10" Cursor="Hand"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}"
+                        x:Name="CardFailedJobs">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Failed (24h)" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatFailedJobs}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource ButtonDanger}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" CornerRadius="6" Padding="14,10" Cursor="Hand"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}"
+                        x:Name="CardRunningJobs">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Running Now" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatRunningJobs}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentBlue}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="3" CornerRadius="6" Padding="14,10" Cursor="Hand"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}" BorderThickness="1"
+                        Background="{DynamicResource EditorBackground}"
+                        x:Name="CardDisabledJobs">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Disabled" FontSize="10"
+                                   Foreground="{DynamicResource TextSecondary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatDisabledJobs}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Row 2: Failed Jobs Banner (conditional) -->
+            <Border Grid.Row="2" Background="{DynamicResource BlockingHighlight}"
                     BorderBrush="{DynamicResource ButtonDanger}" BorderThickness="0,0,0,2"
-                    Padding="12,6"
+                    Padding="12,6" Margin="10,8,10,0"
+                    CornerRadius="6"
                     IsVisible="{Binding HasFailedJobs}">
                 <Grid ColumnDefinitions="Auto,*">
                     <TextBlock Grid.Column="0" Text="⚠" FontSize="13" Margin="0,0,8,0"
@@ -228,242 +290,289 @@
                 </Grid>
             </Border>
 
-            <!-- Job Action Buttons -->
-            <Border Grid.Row="2" Background="{DynamicResource ToolbarBackground}" Padding="15,4">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="StartJobButton" Content="Start" Classes="btn-secondary"
-                            Padding="10,3" FontSize="11" Cursor="Hand"/>
-                    <Button x:Name="StopJobButton" Content="Stop" Classes="btn-secondary"
-                            Padding="10,3" FontSize="11" Cursor="Hand"/>
-                    <Button x:Name="ToggleEnabledButton" Content="Enable/Disable" Classes="btn-secondary"
-                            Padding="10,3" FontSize="11" Cursor="Hand"/>
-                </StackPanel>
-            </Border>
+            <!-- Row 3: Grids + Detail overlay -->
+            <Panel Grid.Row="3">
+                <!-- Grids layer (fills entire space) -->
+                <DockPanel>
+                    <!-- Disabled jobs docked at bottom -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="10,4,10,4">
+                        <Border x:Name="DisabledJobsHeader" Background="{DynamicResource PanelHeaderBackground}"
+                                CornerRadius="6,6,0,0" Padding="12,5" Cursor="Hand"
+                                IsVisible="{Binding DisabledJobs.Count}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock x:Name="DisabledJobsArrow" Text="▸" FontSize="10"
+                                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DisabledJobsHeaderText}" FontSize="11"
+                                           Foreground="{DynamicResource TextSecondary}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="{DynamicResource ActivityPanelBorder}"
+                                BorderThickness="1,0,1,1" CornerRadius="0,0,6,6"
+                                Background="{DynamicResource EditorBackground}"
+                                ClipToBounds="True" MaxHeight="200"
+                                IsVisible="{Binding IsDisabledJobsExpanded}">
+                            <DataGrid x:Name="DisabledJobsGrid"
+                                      ItemsSource="{Binding DisabledJobs}"
+                                      SelectedItem="{Binding SelectedJob}"
+                                      IsReadOnly="True" GridLinesVisibility="Horizontal"
+                                      BorderThickness="0" CanUserResizeColumns="True"
+                                      CanUserSortColumns="True" HeadersVisibility="Column"
+                                      FontSize="11" HorizontalScrollBarVisibility="Auto">
+                                <DataGrid.Styles>
+                                    <Style Selector="DataGridRow">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                        <Setter Property="Opacity" Value="0.6"/>
+                                    </Style>
+                                    <Style Selector="DataGridRow:nth-child(2n)">
+                                        <Setter Property="Background" Value="{DynamicResource ActivityAlternateRow}"/>
+                                    </Style>
+                                    <Style Selector="DataGridCell">
+                                        <Setter Property="MinHeight" Value="0"/>
+                                    </Style>
+                                </DataGrid.Styles>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Job Name" Binding="{Binding JobName}" Width="*"/>
+                                    <DataGridTextColumn Header="Status" Binding="{Binding CurrentStatus}" Width="70"/>
+                                    <DataGridTextColumn Header="Last Outcome" Binding="{Binding LastRunOutcome}" Width="100"/>
+                                    <DataGridTextColumn Header="Last Run" Binding="{Binding LastRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="125"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding LastDurationDisplay}" Width="75"/>
+                                    <DataGridTextColumn Header="Next Run" Binding="{Binding NextRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="125"/>
+                                    <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
+                                    <DataGridTextColumn Header="Schedule" Binding="{Binding Schedule}" Width="150"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </StackPanel>
 
-            <!-- Jobs Grid -->
-            <DataGrid Grid.Row="3" x:Name="JobsGrid"
-                      ItemsSource="{Binding Jobs}"
-                      SelectedItem="{Binding SelectedJob}"
-                      IsReadOnly="True"
-                      GridLinesVisibility="Horizontal"
-                      BorderThickness="0"
-                      CanUserResizeColumns="True"
-                      CanUserSortColumns="True">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Job Name" Binding="{Binding JobName}" Width="*"/>
-                    <DataGridTextColumn Header="Enabled" Binding="{Binding EnabledDisplay}" Width="60"/>
-                    <DataGridTextColumn Header="Status" Binding="{Binding CurrentStatus}" Width="75"/>
-                    <DataGridTextColumn Header="Last Outcome" Binding="{Binding LastRunOutcome}" Width="100"/>
-                    <DataGridTextColumn Header="Last Run" Binding="{Binding LastRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="120"/>
-                    <DataGridTextColumn Header="Duration" Binding="{Binding LastDurationDisplay}" Width="70"/>
-                    <DataGridTextColumn Header="Next Run" Binding="{Binding NextRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="120"/>
-                    <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
-                    <DataGridTextColumn Header="Schedule" Binding="{Binding Schedule}" Width="150"/>
-                </DataGrid.Columns>
-            </DataGrid>
+                    <!-- Enabled jobs grid (fills remaining space) -->
+                    <Border Margin="10,8,10,0"
+                            BorderBrush="{DynamicResource ActivityPanelBorder}"
+                            BorderThickness="1" CornerRadius="6"
+                            Background="{DynamicResource EditorBackground}"
+                            ClipToBounds="True">
+                        <DataGrid x:Name="JobsGrid"
+                                  ItemsSource="{Binding EnabledJobs}"
+                                  SelectedItem="{Binding SelectedJob}"
+                                  IsReadOnly="True" GridLinesVisibility="Horizontal"
+                                  BorderThickness="0" CanUserResizeColumns="True"
+                                  CanUserSortColumns="True" HeadersVisibility="Column"
+                                  FontSize="11" HorizontalScrollBarVisibility="Auto">
+                            <DataGrid.Styles>
+                                <Style Selector="DataGridRow">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="MinHeight" Value="0"/>
+                                </Style>
+                                <Style Selector="DataGridRow:nth-child(2n)">
+                                    <Setter Property="Background" Value="{DynamicResource ActivityAlternateRow}"/>
+                                </Style>
+                                <Style Selector="DataGridCell">
+                                    <Setter Property="MinHeight" Value="0"/>
+                                </Style>
+                            </DataGrid.Styles>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Job Name" Binding="{Binding JobName}" Width="*"/>
+                                <DataGridTextColumn Header="Status" Binding="{Binding CurrentStatus}" Width="70"/>
+                                <DataGridTextColumn Header="Last Outcome" Binding="{Binding LastRunOutcome}" Width="100"/>
+                                <DataGridTextColumn Header="Last Run" Binding="{Binding LastRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="125"/>
+                                <DataGridTextColumn Header="Duration" Binding="{Binding LastDurationDisplay}" Width="75"/>
+                                <DataGridTextColumn Header="Next Run" Binding="{Binding NextRunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="125"/>
+                                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
+                                <DataGridTextColumn Header="Schedule" Binding="{Binding Schedule}" Width="150"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </DockPanel>
 
-            <!-- Splitter -->
-            <GridSplitter Grid.Row="4" Height="3" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource BorderDefault}"
-                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
-                          IsVisible="{Binding IsJobDetailVisible}"/>
+                <!-- Detail panel overlay (bottom-docked, resizable via drag handle) -->
+                <Border x:Name="JobDetailPanel"
+                        IsVisible="{Binding IsJobDetailVisible}"
+                        VerticalAlignment="Bottom"
+                        Background="{DynamicResource EditorBackground}"
+                        BorderBrush="{DynamicResource ActivityPanelBorder}"
+                        BorderThickness="0,1,0,0"
+                        Height="180">
+                    <Grid RowDefinitions="4,Auto,*">
+                        <!-- Resize handle -->
+                        <Border x:Name="JobDetailResizeHandle" Grid.Row="0"
+                                Background="{DynamicResource BorderDefault}"
+                                Cursor="SizeNorthSouth" Height="4"/>
 
-            <!-- Job Detail Panel -->
-            <Grid Grid.Row="5" IsVisible="{Binding IsJobDetailVisible}"
-                  RowDefinitions="Auto,*">
+                        <!-- Detail sub-tabs + unsaved indicator -->
+                        <Border Grid.Row="1" Background="{DynamicResource PanelHeaderBackground}" Padding="10,4">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                    <RadioButton GroupName="JobDetailTabs"
+                                                 IsChecked="{Binding IsJobGeneralTabActive}"
+                                                 Classes="TabButton" Content="General" FontSize="11"/>
+                                    <RadioButton GroupName="JobDetailTabs"
+                                                 IsChecked="{Binding IsJobStepsTabActive}"
+                                                 Classes="TabButton" Content="Steps" FontSize="11"/>
+                                    <RadioButton GroupName="JobDetailTabs"
+                                                 IsChecked="{Binding IsJobScheduleTabActive}"
+                                                 Classes="TabButton" Content="Schedule" FontSize="11"/>
+                                    <RadioButton GroupName="JobDetailTabs"
+                                                 IsChecked="{Binding IsJobHistoryTabActive}"
+                                                 Classes="TabButton" Content="History" FontSize="11"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="● unsaved" FontSize="10"
+                                           Foreground="{DynamicResource ButtonDanger}"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding HasUnsavedChanges}"/>
+                            </Grid>
+                        </Border>
 
-                <!-- Detail sub-tabs + unsaved indicator -->
-                <Border Grid.Row="0" Background="{DynamicResource PanelHeaderBackground}" Padding="10,4">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
-                            <RadioButton GroupName="JobDetailTabs"
-                                         IsChecked="{Binding IsJobGeneralTabActive}"
-                                         Classes="TabButton" Content="General" FontSize="11"/>
-                            <RadioButton GroupName="JobDetailTabs"
-                                         IsChecked="{Binding IsJobStepsTabActive}"
-                                         Classes="TabButton" Content="Steps" FontSize="11"/>
-                            <RadioButton GroupName="JobDetailTabs"
-                                         IsChecked="{Binding IsJobScheduleTabActive}"
-                                         Classes="TabButton" Content="Schedule" FontSize="11"/>
-                            <RadioButton GroupName="JobDetailTabs"
-                                         IsChecked="{Binding IsJobHistoryTabActive}"
-                                         Classes="TabButton" Content="History" FontSize="11"/>
-                        </StackPanel>
-                        <TextBlock Grid.Column="1" Text="● unsaved" FontSize="10"
-                                   Foreground="{DynamicResource ButtonDanger}"
-                                   VerticalAlignment="Center"
-                                   IsVisible="{Binding HasUnsavedChanges}"/>
+                        <!-- Tab content -->
+                        <Panel Grid.Row="2">
+                            <!-- GENERAL TAB -->
+                            <ScrollViewer IsVisible="{Binding IsJobGeneralTabActive}"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="6" Margin="15,8">
+                                    <Grid ColumnDefinitions="40,*,12,60,Auto,12,55,Auto">
+                                        <TextBlock Grid.Column="0" Text="Name" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <TextBox Grid.Column="1" Text="{Binding EditJobName}" FontSize="11"/>
+                                        <TextBlock Grid.Column="3" Text="Category" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <ComboBox Grid.Column="4" ItemsSource="{Binding AllCategories}"
+                                                  SelectedItem="{Binding EditJobCategory}" MinWidth="180" FontSize="11"/>
+                                        <TextBlock Grid.Column="6" Text="Enabled" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <CheckBox Grid.Column="7" IsChecked="{Binding EditJobEnabled}" FontSize="11"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="40,*">
+                                        <TextBlock Grid.Column="0" Text="Desc" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <TextBox Grid.Column="1" Text="{Binding EditJobDescription}"
+                                                 FontSize="11" Height="28"/>
+                                    </Grid>
+                                    <Button Content="Save" Classes="btn-primary" Padding="14,4" FontSize="11"
+                                            Command="{Binding SaveJobGeneralCommand}"
+                                            HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- STEPS TAB -->
+                            <Grid IsVisible="{Binding IsJobStepsTabActive}"
+                                  RowDefinitions="*,Auto,Auto">
+                                <DataGrid Grid.Row="0" ItemsSource="{Binding JobSteps}"
+                                          SelectedItem="{Binding SelectedStep}"
+                                          IsReadOnly="True" GridLinesVisibility="Horizontal"
+                                          BorderThickness="0" CanUserResizeColumns="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="#" Binding="{Binding StepId}" Width="35"/>
+                                        <DataGridTextColumn Header="Step Name" Binding="{Binding StepName}" Width="*"/>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Subsystem}" Width="70"/>
+                                        <DataGridTextColumn Header="On Success" Binding="{Binding OnSuccessAction}" Width="110"/>
+                                        <DataGridTextColumn Header="On Failure" Binding="{Binding OnFailureAction}" Width="110"/>
+                                        <DataGridTextColumn Header="Command" Binding="{Binding CommandPreview}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBox Grid.Row="1" Text="{Binding EditStepCommand}"
+                                         FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                                         AcceptsReturn="True" TextWrapping="Wrap"
+                                         Height="80" Margin="0,2,0,0"
+                                         Watermark="Select a step to edit its command..."/>
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,4">
+                                    <Button Content="Save Step" Classes="btn-primary" Padding="10,4" FontSize="11"
+                                            Command="{Binding SaveStepCommand}"/>
+                                    <Button Content="Add Step" Classes="btn-secondary" Padding="10,4" FontSize="11"
+                                            Command="{Binding AddStepCommand}"/>
+                                    <Button x:Name="DeleteStepButton" Content="Delete Step" Classes="btn-secondary"
+                                            Padding="10,4" FontSize="11"/>
+                                    <Button x:Name="OpenStepButton" Content="Open in Editor" Classes="btn-secondary"
+                                            Padding="10,4" FontSize="11"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- SCHEDULE TAB -->
+                            <ScrollViewer IsVisible="{Binding IsJobScheduleTabActive}"
+                                          VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="10" Margin="15,10">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Preview:" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextSecondary}"/>
+                                        <TextBlock Text="{Binding SchedulePreview}" FontSize="11"
+                                                   Foreground="{DynamicResource AccentBlue}"/>
+                                    </StackPanel>
+                                    <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Frequency" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="FreqTypeCombo"
+                                                  MinWidth="200" FontSize="11" SelectedIndex="0">
+                                            <ComboBoxItem Content="Daily" Tag="4"/>
+                                            <ComboBoxItem Content="Weekly" Tag="8"/>
+                                            <ComboBoxItem Content="Monthly" Tag="16"/>
+                                            <ComboBoxItem Content="Once" Tag="1"/>
+                                            <ComboBoxItem Content="When SQL Agent starts" Tag="64"/>
+                                            <ComboBoxItem Content="When CPU is idle" Tag="128"/>
+                                        </ComboBox>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Interval" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="Every" FontSize="11" VerticalAlignment="Center"/>
+                                            <NumericUpDown Value="{Binding EditFreqInterval}" Minimum="1" Maximum="365"
+                                                           Width="80" FontSize="11" FormatString="0"/>
+                                            <TextBlock Text="day(s)" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Days" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                            <CheckBox Content="Sun" IsChecked="{Binding SchedSun}" FontSize="10"/>
+                                            <CheckBox Content="Mon" IsChecked="{Binding SchedMon}" FontSize="10"/>
+                                            <CheckBox Content="Tue" IsChecked="{Binding SchedTue}" FontSize="10"/>
+                                            <CheckBox Content="Wed" IsChecked="{Binding SchedWed}" FontSize="10"/>
+                                            <CheckBox Content="Thu" IsChecked="{Binding SchedThu}" FontSize="10"/>
+                                            <CheckBox Content="Fri" IsChecked="{Binding SchedFri}" FontSize="10"/>
+                                            <CheckBox Content="Sat" IsChecked="{Binding SchedSat}" FontSize="10"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Recurrence" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                            <ComboBox x:Name="SubdayTypeCombo" MinWidth="130" FontSize="11" SelectedIndex="0">
+                                                <ComboBoxItem Content="Once at time" Tag="1"/>
+                                                <ComboBoxItem Content="Every N minutes" Tag="4"/>
+                                                <ComboBoxItem Content="Every N hours" Tag="8"/>
+                                            </ComboBox>
+                                            <NumericUpDown Value="{Binding EditFreqSubdayInterval}" Minimum="1" Maximum="60"
+                                                           Width="70" FontSize="11" FormatString="0"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Start time" FontSize="11"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
+                                        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                            <NumericUpDown Value="{Binding EditActiveStartHour}" Minimum="0" Maximum="23"
+                                                           Width="65" FontSize="11" FormatString="00"/>
+                                            <TextBlock Text=":" VerticalAlignment="Center"/>
+                                            <NumericUpDown Value="{Binding EditActiveStartMinute}" Minimum="0" Maximum="59"
+                                                           Width="65" FontSize="11" FormatString="00"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                        <Button Content="Save Schedule" Classes="btn-primary" Padding="14,5" FontSize="11"
+                                                Command="{Binding SaveScheduleCommand}"/>
+                                        <Button x:Name="RemoveScheduleButton" Content="Remove Schedule" Classes="btn-secondary" Padding="10,5" FontSize="11"
+                                                IsVisible="{Binding HasSchedule}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- HISTORY TAB -->
+                            <DataGrid x:Name="JobHistoryGrid"
+                                      ItemsSource="{Binding JobHistory}"
+                                      IsReadOnly="True" GridLinesVisibility="Horizontal"
+                                      BorderThickness="0" CanUserResizeColumns="True"
+                                      IsVisible="{Binding IsJobHistoryTabActive}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Date" Binding="{Binding RunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="130"/>
+                                    <DataGridTextColumn Header="Outcome" Binding="{Binding RunStatusDisplay}" Width="80"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="70"/>
+                                    <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Panel>
                     </Grid>
                 </Border>
-
-                <!-- ═══ GENERAL TAB ═══ -->
-                <ScrollViewer Grid.Row="1" IsVisible="{Binding IsJobGeneralTabActive}"
-                              VerticalScrollBarVisibility="Auto">
-                    <StackPanel Spacing="10" Margin="15,10">
-                        <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding EditJobName}" FontSize="11"/>
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Description" FontSize="11"
-                                       VerticalAlignment="Top" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EditJobDescription}"
-                                     FontSize="11" AcceptsReturn="True" TextWrapping="Wrap"
-                                     Height="50"/>
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Enabled" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <CheckBox Grid.Row="2" Grid.Column="1" IsChecked="{Binding EditJobEnabled}" FontSize="11"/>
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Category" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding AllCategories}"
-                                      SelectedItem="{Binding EditJobCategory}" MinWidth="200" FontSize="11"/>
-
-                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                <Button Content="Save" Classes="btn-primary" Padding="14,5" FontSize="11"
-                                        Command="{Binding SaveJobGeneralCommand}"/>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- ═══ STEPS TAB ═══ -->
-                <Grid Grid.Row="1" IsVisible="{Binding IsJobStepsTabActive}"
-                      RowDefinitions="*,Auto,Auto">
-                    <!-- Steps grid -->
-                    <DataGrid Grid.Row="0" ItemsSource="{Binding JobSteps}"
-                              SelectedItem="{Binding SelectedStep}"
-                              IsReadOnly="True" GridLinesVisibility="Horizontal"
-                              BorderThickness="0" CanUserResizeColumns="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="#" Binding="{Binding StepId}" Width="35"/>
-                            <DataGridTextColumn Header="Step Name" Binding="{Binding StepName}" Width="*"/>
-                            <DataGridTextColumn Header="Type" Binding="{Binding Subsystem}" Width="70"/>
-                            <DataGridTextColumn Header="On Success" Binding="{Binding OnSuccessAction}" Width="110"/>
-                            <DataGridTextColumn Header="On Failure" Binding="{Binding OnFailureAction}" Width="110"/>
-                            <DataGridTextColumn Header="Command" Binding="{Binding CommandPreview}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-
-                    <!-- Step command editor -->
-                    <TextBox Grid.Row="1" Text="{Binding EditStepCommand}"
-                             FontFamily="Consolas,Menlo,monospace" FontSize="11"
-                             AcceptsReturn="True" TextWrapping="Wrap"
-                             Height="80" Margin="0,2,0,0"
-                             Watermark="Select a step to edit its command..."/>
-
-                    <!-- Step action buttons -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,4">
-                        <Button Content="Save Step" Classes="btn-primary" Padding="10,4" FontSize="11"
-                                Command="{Binding SaveStepCommand}"/>
-                        <Button Content="Add Step" Classes="btn-secondary" Padding="10,4" FontSize="11"
-                                Command="{Binding AddStepCommand}"/>
-                        <Button x:Name="DeleteStepButton" Content="Delete Step" Classes="btn-secondary"
-                                Padding="10,4" FontSize="11"/>
-                        <Button x:Name="OpenStepButton" Content="Open in Editor" Classes="btn-secondary"
-                                Padding="10,4" FontSize="11"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- ═══ SCHEDULE TAB ═══ -->
-                <ScrollViewer Grid.Row="1" IsVisible="{Binding IsJobScheduleTabActive}"
-                              VerticalScrollBarVisibility="Auto">
-                    <StackPanel Spacing="10" Margin="15,10">
-                        <!-- Preview -->
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Preview:" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextSecondary}"/>
-                            <TextBlock Text="{Binding SchedulePreview}" FontSize="11"
-                                       Foreground="{DynamicResource AccentBlue}"/>
-                        </StackPanel>
-
-                        <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
-                            <!-- Frequency type -->
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Frequency" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="FreqTypeCombo"
-                                      MinWidth="200" FontSize="11" SelectedIndex="0">
-                                <ComboBoxItem Content="Daily" Tag="4"/>
-                                <ComboBoxItem Content="Weekly" Tag="8"/>
-                                <ComboBoxItem Content="Monthly" Tag="16"/>
-                                <ComboBoxItem Content="Once" Tag="1"/>
-                                <ComboBoxItem Content="When SQL Agent starts" Tag="64"/>
-                                <ComboBoxItem Content="When CPU is idle" Tag="128"/>
-                            </ComboBox>
-
-                            <!-- Interval (Daily: every N days, Monthly: day N) -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Interval" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="Every" FontSize="11" VerticalAlignment="Center"/>
-                                <NumericUpDown Value="{Binding EditFreqInterval}" Minimum="1" Maximum="365"
-                                               Width="80" FontSize="11" FormatString="0"/>
-                                <TextBlock Text="day(s)" FontSize="11" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <!-- Weekly day checkboxes -->
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Days" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                <CheckBox Content="Sun" IsChecked="{Binding SchedSun}" FontSize="10"/>
-                                <CheckBox Content="Mon" IsChecked="{Binding SchedMon}" FontSize="10"/>
-                                <CheckBox Content="Tue" IsChecked="{Binding SchedTue}" FontSize="10"/>
-                                <CheckBox Content="Wed" IsChecked="{Binding SchedWed}" FontSize="10"/>
-                                <CheckBox Content="Thu" IsChecked="{Binding SchedThu}" FontSize="10"/>
-                                <CheckBox Content="Fri" IsChecked="{Binding SchedFri}" FontSize="10"/>
-                                <CheckBox Content="Sat" IsChecked="{Binding SchedSat}" FontSize="10"/>
-                            </StackPanel>
-
-                            <!-- Subday frequency -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Recurrence" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                <ComboBox x:Name="SubdayTypeCombo" MinWidth="130" FontSize="11" SelectedIndex="0">
-                                    <ComboBoxItem Content="Once at time" Tag="1"/>
-                                    <ComboBoxItem Content="Every N minutes" Tag="4"/>
-                                    <ComboBoxItem Content="Every N hours" Tag="8"/>
-                                </ComboBox>
-                                <NumericUpDown Value="{Binding EditFreqSubdayInterval}" Minimum="1" Maximum="60"
-                                               Width="70" FontSize="11" FormatString="0"/>
-                            </StackPanel>
-
-                            <!-- Start time -->
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Start time" FontSize="11"
-                                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}"/>
-                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                <NumericUpDown Value="{Binding EditActiveStartHour}" Minimum="0" Maximum="23"
-                                               Width="65" FontSize="11" FormatString="00"/>
-                                <TextBlock Text=":" VerticalAlignment="Center"/>
-                                <NumericUpDown Value="{Binding EditActiveStartMinute}" Minimum="0" Maximum="59"
-                                               Width="65" FontSize="11" FormatString="00"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Schedule buttons -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                            <Button Content="Save Schedule" Classes="btn-primary" Padding="14,5" FontSize="11"
-                                    Command="{Binding SaveScheduleCommand}"/>
-                            <Button x:Name="RemoveScheduleButton" Content="Remove Schedule" Classes="btn-secondary" Padding="10,5" FontSize="11"
-                                    IsVisible="{Binding HasSchedule}"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- ═══ HISTORY TAB ═══ -->
-                <DataGrid Grid.Row="1" x:Name="JobHistoryGrid"
-                          ItemsSource="{Binding JobHistory}"
-                          IsReadOnly="True" GridLinesVisibility="Horizontal"
-                          BorderThickness="0" CanUserResizeColumns="True"
-                          IsVisible="{Binding IsJobHistoryTabActive}">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Date" Binding="{Binding RunDate, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="130"/>
-                        <DataGridTextColumn Header="Outcome" Binding="{Binding RunStatusDisplay}" Width="80"/>
-                        <DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="70"/>
-                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </Grid>
+            </Panel>
         </Grid>
 
         <!-- Status bar -->
