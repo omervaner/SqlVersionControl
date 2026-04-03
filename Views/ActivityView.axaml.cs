@@ -237,9 +237,9 @@ public partial class ActivityView : UserControl
         };
 
         var result = false;
-        ((dialog.Content as Grid)!.Children[2] as StackPanel)!.Children.OfType<Button>()
+        (dialog.Content as Grid)!.Children.OfType<StackPanel>().First().Children.OfType<Button>()
             .First(b => b.Classes.Contains("btn-primary")).Click += (_, _) => { result = true; dialog.Close(); };
-        ((dialog.Content as Grid)!.Children[2] as StackPanel)!.Children.OfType<Button>()
+        (dialog.Content as Grid)!.Children.OfType<StackPanel>().First().Children.OfType<Button>()
             .Last().Click += (_, _) => dialog.Close();
 
         await dialog.ShowDialog(TopLevel.GetTopLevel(this) as Window ?? throw new InvalidOperationException());
@@ -313,9 +313,9 @@ public partial class ActivityView : UserControl
             Content = BuildConfirmPanel(message, null, actionLabel, false)
         };
 
-        ((dialog.Content as Grid)!.Children[2] as StackPanel)!.Children.OfType<Button>()
+        (dialog.Content as Grid)!.Children.OfType<StackPanel>().First().Children.OfType<Button>()
             .First(b => b.Classes.Contains("btn-primary")).Click += (_, _) => { result = true; dialog.Close(); };
-        ((dialog.Content as Grid)!.Children[2] as StackPanel)!.Children.OfType<Button>()
+        (dialog.Content as Grid)!.Children.OfType<StackPanel>().First().Children.OfType<Button>()
             .Last().Click += (_, _) => dialog.Close();
 
         dialog.KeyDown += (_, e) =>
@@ -386,17 +386,10 @@ public partial class ActivityView : UserControl
         // Opacity for current session
         e.Row.Opacity = session.IsCurrentSession ? 0.5 : 1.0;
 
-        // Row background: blocking highlight > alternating rows
+        // Row background: blocking highlight (alternating rows handled in XAML)
         if (session.BlockingSession > 0)
         {
             e.Row.Background = GetBrush("BlockingHighlight") ?? new SolidColorBrush(Color.FromArgb(30, 255, 100, 100));
-        }
-        else
-        {
-            var idx = e.Row.GetIndex();
-            e.Row.Background = idx % 2 == 1
-                ? (GetBrush("ActivityAlternateRow") ?? Brushes.Transparent)
-                : Brushes.Transparent;
         }
 
         // Defer cell styling to after layout

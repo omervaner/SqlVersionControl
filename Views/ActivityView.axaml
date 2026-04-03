@@ -158,6 +158,14 @@
                           CanUserSortColumns="True"
                           HeadersVisibility="Column"
                           HorizontalScrollBarVisibility="Auto">
+                    <DataGrid.Styles>
+                        <Style Selector="DataGridRow">
+                            <Setter Property="Background" Value="Transparent"/>
+                        </Style>
+                        <Style Selector="DataGridRow:nth-child(2n)">
+                            <Setter Property="Background" Value="{DynamicResource ActivityAlternateRow}"/>
+                        </Style>
+                    </DataGrid.Styles>
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="SPID" Binding="{Binding SessionId}" MinWidth="55" Width="Auto"/>
                         <DataGridTextColumn Header="Login" Binding="{Binding Login}" MinWidth="80" Width="Auto"/>
