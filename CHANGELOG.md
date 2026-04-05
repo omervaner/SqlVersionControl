@@ -4,6 +4,22 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.13.1 (April 2026)
+
+### Editor — Line Number Gutter Polish
+- **Wider line number gutter**: Increased from auto-size to 34px for easier clicking
+- **SSMS-style gutter click**: Single-clicking the line number margin selects the entire line (previously placed cursor)
+- **Gutter drag-to-select**: Click and drag down the line number gutter to select multiple lines
+- **Applied to Peek Editor**: Same gutter improvements on the peek definition panel
+
+### Results Grid — Row Header & Selection Polish
+- **Wider row headers**: Set RowHeaderWidth to 40px on both main and stacked result grids
+- **Row header drag-to-select**: Click a row header and drag down to select multiple full rows
+- **Clean full-row selection borders**: Full-row selection now draws a single outer border rectangle instead of individual borders on every cell
+- **Right-click preserves full-row selection**: Full-row selections no longer collapse to a single column when right-clicking for context menu
+
+---
+
 ## v2.13.0 (April 2026)
 
 ### Results Grid — Selection Overhaul
