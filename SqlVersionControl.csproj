@@ -10,7 +10,7 @@
     <RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers>
 
     <!-- App Metadata -->
-    <Version>2.11.0</Version>
+    <Version>2.12.0</Version>
     <AssemblyTitle>Lookout</AssemblyTitle>
     <Product>Lookout</Product>
     <Description>SQL Server desktop IDE — queries, version tracking, database comparison, execution plans, and job management</Description>

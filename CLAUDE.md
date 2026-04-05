@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.11.0 (April 2026)
+## PROJECT STATUS: v2.12.0 (April 2026)
 
-Jobs tab visual overhaul: dashboard stat cards (Total, Failed 24h, Running, Disabled) with click-to-filter, split enabled/disabled grids with collapsible disabled section, compact detail panel as bottom overlay with drag-resize handle. Multi-cell copy (Cmd+C copies focused column from all selected rows). Activity tab dark theme fix for alternating rows. Enable/Disable job crash fix.
+Compare tab database dropdowns: switch databases on any connected server without re-connecting. Settings admin/normal mode: hides DDL audit and Git export config from normal users. Job detail panel close button. Dev environment seed scripts for two-server Docker setup.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 

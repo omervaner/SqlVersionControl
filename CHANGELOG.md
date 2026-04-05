@@ -4,6 +4,28 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.12.0 (April 2026)
+
+### Compare Tab — Database Dropdowns
+- **Database picker on each connection**: After connecting source/target/target2, a dropdown appears listing all user databases on that server — switch databases without disconnecting or creating new connection entries
+- **Auto-populated from sys.databases**: Filters out system databases (master, model, msdb, tempdb), auto-selects the current database
+- **Swaps with connections**: Database lists and selections swap correctly when using the ⇄ swap button
+
+### Settings — Admin / Normal User Mode
+- **User Mode toggle**: Normal (default) and Admin at the top of Settings — controls which sections are visible
+- **Normal mode hides**: DDL audit source configuration, Git Integration section, File → Export to Git menu item
+- **Immediate toggle**: Switching modes instantly shows/hides sections without saving or restarting
+- **Persisted to settings.json**: Remembers your choice across sessions
+
+### UX Improvements
+- **Job detail close button**: ✕ button in the detail panel header to dismiss it (previously could only toggle by re-clicking the job row)
+
+### Dev Environment
+- **Two-server seed scripts**: `scripts/seed-server1.sql` (PROD, port 1433) and `scripts/seed-server2.sql` (DEV, port 1434) for testing Compare across servers with same DB name but different schemas
+- **6 SQL Agent test jobs**: Including intentionally failing jobs for testing the failed jobs alert badge
+
+---
+
 ## v2.11.0 (April 2026)
 
 ### Jobs Tab — Visual Overhaul
