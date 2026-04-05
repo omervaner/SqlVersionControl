@@ -169,10 +169,94 @@ public partial class QueryTabView
         EditorPlaceholder.IsVisible = show;
     }
 
+    private static void WidenLineNumberGutter(AvaloniaEdit.TextEditor editor)
+    {
+        Avalonia.Controls.Control? lineNumMargin = null;
+        foreach (var margin in editor.TextArea.LeftMargins)
+        {
+            if (margin.GetType().Name == "LineNumberMargin")
+            {
+                lineNumMargin = (Avalonia.Controls.Control)margin;
+                lineNumMargin.Width = 34;
+                lineNumMargin.Margin = new Avalonia.Thickness(0, 0, 2, 0);
+
+                break;
+            }
+        }
+
+        if (lineNumMargin == null) return;
+
+        int gutterDragAnchorLine = -1;
+
+        int GetLineAtY(Avalonia.Point posInTextView)
+        {
+            var vl = editor.TextArea.TextView.GetVisualLineFromVisualTop(
+                posInTextView.Y + editor.TextArea.TextView.ScrollOffset.Y);
+            return vl?.FirstDocumentLine.LineNumber ?? -1;
+        }
+
+        void SelectLineRange(int fromLine, int toLine)
+        {
+            int startLine = Math.Min(fromLine, toLine);
+            int endLine = Math.Max(fromLine, toLine);
+            var startDoc = editor.Document.GetLineByNumber(startLine);
+            var endDoc = editor.Document.GetLineByNumber(endLine);
+            editor.TextArea.Caret.Line = toLine;
+            editor.TextArea.Caret.Column = 1;
+            editor.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(
+                editor.TextArea, startDoc.Offset,
+                endDoc.Offset + endDoc.TotalLength);
+        }
+
+        bool IsInGutter(Avalonia.Input.PointerEventArgs e)
+        {
+            var pos = e.GetPosition(editor.TextArea);
+            return pos.X <= lineNumMargin!.Bounds.Right + lineNumMargin.Margin.Right;
+        }
+
+        // Click in gutter: select whole line
+        editor.TextArea.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (s, e) =>
+        {
+            if (!IsInGutter(e)) return;
+
+            var line = GetLineAtY(e.GetPosition(editor.TextArea.TextView));
+            if (line < 1) return;
+
+            gutterDragAnchorLine = line;
+            SelectLineRange(line, line);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Drag in gutter: extend selection across lines
+        editor.TextArea.AddHandler(Avalonia.Input.InputElement.PointerMovedEvent, (s, e) =>
+        {
+            if (gutterDragAnchorLine < 1) return;
+            if (!e.GetCurrentPoint(editor.TextArea).Properties.IsLeftButtonPressed)
+            {
+                gutterDragAnchorLine = -1;
+                return;
+            }
+
+            var line = GetLineAtY(e.GetPosition(editor.TextArea.TextView));
+            if (line < 1) return;
+
+            SelectLineRange(gutterDragAnchorLine, line);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Release: end drag
+        editor.TextArea.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (s, e) =>
+        {
+            gutterDragAnchorLine = -1;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+    }
+
     private void ConfigureEditor()
     {
         SqlEditor.Options.ConvertTabsToSpaces = true;
         SqlEditor.Options.IndentationSize = 4;
+
+        WidenLineNumberGutter(SqlEditor);
 
         SqlEditor.Text = "";
         _viewModel?.SetInitialText("");
@@ -218,6 +302,7 @@ public partial class QueryTabView
                 });
             }, null, 500, Timeout.Infinite);
         };
+
     }
 
     // ── Section 11: Highlight All Occurrences ────────────────────────

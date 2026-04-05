@@ -98,6 +98,7 @@ public partial class QueryTabView
         if (SqlEditor.SyntaxHighlighting != null)
             PeekEditor.SyntaxHighlighting = SqlEditor.SyntaxHighlighting;
         ApplyThemeToEditor(PeekEditor);
+        WidenLineNumberGutter(PeekEditor);
 
         // Show peek, hide other result panels
         ResultsGrid.IsVisible = false;

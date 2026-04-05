@@ -1134,6 +1134,7 @@ public partial class QueryTabView
                 CanUserSortColumns = true,
                 CanUserReorderColumns = true,
                 FrozenColumnCount = 0,
+                RowHeaderWidth = 40,
                 RowHeight = rowHeight,
                 ColumnHeaderHeight = rowHeight + 4,
                 FontSize = gridFontSize,
