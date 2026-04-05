@@ -189,6 +189,19 @@ public partial class QueryTabView : UserControl
         // Peek Definition: Cmd+Click (Mac) / Ctrl+Click (Windows) on word in editor
         SqlEditor.AddHandler(InputElement.PointerPressedEvent, OnEditorPointerPressed, handledEventsToo: true);
 
+        // Clear results grid selection when clicking back into the editor
+        SqlEditor.AddHandler(InputElement.PointerPressedEvent, (_, _) =>
+        {
+            if (_activeResultsGrid?.SelectedItems?.Count > 0)
+            {
+                _activeResultsGrid.SelectedItems.Clear();
+                _dragStartColIndex = -1;
+                _dragEndColIndex = -1;
+                _fullRowSelectionMode = false;
+                RepaintCellSelection();
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         // Editor right-click context menu
         SqlEditor.AddHandler(InputElement.PointerReleasedEvent, OnEditorPointerReleased, handledEventsToo: true);
         PeekCloseButton.Click += (_, _) => ClosePeekPanel();

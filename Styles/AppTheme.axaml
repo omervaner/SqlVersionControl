@@ -31,7 +31,7 @@
     <SolidColorBrush x:Key="BorderDefault" Color="#3a3d44"/>
     <SolidColorBrush x:Key="SplitterBackground" Color="#3a3d44"/>
     <SolidColorBrush x:Key="IndentGuide" Color="#3a3d44" Opacity="0.3"/>
-    <SolidColorBrush x:Key="GridVerticalLine" Color="#3a3d44" Opacity="0.6"/>
+    <SolidColorBrush x:Key="GridVerticalLine" Color="#3a3d44" Opacity="0.8"/>
 
     <!-- === TEXT === -->
     <SolidColorBrush x:Key="TextPrimary" Color="#c5c8c6"/>
@@ -43,6 +43,7 @@
     <!-- === SELECTION / FOCUS === -->
     <SolidColorBrush x:Key="SelectionActive" Color="#3a3d44"/>
     <SolidColorBrush x:Key="CellSelectionHighlight" Color="#3044688B"/>
+    <SolidColorBrush x:Key="CellSelectionBorder" Color="#88a1bb"/>
     <SolidColorBrush x:Key="HoverBackground" Color="#2e3138"/>
     <SolidColorBrush x:Key="WordHighlight" Color="#5a4a1e"/>
     <SolidColorBrush x:Key="BracketMatchBackground" Color="#40808080"/>

@@ -654,9 +654,9 @@ public partial class QueryTabViewModel : ObservableObject
                 return;
             }
 
-            // Wrap rows in EditableRow
+            // Wrap rows in EditableRow (clone arrays so edits don't mutate original Results)
             EditableRows = new ObservableCollection<EditableRow>(
-                result.Rows.Select(r => new EditableRow(r, result.ColumnTypes))
+                result.Rows.Select(r => new EditableRow((object?[])r.Clone(), result.ColumnTypes))
             );
 
             IsEditMode = true;

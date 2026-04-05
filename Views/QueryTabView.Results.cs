@@ -64,6 +64,13 @@ public partial class QueryTabView
         return new SolidColorBrush(Color.Parse("#3044688B"));
     }
 
+    private static IBrush GetCellSelectionBorderBrush()
+    {
+        if (Application.Current?.Resources.TryGetResource("CellSelectionBorder", null, out var brush) == true && brush is IBrush b)
+            return b;
+        return new SolidColorBrush(Color.Parse("#88a1bb"));
+    }
+
     /// <summary>
     /// Repaint cell-level selection highlights on the active grid.
     /// Clears all cell highlights, then applies highlight only to cells
@@ -108,31 +115,55 @@ public partial class QueryTabView
         }
 
         var highlightBrush = GetCellSelectionBrush();
+        var borderBrush = GetCellSelectionBorderBrush();
 
-        // Walk all realized rows
-        foreach (var row in grid.GetVisualDescendants().OfType<DataGridRow>())
+        // First pass: find min/max selected row indices for border placement
+        int minSelRow = int.MaxValue, maxSelRow = int.MinValue;
+        var allRows = grid.GetVisualDescendants().OfType<DataGridRow>().ToList();
+        foreach (var row in allRows)
+        {
+            if (row.DataContext != null && selectedSet.Contains(row.DataContext))
+            {
+                var idx = row.GetIndex();
+                if (idx < minSelRow) minSelRow = idx;
+                if (idx > maxSelRow) maxSelRow = idx;
+            }
+        }
+
+        // Second pass: apply backgrounds, borders, and hide default rectangles
+        foreach (var row in allRows)
         {
             bool isSelected = row.DataContext != null && selectedSet.Contains(row.DataContext);
+            int rowIdx = row.GetIndex();
 
-            // Hide Avalonia's built-in selection rectangle (template part)
-            if (isSelected)
+            // Hide Avalonia's built-in selection + focus rectangles (template parts)
+            foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
             {
-                foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
-                {
-                    rect.Fill = Brushes.Transparent;
-                }
+                rect.Fill = Brushes.Transparent;
+                rect.Stroke = Brushes.Transparent;
             }
 
             var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
 
             for (int i = 0; i < cells.Count; i++)
             {
-                // Highlight cells in the column range, or ALL cells if full-row mode
                 bool inRange = colRangeMin == -1 || (i >= colRangeMin && i <= colRangeMax);
                 if (isSelected && inRange)
+                {
                     cells[i].Background = highlightBrush;
+                    cells[i].BorderBrush = borderBrush;
+                    double top = rowIdx == minSelRow ? 1 : 0;
+                    double bottom = rowIdx == maxSelRow ? 1 : 0;
+                    double left = (colRangeMin == -1 || i == colRangeMin) ? 1 : 0;
+                    double right = (colRangeMin == -1 || i == colRangeMax) ? 1 : 0;
+                    cells[i].BorderThickness = new Thickness(left, top, right, bottom);
+                }
                 else
+                {
                     cells[i].Background = Brushes.Transparent;
+                    cells[i].BorderBrush = null;
+                    cells[i].BorderThickness = new Thickness(0);
+                }
             }
         }
     }
@@ -174,23 +205,52 @@ public partial class QueryTabView
         {
             row.LayoutUpdated -= OnRowLayoutForCellSelection;
 
-            // Hide Avalonia's built-in selection rectangle
-            if (isSelected)
+            // Hide Avalonia's built-in selection + focus rectangles
+            foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
             {
-                foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
-                    rect.Fill = Brushes.Transparent;
+                rect.Fill = Brushes.Transparent;
+                rect.Stroke = Brushes.Transparent;
             }
 
             var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
             var highlightBrush = GetCellSelectionBrush();
+            var borderBrush = GetCellSelectionBorderBrush();
+
+            // Determine row edge positions for border
+            int rowIdx = row.GetIndex();
+            int minSel = int.MaxValue, maxSel = int.MinValue;
+            if (isSelected && grid.SelectedItems != null)
+            {
+                foreach (var selRow in grid.GetVisualDescendants().OfType<DataGridRow>())
+                {
+                    if (selRow.DataContext != null && grid.SelectedItems.Contains(selRow.DataContext))
+                    {
+                        var si = selRow.GetIndex();
+                        if (si < minSel) minSel = si;
+                        if (si > maxSel) maxSel = si;
+                    }
+                }
+            }
 
             for (int i = 0; i < cells.Count; i++)
             {
                 bool inRange = colRangeMin == -1 || (i >= colRangeMin && i <= colRangeMax);
                 if (isSelected && inRange)
+                {
                     cells[i].Background = highlightBrush;
+                    cells[i].BorderBrush = borderBrush;
+                    double top = rowIdx == minSel ? 1 : 0;
+                    double bottom = rowIdx == maxSel ? 1 : 0;
+                    double left = (colRangeMin == -1 || i == colRangeMin) ? 1 : 0;
+                    double right = (colRangeMin == -1 || i == colRangeMax) ? 1 : 0;
+                    cells[i].BorderThickness = new Thickness(left, top, right, bottom);
+                }
                 else
+                {
                     cells[i].Background = Brushes.Transparent;
+                    cells[i].BorderBrush = null;
+                    cells[i].BorderThickness = new Thickness(0);
+                }
             }
         }
     }
@@ -1138,13 +1198,21 @@ public partial class QueryTabView
 
         for (int i = 0; i < result.ColumnNames.Length; i++)
         {
-            grid.Columns.Add(new DataGridTextColumn
+            var col = new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
                 Binding = new Binding($"[{i}]", BindingMode.TwoWay),
                 IsReadOnly = true,
                 FontSize = fontSize,
-            });
+            };
+
+            // Right-align numeric columns (SSMS-style)
+            if (i < result.ColumnTypes.Length && IsNumericType(result.ColumnTypes[i]))
+            {
+                col.CellStyleClasses.Add("numericCell");
+            }
+
+            grid.Columns.Add(col);
         }
     }
 

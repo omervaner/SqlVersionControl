@@ -279,9 +279,27 @@ public partial class QueryTabView
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            // Cancel current cell edit; if not editing a cell, exit edit mode entirely
-            if (!ResultsGrid.CancelEdit())
+
+            // If a cell TextBox is focused, first Escape just cancels the cell edit
+            var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            if (focused is Avalonia.Controls.TextBox tb && tb.FindAncestorOfType<DataGridCell>() != null)
+            {
+                ResultsGrid.CancelEdit();
+                return;
+            }
+
+            // No cell being actively edited — exit edit mode
+            bool hasChanges = _viewModel.EditableRows?.Any(r =>
+                r.State != RowEditState.None) == true;
+
+            if (hasChanges)
+            {
+                _ = PromptExitEditModeAsync();
+            }
+            else
+            {
                 _viewModel.CancelChangesCommand.Execute(null);
+            }
             return;
         }
 
@@ -472,6 +490,26 @@ public partial class QueryTabView
         };
 
         row.Opacity = editRow.State == RowEditState.Deleted ? 0.5 : 1.0;
+    }
+
+    private async Task PromptExitEditModeAsync()
+    {
+        var window = TopLevel.GetTopLevel(this) as Window;
+        if (window == null) return;
+
+        // Reuse CloseTabDialog — "Don't Save" = discard changes, "Cancel" = stay in edit mode
+        var dialog = new CloseTabDialog("uncommitted edit changes");
+        await dialog.ShowDialog(window);
+
+        if (dialog.Result == false) // Don't Save = discard changes
+        {
+            _viewModel?.CancelChangesCommand.Execute(null);
+        }
+        else if (dialog.Result == true) // Save = apply changes to database
+        {
+            _viewModel?.ApplyChangesCommand.Execute(null);
+        }
+        // null = cancelled — stay in edit mode
     }
 
     private void RefreshRowVisuals()
