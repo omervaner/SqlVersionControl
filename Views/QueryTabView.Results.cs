@@ -154,8 +154,8 @@ public partial class QueryTabView
                     cells[i].BorderBrush = borderBrush;
                     double top = rowIdx == minSelRow ? 1 : 0;
                     double bottom = rowIdx == maxSelRow ? 1 : 0;
-                    double left = (colRangeMin == -1 || i == colRangeMin) ? 1 : 0;
-                    double right = (colRangeMin == -1 || i == colRangeMax) ? 1 : 0;
+                    double left = (colRangeMin == -1 ? i == 0 : i == colRangeMin) ? 1 : 0;
+                    double right = (colRangeMin == -1 ? i == cells.Count - 1 : i == colRangeMax) ? 1 : 0;
                     cells[i].BorderThickness = new Thickness(left, top, right, bottom);
                 }
                 else
@@ -241,8 +241,8 @@ public partial class QueryTabView
                     cells[i].BorderBrush = borderBrush;
                     double top = rowIdx == minSel ? 1 : 0;
                     double bottom = rowIdx == maxSel ? 1 : 0;
-                    double left = (colRangeMin == -1 || i == colRangeMin) ? 1 : 0;
-                    double right = (colRangeMin == -1 || i == colRangeMax) ? 1 : 0;
+                    double left = (colRangeMin == -1 ? i == 0 : i == colRangeMin) ? 1 : 0;
+                    double right = (colRangeMin == -1 ? i == cells.Count - 1 : i == colRangeMax) ? 1 : 0;
                     cells[i].BorderThickness = new Thickness(left, top, right, bottom);
                 }
                 else
@@ -423,6 +423,13 @@ public partial class QueryTabView
 
     private void OnRowHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (sender is not DataGrid grid) return;
+
+        // Right-click: preserve full-row selection (don't let it reset)
+        var point = e.GetCurrentPoint(grid);
+        if (point.Properties.IsRightButtonPressed)
+            return;
+
         // Check if click came from a row header area (not a data cell)
         var source = e.Source as Visual;
         bool isRowHeader = false;
@@ -444,6 +451,17 @@ public partial class QueryTabView
         if (isRowHeader)
         {
             _fullRowSelectionMode = true;
+
+            // Set up drag state for multi-row selection from row headers
+            var pos = e.GetPosition(grid);
+            var rowIndex = GetRowIndexAtPoint(grid, pos);
+            if (rowIndex >= 0)
+            {
+                _dragStartRowIndex = rowIndex;
+                _isDragSelecting = false;
+                e.Pointer.Capture(grid);
+            }
+
             Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
         }
         else
