@@ -15,6 +15,16 @@ public partial class QueryTabView
 {
     private bool _resultsMaximized;
 
+    // Column-scoped cell selection highlighting
+    private DataGridColumn? _highlightedColumn;
+
+    // Drag-to-select state
+    private bool _isDragSelecting;
+    private int _dragStartRowIndex = -1;
+
+    // When true, RepaintCellSelection highlights all cells (full row) instead of one column
+    private bool _fullRowSelectionMode;
+
     // NULL styling is handled by OnDataGridLoadingRow → StyleNullCells (text + italic + foreground)
     private static IBrush? _nullForeground;
 
@@ -43,6 +53,247 @@ public partial class QueryTabView
                 _nullForeground = new SolidColorBrush(Color.FromRgb(102, 102, 102));
         }
         return _nullForeground;
+    }
+
+    private static IBrush GetCellSelectionBrush()
+    {
+        if (Application.Current?.Resources.TryGetResource("CellSelectionHighlight", null, out var brush) == true && brush is IBrush b)
+            return b;
+        return new SolidColorBrush(Color.Parse("#3044688B"));
+    }
+
+    /// <summary>
+    /// Repaint cell-level selection highlights on the active grid.
+    /// Clears all cell highlights, then applies highlight only to cells
+    /// in the focused column for selected rows.
+    /// </summary>
+    private void RepaintCellSelection()
+    {
+        var grid = _activeResultsGrid;
+        if (grid == null) return;
+
+        var focusedCol = grid.CurrentColumn;
+        var focusedColIndex = _fullRowSelectionMode ? -1
+            : focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+
+        // Get the set of selected items for fast lookup
+        var selectedItems = grid.SelectedItems;
+        var selectedSet = new HashSet<object>();
+        if (selectedItems != null)
+        {
+            foreach (var item in selectedItems)
+            {
+                if (item != null) selectedSet.Add(item);
+            }
+        }
+
+        var highlightBrush = GetCellSelectionBrush();
+
+        // Walk all realized rows
+        foreach (var row in grid.GetVisualDescendants().OfType<DataGridRow>())
+        {
+            bool isSelected = row.DataContext != null && selectedSet.Contains(row.DataContext);
+
+            // Hide Avalonia's built-in selection rectangle (template part)
+            if (isSelected)
+            {
+                foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
+                {
+                    rect.Fill = Brushes.Transparent;
+                }
+            }
+
+            var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                // Highlight the focused column cell, or ALL cells if no column focused (row header / select-all)
+                if (isSelected && (focusedColIndex == -1 || i == focusedColIndex))
+                    cells[i].Background = highlightBrush;
+                else
+                    cells[i].Background = Brushes.Transparent;
+            }
+        }
+
+        _highlightedColumn = focusedCol;
+    }
+
+    /// <summary>
+    /// Apply cell highlight to a single row (used in LoadingRow for virtualized rows).
+    /// </summary>
+    private void ApplyCellSelectionToRow(DataGridRow row)
+    {
+        var grid = _activeResultsGrid;
+        if (grid == null) return;
+
+        var focusedCol = grid.CurrentColumn;
+        var focusedColIndex = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+
+        bool isSelected = row.DataContext != null && grid.SelectedItems != null &&
+                          grid.SelectedItems.Contains(row.DataContext);
+
+        row.LayoutUpdated += OnRowLayoutForCellSelection;
+
+        void OnRowLayoutForCellSelection(object? s, EventArgs args)
+        {
+            row.LayoutUpdated -= OnRowLayoutForCellSelection;
+
+            // Hide Avalonia's built-in selection rectangle
+            if (isSelected)
+            {
+                foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
+                    rect.Fill = Brushes.Transparent;
+            }
+
+            var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
+            var highlightBrush = GetCellSelectionBrush();
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                if (isSelected && (focusedColIndex == -1 || i == focusedColIndex))
+                    cells[i].Background = highlightBrush;
+                else
+                    cells[i].Background = Brushes.Transparent;
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Drag-to-select: Avalonia DataGrid doesn't support click-drag selection
+    // natively. We implement it via PointerPressed/Moved/Released.
+    // -----------------------------------------------------------------------
+
+    private static int GetRowIndexAtPoint(DataGrid grid, Point position)
+    {
+        var hit = grid.GetVisualAt(position);
+        var visual = hit as Visual;
+        while (visual != null && visual is not DataGridRow)
+            visual = visual.GetVisualParent() as Visual;
+        return visual is DataGridRow row ? row.GetIndex() : -1;
+    }
+
+    private void OnDragSelectPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not DataGrid grid) return;
+        if (_viewModel is { IsEditMode: true }) return;
+
+        var point = e.GetCurrentPoint(grid);
+        if (!point.Properties.IsLeftButtonPressed) return;
+
+        // Don't interfere with Ctrl+Click or Shift+Click
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
+            e.KeyModifiers.HasFlag(KeyModifiers.Meta) ||
+            e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            return;
+
+        // Don't start drag from column headers
+        var source = e.Source as Visual;
+        while (source != null)
+        {
+            if (source is DataGridColumnHeader)
+                return;
+            source = source.GetVisualParent() as Visual;
+        }
+
+        // Don't start drag if click is in the row header area (left of first column)
+        var pos = e.GetPosition(grid);
+        if (pos.X < grid.RowHeaderWidth)
+            return;
+
+        var rowIndex = GetRowIndexAtPoint(grid, e.GetPosition(grid));
+        if (rowIndex < 0) return;
+
+        _dragStartRowIndex = rowIndex;
+        _isDragSelecting = false;
+        e.Pointer.Capture(grid);
+    }
+
+    private void OnDragSelectPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragStartRowIndex < 0) return;
+        if (sender is not DataGrid grid) return;
+
+        var currentRowIndex = GetRowIndexAtPoint(grid, e.GetPosition(grid));
+        if (currentRowIndex < 0) return;
+        if (currentRowIndex == _dragStartRowIndex && !_isDragSelecting) return;
+
+        _isDragSelecting = true;
+
+        // Select the range from drag start to current row
+        var items = grid.ItemsSource?.Cast<object>().ToList();
+        if (items == null) return;
+
+        var minIdx = Math.Min(_dragStartRowIndex, currentRowIndex);
+        var maxIdx = Math.Max(_dragStartRowIndex, currentRowIndex);
+
+        grid.SelectedItems.Clear();
+        for (int i = minIdx; i <= maxIdx; i++)
+        {
+            if (i >= 0 && i < items.Count)
+                grid.SelectedItems.Add(items[i]);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnDragSelectPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var wasDragging = _isDragSelecting;
+        _isDragSelecting = false;
+        _dragStartRowIndex = -1;
+
+        e.Pointer.Capture(null);
+
+        if (wasDragging)
+        {
+            e.Handled = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
+        }
+        else
+        {
+            // Normal click release — repaint for the single selection
+            Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    private void OnRowHeaderPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Check if click came from a row header area (not a data cell)
+        var source = e.Source as Visual;
+        bool isRowHeader = false;
+        while (source != null)
+        {
+            // Row header cells have DataGridRowHeader type, but it's internal.
+            // Check by type name instead.
+            var typeName = source.GetType().Name;
+            if (typeName == "DataGridRowHeader" || typeName == "DataGridTopLeftCornerHeader")
+            {
+                isRowHeader = true;
+                break;
+            }
+            if (source is DataGridCell)
+                break; // It's a data cell click, not a header
+            source = source.GetVisualParent() as Visual;
+        }
+
+        if (isRowHeader)
+        {
+            _fullRowSelectionMode = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
+        }
+        else
+        {
+            _fullRowSelectionMode = false;
+        }
+    }
+
+    /// <summary>Wire drag-to-select and row header detection on a DataGrid (main or stacked).</summary>
+    private void WireDragSelection(DataGrid grid)
+    {
+        grid.AddHandler(PointerPressedEvent, OnRowHeaderPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        grid.AddHandler(PointerPressedEvent, OnDragSelectPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        grid.AddHandler(PointerMovedEvent, OnDragSelectPointerMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        grid.AddHandler(PointerReleasedEvent, OnDragSelectPointerReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 
     private void OnResultsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -727,7 +978,7 @@ public partial class QueryTabView
             BuildColumnsForGrid(grid, result);
             grid.ItemsSource = result.Rows;
 
-            // Wire events for cell detail + active grid tracking
+            // Wire events for cell detail + active grid tracking + cell selection highlight
             grid.SelectionChanged += (s, _) =>
             {
                 var clickedGrid = (DataGrid)s!;
@@ -739,16 +990,18 @@ public partial class QueryTabView
                         otherGrid.SelectedIndex = -1;
                 }
                 UpdateCellDetail();
+                Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
             };
             grid.CellPointerPressed += (s, _) =>
             {
                 _activeResultsGrid = (DataGrid)s!;
-                Avalonia.Threading.Dispatcher.UIThread.Post(UpdateCellDetail);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => { UpdateCellDetail(); RepaintCellSelection(); });
             };
 
-            // Wire LoadingRow for NULL styling + keyboard handler for copy
+            // Wire LoadingRow for NULL styling + keyboard handler for copy + drag-select
             grid.LoadingRow += OnDataGridLoadingRow;
             grid.AddHandler(KeyDownEvent, OnResultsGridKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            WireDragSelection(grid);
 
             Grid.SetRow(grid, 1);
             container.Children.Add(grid);

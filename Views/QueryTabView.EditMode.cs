@@ -382,6 +382,9 @@ public partial class QueryTabView
 
         // Style NULL cells (grey italic) for both read-only and edit mode
         StyleNullCells(e.Row);
+
+        // Apply column-scoped cell selection highlight for virtualized rows
+        ApplyCellSelectionToRow(e.Row);
     }
 
     private void StyleNullCells(DataGridRow row)

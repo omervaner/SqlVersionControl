@@ -138,10 +138,15 @@ public partial class QueryTabView : UserControl
         // Keyboard shortcuts on results grid (Ctrl+V paste in edit mode)
         ResultsGrid.AddHandler(KeyDownEvent, OnResultsGridKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
+        // Drag-to-select (Avalonia DataGrid doesn't support this natively)
+        WireDragSelection(ResultsGrid);
+
         // Cell detail viewer — track both row changes and cell clicks
         ResultsGrid.SelectionChanged += OnResultsGridCellSelected;
+        ResultsGrid.SelectionChanged += (_, _) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
         ResultsGrid.CellPointerPressed += (_, _) =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateCellDetail(), Avalonia.Threading.DispatcherPriority.Background);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => { UpdateCellDetail(); RepaintCellSelection(); }, Avalonia.Threading.DispatcherPriority.Background);
         CellDetailCopyButton.Click += async (_, _) =>
         {
             if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)

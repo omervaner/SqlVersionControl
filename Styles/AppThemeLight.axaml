@@ -42,6 +42,7 @@
 
     <!-- === SELECTION / FOCUS === -->
     <SolidColorBrush x:Key="SelectionActive" Color="#d4cec3"/>
+    <SolidColorBrush x:Key="CellSelectionHighlight" Color="#4044688B"/>
     <SolidColorBrush x:Key="HoverBackground" Color="#ebe5da"/>
     <SolidColorBrush x:Key="WordHighlight" Color="#d4c48a"/>
     <SolidColorBrush x:Key="BracketMatchBackground" Color="#40808080"/>

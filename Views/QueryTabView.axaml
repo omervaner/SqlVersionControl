@@ -190,6 +190,9 @@
                             <Style Selector="DataGridRow">
                                 <Setter Property="MinHeight" Value="0"/>
                             </Style>
+                            <Style Selector="DataGridRow:selected">
+                                <Setter Property="Background" Value="Transparent"/>
+                            </Style>
                         </DataGrid.Styles>
                     </DataGrid>
 
