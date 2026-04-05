@@ -346,17 +346,40 @@ public partial class QueryTabView
         var selected = GetSelectedRows();
         var rows = selected.Count > 0 ? selected : result.Rows;
 
+        // Determine column range (multi-column drag or single column or all)
+        int minCol, maxCol;
+        if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+        {
+            minCol = Math.Min(_dragStartColIndex, _dragEndColIndex);
+            maxCol = Math.Max(_dragStartColIndex, _dragEndColIndex);
+        }
+        else if (!_fullRowSelectionMode && _activeResultsGrid?.CurrentColumn != null)
+        {
+            minCol = maxCol = _activeResultsGrid.Columns.IndexOf(_activeResultsGrid.CurrentColumn);
+        }
+        else
+        {
+            minCol = 0;
+            maxCol = result.ColumnNames.Length - 1;
+        }
+
+        // Clamp to valid range
+        minCol = Math.Max(0, minCol);
+        maxCol = Math.Min(result.ColumnNames.Length - 1, maxCol);
+
         var sb = new StringBuilder();
-        sb.AppendLine(string.Join("\t", result.ColumnNames));
+        sb.AppendLine(string.Join("\t", result.ColumnNames.Skip(minCol).Take(maxCol - minCol + 1)));
         foreach (var row in rows)
-            sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));
+            sb.AppendLine(string.Join("\t", row.Skip(minCol).Take(maxCol - minCol + 1).Select(v => v?.ToString() ?? "NULL")));
 
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard != null)
         {
             await clipboard.SetTextAsync(sb.ToString());
-            var label = selected.Count > 0 ? $"{selected.Count} selected row" : $"{rows.Count} row";
+            var colCount = maxCol - minCol + 1;
+            var label = selected.Count > 0 ? $"{selected.Count} row" : $"{rows.Count} row";
             if (rows.Count != 1) label += "s";
+            if (colCount < result.ColumnNames.Length) label += $" × {colCount} col{(colCount > 1 ? "s" : "")}";
             _viewModel.Flash($"\u2713 {label} copied", ViewModels.QueryStatusSeverity.Success);
         }
     }

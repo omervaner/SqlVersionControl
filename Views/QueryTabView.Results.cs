@@ -247,6 +247,19 @@ public partial class QueryTabView
         if (_viewModel is { IsEditMode: true }) return;
 
         var point = e.GetCurrentPoint(grid);
+
+        // Right-click: preserve multi-column selection (don't let DataGrid reset it)
+        if (point.Properties.IsRightButtonPressed)
+        {
+            if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0 &&
+                _dragStartColIndex != _dragEndColIndex)
+            {
+                // We have a multi-column selection — block DataGrid from changing it
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (!point.Properties.IsLeftButtonPressed) return;
 
         // Don't interfere with Ctrl+Click or Shift+Click
@@ -321,6 +334,10 @@ public partial class QueryTabView
 
     private void OnDragSelectPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        // Only handle left button release — right-click release should not reset drag state
+        if (e.InitialPressMouseButton != MouseButton.Left)
+            return;
+
         var wasDragging = _isDragSelecting;
         _isDragSelecting = false;
         _dragStartRowIndex = -1;

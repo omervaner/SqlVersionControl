@@ -146,7 +146,7 @@ public partial class QueryTabView : UserControl
         ResultsGrid.SelectionChanged += (_, _) =>
             Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
         ResultsGrid.CellPointerPressed += (_, _) =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (!_isDragSelecting && _dragStartRowIndex < 0) { _dragStartColIndex = -1; _dragEndColIndex = -1; } UpdateCellDetail(); RepaintCellSelection(); }, Avalonia.Threading.DispatcherPriority.Background);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => { UpdateCellDetail(); RepaintCellSelection(); }, Avalonia.Threading.DispatcherPriority.Background);
         CellDetailCopyButton.Click += async (_, _) =>
         {
             if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
