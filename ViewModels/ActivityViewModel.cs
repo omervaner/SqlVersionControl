@@ -748,6 +748,13 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
         _ = LoadJobDetailAsync(value);
     }
 
+    [RelayCommand]
+    public void CloseJobDetail()
+    {
+        IsJobDetailVisible = false;
+        _previousSelectedJob = null;
+    }
+
     public void CollapseDetail()
     {
         IsJobDetailVisible = false;

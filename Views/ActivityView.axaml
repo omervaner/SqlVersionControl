@@ -400,7 +400,7 @@
 
                         <!-- Detail sub-tabs + unsaved indicator -->
                         <Border Grid.Row="1" Background="{DynamicResource PanelHeaderBackground}" Padding="10,4">
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
                                     <RadioButton GroupName="JobDetailTabs"
                                                  IsChecked="{Binding IsJobGeneralTabActive}"
@@ -417,8 +417,13 @@
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="● unsaved" FontSize="10"
                                            Foreground="{DynamicResource ButtonDanger}"
-                                           VerticalAlignment="Center"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"
                                            IsVisible="{Binding HasUnsavedChanges}"/>
+                                <Button Grid.Column="2" Content="✕" FontSize="11"
+                                        Background="Transparent" BorderThickness="0"
+                                        Foreground="{DynamicResource TextSecondary}"
+                                        Padding="6,2" Cursor="Hand" VerticalAlignment="Center"
+                                        Command="{Binding CloseJobDetailCommand}"/>
                             </Grid>
                         </Border>
 

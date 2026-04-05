@@ -40,6 +40,13 @@ public partial class CompareViewModel : ViewModelBase
 
     private string _sourceConnectionString = "";
 
+    // Source database picker
+    [ObservableProperty]
+    private ObservableCollection<string> _sourceDatabases = new();
+
+    [ObservableProperty]
+    private string? _selectedSourceDatabase;
+
     // Target connection
     [ObservableProperty]
     private ObservableCollection<SavedConnection> _targetConnections = new();
@@ -55,6 +62,13 @@ public partial class CompareViewModel : ViewModelBase
 
     private string _targetConnectionString = "";
 
+    // Target database picker
+    [ObservableProperty]
+    private ObservableCollection<string> _targetDatabases = new();
+
+    [ObservableProperty]
+    private string? _selectedTargetDatabase;
+
     // Target2 connection (optional third database for three-way compare)
     [ObservableProperty]
     private ObservableCollection<SavedConnection> _target2Connections = new();
@@ -67,6 +81,13 @@ public partial class CompareViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isTarget2Connected;
+
+    // Target2 database picker
+    [ObservableProperty]
+    private ObservableCollection<string> _target2Databases = new();
+
+    [ObservableProperty]
+    private string? _selectedTarget2Database;
 
     [ObservableProperty]
     private bool _showTarget2; // Toggle for showing third DB
@@ -393,11 +414,18 @@ public partial class CompareViewModel : ViewModelBase
             IsSourceConnected = true;
             SourceStatus = $"Connected: {conn.Server}/{conn.Database}";
             SaveLastComparison();
+
+            // Load database list and auto-select current database
+            var dbs = await LoadDatabaseListAsync(_sourceConnectionString, SourceDatabases);
+            _selectedSourceDatabase = dbs.Contains(conn.Database) ? conn.Database : dbs.FirstOrDefault();
+            OnPropertyChanged(nameof(SelectedSourceDatabase));
+
             await LoadObjectsAsync();
         }
         else
         {
             IsSourceConnected = false;
+            SourceDatabases.Clear();
             SourceStatus = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
@@ -434,6 +462,11 @@ public partial class CompareViewModel : ViewModelBase
             TargetStatus = $"Connected: {conn.Server}/{conn.Database}";
             SaveLastComparison();
 
+            // Load database list and auto-select current database
+            var dbs = await LoadDatabaseListAsync(_targetConnectionString, TargetDatabases);
+            _selectedTargetDatabase = dbs.Contains(conn.Database) ? conn.Database : dbs.FirstOrDefault();
+            OnPropertyChanged(nameof(SelectedTargetDatabase));
+
             // Auto-connect source after target connects (password should be in PasswordStore from main login)
             if (SelectedSourceConnection != null && !IsSourceConnected)
             {
@@ -450,6 +483,7 @@ public partial class CompareViewModel : ViewModelBase
         else
         {
             IsTargetConnected = false;
+            TargetDatabases.Clear();
             TargetStatus = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
@@ -484,6 +518,11 @@ public partial class CompareViewModel : ViewModelBase
             IsTarget2Connected = true;
             Target2Status = $"Connected: {conn.Server}/{conn.Database}";
 
+            // Load database list and auto-select current database
+            var dbs = await LoadDatabaseListAsync(_target2ConnectionString, Target2Databases);
+            _selectedTarget2Database = dbs.Contains(conn.Database) ? conn.Database : dbs.FirstOrDefault();
+            OnPropertyChanged(nameof(SelectedTarget2Database));
+
             // Reload definitions if we have a selected object
             if (SelectedObject != null)
             {
@@ -493,6 +532,7 @@ public partial class CompareViewModel : ViewModelBase
         else
         {
             IsTarget2Connected = false;
+            Target2Databases.Clear();
             Target2Status = $"Failed: {_lastConnectionError ?? "Connection failed"}";
         }
     }
@@ -567,6 +607,85 @@ public partial class CompareViewModel : ViewModelBase
 
         return settings.ConnectionString;
     }
+
+    /// <summary>
+    /// Rebuild a connection string swapping in a different database (InitialCatalog).
+    /// </summary>
+    private static string SwapDatabase(string connectionString, string newDatabase)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            InitialCatalog = newDatabase
+        };
+        return builder.ConnectionString;
+    }
+
+    /// <summary>
+    /// Load the list of user databases from a connection string and populate the target collection.
+    /// Returns the list for further use (e.g. auto-selecting).
+    /// </summary>
+    private async Task<List<string>> LoadDatabaseListAsync(string connectionString, ObservableCollection<string> target)
+    {
+        var databases = new List<string>();
+        try
+        {
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(
+                "SELECT name FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' ORDER BY name", conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                databases.Add(reader.GetString(0));
+        }
+        catch
+        {
+            // Silently fail — the connection indicator already shows status
+        }
+
+        target.Clear();
+        foreach (var db in databases)
+            target.Add(db);
+
+        return databases;
+    }
+
+    // Suppress MVVMTK0034 — we set backing fields to avoid re-triggering connection logic
+    #pragma warning disable MVVMTK0034
+
+    partial void OnSelectedSourceDatabaseChanged(string? value)
+    {
+        if (value == null || string.IsNullOrEmpty(_sourceConnectionString)) return;
+
+        _sourceConnectionString = SwapDatabase(_sourceConnectionString, value);
+        SourceStatus = $"Connected: {SelectedSourceConnection?.Server}/{value}";
+
+        if (IsSourceConnected && IsTargetConnected)
+            _ = LoadObjectsAsync();
+    }
+
+    partial void OnSelectedTargetDatabaseChanged(string? value)
+    {
+        if (value == null || string.IsNullOrEmpty(_targetConnectionString)) return;
+
+        _targetConnectionString = SwapDatabase(_targetConnectionString, value);
+        TargetStatus = $"Connected: {SelectedTargetConnection?.Server}/{value}";
+
+        if (IsSourceConnected && IsTargetConnected)
+            _ = LoadObjectsAsync();
+    }
+
+    partial void OnSelectedTarget2DatabaseChanged(string? value)
+    {
+        if (value == null || string.IsNullOrEmpty(_target2ConnectionString)) return;
+
+        _target2ConnectionString = SwapDatabase(_target2ConnectionString, value);
+        Target2Status = $"Connected: {SelectedTarget2Connection?.Server}/{value}";
+
+        if (SelectedObject != null)
+            _ = LoadDefinitionsAsync(SelectedObject);
+    }
+
+    #pragma warning restore MVVMTK0034
 
     private bool IsProductionConnection(SavedConnection? conn)
     {
@@ -648,16 +767,22 @@ public partial class CompareViewModel : ViewModelBase
         var tempConnStr = _sourceConnectionString;
         var tempStatus = _sourceStatus;
         var tempConnected = _isSourceConnected;
+        var tempDbs = _sourceDatabases;
+        var tempSelectedDb = _selectedSourceDatabase;
 
         _selectedSourceConnection = _selectedTargetConnection;
         _sourceConnectionString = _targetConnectionString;
         _sourceStatus = _targetStatus;
         _isSourceConnected = _isTargetConnected;
+        _sourceDatabases = _targetDatabases;
+        _selectedSourceDatabase = _selectedTargetDatabase;
 
         _selectedTargetConnection = tempConn;
         _targetConnectionString = tempConnStr;
         _targetStatus = tempStatus;
         _isTargetConnected = tempConnected;
+        _targetDatabases = tempDbs;
+        _selectedTargetDatabase = tempSelectedDb;
 
         // Notify UI of all swapped properties
         OnPropertyChanged(nameof(SelectedSourceConnection));
@@ -666,6 +791,10 @@ public partial class CompareViewModel : ViewModelBase
         OnPropertyChanged(nameof(TargetStatus));
         OnPropertyChanged(nameof(IsSourceConnected));
         OnPropertyChanged(nameof(IsTargetConnected));
+        OnPropertyChanged(nameof(SourceDatabases));
+        OnPropertyChanged(nameof(SelectedSourceDatabase));
+        OnPropertyChanged(nameof(TargetDatabases));
+        OnPropertyChanged(nameof(SelectedTargetDatabase));
         OnPropertyChanged(nameof(CompareOverlayMessage));
         OnPropertyChanged(nameof(ShowCompareOverlay));
         OnPropertyChanged(nameof(DeployTooltip));
@@ -700,6 +829,8 @@ public partial class CompareViewModel : ViewModelBase
             Target2Code = "";
             DiffModel2 = null;
             CanDeploy2 = false;
+            Target2Databases.Clear();
+            SelectedTarget2Database = null;
         }
     }
 

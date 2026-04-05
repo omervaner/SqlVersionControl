@@ -41,6 +41,10 @@ public partial class SettingsDialog : Window
         LightThemeRadio.IsCheckedChanged += (s, e) => PreviewTheme();
         FontSizeCombo.SelectionChanged += (s, e) => PreviewTheme();
 
+        // User mode toggle — immediately show/hide admin sections
+        AdminModeRadio.IsCheckedChanged += (s, e) => UpdateAdminSectionVisibility();
+        NormalModeRadio.IsCheckedChanged += (s, e) => UpdateAdminSectionVisibility();
+
         // Enter saves, Escape cancels
         KeyDown += (s, e) =>
         {
@@ -55,6 +59,13 @@ public partial class SettingsDialog : Window
         BrowseFolderButton.Click += async (s, e) => await BrowseForFolderAsync();
         BrowseGitFolderButton.Click += async (s, e) => await BrowseForGitFolderAsync();
         ExportNowButton.Click += async (s, e) => await ExportNowAsync();
+    }
+
+    private void UpdateAdminSectionVisibility()
+    {
+        var isAdmin = AdminModeRadio.IsChecked == true;
+        VersionHistorySection.IsVisible = isAdmin;
+        GitIntegrationSection.IsVisible = isAdmin;
     }
 
     private void PreviewTheme()
@@ -83,6 +94,13 @@ public partial class SettingsDialog : Window
     private void LoadCurrentSettings()
     {
         var s = _settings.Settings;
+
+        // User mode
+        if (s.IsAdminMode)
+            AdminModeRadio.IsChecked = true;
+        else
+            NormalModeRadio.IsChecked = true;
+        UpdateAdminSectionVisibility();
 
         // Theme
         if (s.UseDarkTheme)
@@ -131,6 +149,9 @@ public partial class SettingsDialog : Window
     private void SaveAndClose()
     {
         var s = _settings.Settings;
+
+        // User mode
+        s.IsAdminMode = AdminModeRadio.IsChecked == true;
 
         // Theme
         s.UseDarkTheme = DarkThemeRadio.IsChecked == true;

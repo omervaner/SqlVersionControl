@@ -9,10 +9,15 @@
         <!-- Top Bar Row 1: Source, Search, Target1 -->
         <Border Grid.Row="0" Background="{DynamicResource ToolbarBackground}" Padding="10,8">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-                <!-- Source Connection -->
+                <!-- Source Connection + DB picker -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Source:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <views:ConnectionIndicator x:Name="SourceConnectionIndicator"/>
+                    <ComboBox ItemsSource="{Binding SourceDatabases}"
+                              SelectedItem="{Binding SelectedSourceDatabase}"
+                              IsVisible="{Binding IsSourceConnected}"
+                              MinWidth="100" MaxWidth="180" Padding="6,3"
+                              FontSize="11" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- Swap Source ↔ Target -->
@@ -37,8 +42,13 @@
                              Width="200"/>
                 </StackPanel>
 
-                <!-- Target1 Connection + T2 Toggle -->
+                <!-- Target1 Connection + DB picker + T2 Toggle -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                    <ComboBox ItemsSource="{Binding TargetDatabases}"
+                              SelectedItem="{Binding SelectedTargetDatabase}"
+                              IsVisible="{Binding IsTargetConnected}"
+                              MinWidth="100" MaxWidth="180" Padding="6,3"
+                              FontSize="11" VerticalAlignment="Center"/>
                     <TextBlock Text="Target 1:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                     <views:ConnectionIndicator x:Name="TargetConnectionIndicator"/>
                     <Button Command="{Binding ToggleTarget2Command}"
@@ -54,6 +64,11 @@
         <!-- Top Bar Row 2: Target2 (only visible when ShowTarget2 is true) -->
         <Border Grid.Row="1" Background="{DynamicResource PanelHeaderBackground}" Padding="10,6" IsVisible="{Binding ShowTarget2}">
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                <ComboBox ItemsSource="{Binding Target2Databases}"
+                          SelectedItem="{Binding SelectedTarget2Database}"
+                          IsVisible="{Binding IsTarget2Connected}"
+                          MinWidth="100" MaxWidth="180" Padding="6,3"
+                          FontSize="11" VerticalAlignment="Center"/>
                 <TextBlock Text="Target 2:" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontSize="12"/>
                 <views:ConnectionIndicator x:Name="Target2ConnectionIndicator"/>
                 <TextBlock Text="{Binding Target2Status}" Foreground="{DynamicResource TextSecondary}"

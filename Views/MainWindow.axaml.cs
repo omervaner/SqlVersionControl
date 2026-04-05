@@ -188,6 +188,7 @@ public partial class MainWindow : Window
 
         // Wire menu items
         WireMenuItems();
+        UpdateAdminMenuVisibility();
 
         // Sleep/wake detection
         _sleepDetector = new SleepDetector();
@@ -429,6 +430,12 @@ public partial class MainWindow : Window
         var dialog = new SettingsDialog(_settings, RefreshDiffViews,
             _viewModel.DatabaseService, connStr);
         await dialog.ShowDialog(this);
+        UpdateAdminMenuVisibility();
+    }
+
+    private void UpdateAdminMenuVisibility()
+    {
+        MenuExportGit.IsVisible = _settings.Settings.IsAdminMode;
     }
 
     private async Task ShowAboutDialogAsync()

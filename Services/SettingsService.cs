@@ -198,6 +198,9 @@ public class AppSettings
     public int GridRowHeight { get; set; } = 22;
     public int ConnectionTimeout { get; set; } = 5;
 
+    // User mode (Normal hides admin-only settings sections)
+    public bool IsAdminMode { get; set; }
+
     // DDL Audit Source (Version History)
     public string? DdlAuditServer { get; set; }
     public string? DdlAuditDatabase { get; set; }
