@@ -121,6 +121,13 @@ public class DataEditService
         string[] columnNames, List<string> pkColumns,
         List<EditableRow> rows)
     {
+        // Detect identity column to exclude from INSERTs
+        var identityCol = await DatabaseService.GetIdentityColumnAsync(connectionString, schema, table);
+        int identityColIndex = identityCol != null
+            ? Array.FindIndex(columnNames, c => c.Equals(identityCol, StringComparison.OrdinalIgnoreCase))
+            : -1;
+        bool identityOmitted = false;
+
         using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
         using var tx = conn.BeginTransaction();
@@ -171,8 +178,11 @@ public class DataEditService
                     case RowEditState.New:
                     {
                         var colIndices = Enumerable.Range(0, columnNames.Length)
-                            .Where(i => row.Values[i] != null)
+                            .Where(i => row.Values[i] != null && i != identityColIndex)
                             .ToList();
+
+                        if (identityColIndex >= 0 && row.Values[identityColIndex] != null)
+                            identityOmitted = true;
 
                         if (colIndices.Count == 0) continue;
 
@@ -223,7 +233,11 @@ public class DataEditService
             if (inserts > 0) parts.Add($"{inserts} insert(s)");
             if (deletes > 0) parts.Add($"{deletes} delete(s)");
 
-            return (true, $"Applied: {string.Join(", ", parts)}");
+            var msg = $"Applied: {string.Join(", ", parts)}";
+            if (identityOmitted)
+                msg += $" — omitted identity column [{identityCol}]";
+
+            return (true, msg);
         }
         catch (Exception ex)
         {
@@ -238,11 +252,16 @@ public class DataEditService
     public static string GeneratePreviewSql(
         string schema, string table,
         string[] columnNames, List<string> pkColumns,
-        List<EditableRow> rows)
+        List<EditableRow> rows,
+        string? identityColumn = null)
     {
         var pkIndices = pkColumns.Select(pk =>
             Array.FindIndex(columnNames, c => c.Equals(pk, StringComparison.OrdinalIgnoreCase))
         ).ToArray();
+
+        int identityColIndex = identityColumn != null
+            ? Array.FindIndex(columnNames, c => c.Equals(identityColumn, StringComparison.OrdinalIgnoreCase))
+            : -1;
 
         var lines = new List<string>();
 
@@ -270,7 +289,7 @@ public class DataEditService
                 case RowEditState.New:
                 {
                     var colIndices = Enumerable.Range(0, columnNames.Length)
-                        .Where(i => row.Values[i] != null)
+                        .Where(i => row.Values[i] != null && i != identityColIndex)
                         .ToList();
 
                     if (colIndices.Count == 0) continue;
@@ -280,6 +299,8 @@ public class DataEditService
 
                     lines.Add($"INSERT INTO [{schema}].[{table}] ({string.Join(", ", cols)})");
                     lines.Add($"VALUES ({string.Join(", ", vals)});");
+                    if (identityColIndex >= 0)
+                        lines.Add($"-- identity column [{columnNames[identityColIndex]}] omitted");
                     lines.Add("");
                     break;
                 }

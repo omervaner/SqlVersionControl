@@ -21,6 +21,7 @@ public class DataCompareResult
     public string[] PkColumnNames { get; set; } = [];
     public int[] PkColumnIndices { get; set; } = [];
     public bool HasIdentityColumn { get; set; }
+    public string? IdentityColumnName { get; set; }
     public List<DataCompareRow> Rows { get; set; } = [];
 
     /// <summary>True if either source or target hit the row limit (more data exists).</summary>

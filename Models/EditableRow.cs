@@ -46,12 +46,12 @@ public class EditableRow : INotifyPropertyChanged, IEditableObject
         {
             if (value is string strVal)
             {
-                if (string.IsNullOrEmpty(strVal))
+                if (string.IsNullOrEmpty(strVal) || strVal.Equals("NULL", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Empty string → null for non-string types
+                    // Empty string or "NULL" text → actual null for non-string types
                     Values[index] = index < ColumnTypes.Length && ColumnTypes[index] != typeof(string)
                         ? null
-                        : strVal;
+                        : (string.IsNullOrEmpty(strVal) ? strVal : null);
                 }
                 else if (index < ColumnTypes.Length && ColumnTypes[index] != typeof(string))
                 {

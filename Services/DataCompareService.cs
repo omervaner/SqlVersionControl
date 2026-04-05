@@ -41,30 +41,10 @@ public class DataCompareService
 
     /// <summary>
     /// Detect if a table has an identity column, and return its name.
+    /// Delegates to DatabaseService.GetIdentityColumnAsync (single source of truth).
     /// </summary>
-    public async Task<string?> GetIdentityColumnAsync(string connectionString, string schema, string table)
-    {
-        var builder = new SqlConnectionStringBuilder(connectionString);
-        var safeDb = builder.InitialCatalog.Replace("]", "]]");
-
-        using var conn = new SqlConnection(connectionString);
-        await conn.OpenAsync();
-
-        var sql = $@"
-            SELECT c.name
-            FROM [{safeDb}].sys.columns c
-            JOIN [{safeDb}].sys.tables t ON c.object_id = t.object_id
-            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
-            WHERE c.is_identity = 1
-              AND s.name = @schema AND t.name = @table";
-
-        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
-        cmd.Parameters.AddWithValue("@schema", schema);
-        cmd.Parameters.AddWithValue("@table", table);
-
-        var result = await cmd.ExecuteScalarAsync();
-        return result as string;
-    }
+    public Task<string?> GetIdentityColumnAsync(string connectionString, string schema, string table)
+        => DatabaseService.GetIdentityColumnAsync(connectionString, schema, table);
 
     /// <summary>
     /// Fetch all rows from a table (up to maxRows). Returns column names and row data.
@@ -162,6 +142,7 @@ public class DataCompareService
             PkColumnNames = pkColumns.ToArray(),
             PkColumnIndices = pkIndices,
             HasIdentityColumn = identityColumn != null,
+            IdentityColumnName = identityColumn,
             WasTruncated = sourceTruncated || targetTruncated,
             MaxRows = maxRows,
             Rows = []
@@ -230,14 +211,10 @@ public class DataCompareService
         var lines = new List<string>();
         var rowList = rows.ToList();
 
-        var needsIdentityInsert = comparison.HasIdentityColumn &&
-            rowList.Any(r => r.Status == DataRowStatus.SourceOnly);
-
-        if (needsIdentityInsert)
-        {
-            lines.Add($"SET IDENTITY_INSERT {tableRef} ON;");
-            lines.Add("");
-        }
+        // Find identity column index to exclude from INSERTs
+        int identityColIndex = comparison.IdentityColumnName != null
+            ? Array.FindIndex(cols, c => c.Equals(comparison.IdentityColumnName, StringComparison.OrdinalIgnoreCase))
+            : -1;
 
         foreach (var row in rowList)
         {
@@ -261,15 +238,17 @@ public class DataCompareService
 
                 case DataRowStatus.SourceOnly:
                 {
-                    // INSERT into target
+                    // INSERT into target — skip identity column
                     var nonNullIndices = Enumerable.Range(0, cols.Length)
-                        .Where(i => row.SourceValues[i] != null)
+                        .Where(i => row.SourceValues[i] != null && i != identityColIndex)
                         .ToList();
                     var colList = nonNullIndices.Select(i => $"[{cols[i]}]");
                     var valList = nonNullIndices.Select(i => FormatValue(row.SourceValues[i]));
 
                     lines.Add($"INSERT INTO {tableRef} ({string.Join(", ", colList)})");
                     lines.Add($"VALUES ({string.Join(", ", valList)});");
+                    if (identityColIndex >= 0)
+                        lines.Add($"-- identity column [{cols[identityColIndex]}] omitted");
                     lines.Add("");
                     break;
                 }
@@ -286,11 +265,6 @@ public class DataCompareService
                     break;
                 }
             }
-        }
-
-        if (needsIdentityInsert)
-        {
-            lines.Add($"SET IDENTITY_INSERT {tableRef} OFF;");
         }
 
         return string.Join("\n", lines);
@@ -314,17 +288,15 @@ public class DataCompareService
 
         int updates = 0, inserts = 0, deletes = 0;
         var rowList = rows.ToList();
-        var needsIdentityInsert = comparison.HasIdentityColumn &&
-            rowList.Any(r => r.Status == DataRowStatus.SourceOnly);
+        bool identityOmitted = false;
+
+        // Find identity column index to exclude from INSERTs
+        int identityColIndex = comparison.IdentityColumnName != null
+            ? Array.FindIndex(cols, c => c.Equals(comparison.IdentityColumnName, StringComparison.OrdinalIgnoreCase))
+            : -1;
 
         try
         {
-            if (needsIdentityInsert)
-            {
-                using var idOn = new SqlCommand($"SET IDENTITY_INSERT {tableRef} ON", conn, tx);
-                await idOn.ExecuteNonQueryAsync();
-            }
-
             foreach (var row in rowList)
             {
                 switch (row.Status)
@@ -353,7 +325,11 @@ public class DataCompareService
                     case DataRowStatus.SourceOnly:
                     {
                         var nonNullIndices = Enumerable.Range(0, cols.Length)
-                            .Where(i => row.SourceValues[i] != null).ToList();
+                            .Where(i => row.SourceValues[i] != null && i != identityColIndex).ToList();
+
+                        if (identityColIndex >= 0 && row.SourceValues[identityColIndex] != null)
+                            identityOmitted = true;
+
                         var colList = nonNullIndices.Select(i => $"[{cols[i]}]");
                         var parms = nonNullIndices.Select(i => $"@ins_{i}");
 
@@ -384,12 +360,6 @@ public class DataCompareService
                 }
             }
 
-            if (needsIdentityInsert)
-            {
-                using var idOff = new SqlCommand($"SET IDENTITY_INSERT {tableRef} OFF", conn, tx);
-                await idOff.ExecuteNonQueryAsync();
-            }
-
             tx.Commit();
 
             var parts = new List<string>();
@@ -397,7 +367,11 @@ public class DataCompareService
             if (inserts > 0) parts.Add($"{inserts} insert(s)");
             if (deletes > 0) parts.Add($"{deletes} delete(s)");
 
-            return (true, $"Applied: {string.Join(", ", parts)}");
+            var msg = $"Applied: {string.Join(", ", parts)}";
+            if (identityOmitted)
+                msg += $" — omitted identity column [{comparison.IdentityColumnName}]";
+
+            return (true, msg);
         }
         catch (Exception ex)
         {

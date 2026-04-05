@@ -140,6 +140,7 @@ public partial class QueryTabViewModel : ObservableObject
     private string? _editTableSchema;
     private string? _editTableName;
     private List<string>? _editPkColumns;
+    private string? _editIdentityColumn;
 
     public string? EditTableSchema => _editTableSchema;
     public string? EditTableName => _editTableName;
@@ -629,9 +630,12 @@ public partial class QueryTabViewModel : ObservableObject
 
         try
         {
-            // Fetch PK columns
+            // Fetch PK columns and identity column
+            var connStr = GetEffectiveConnectionString(SelectedDatabase!);
             _editPkColumns = await _editService.GetPrimaryKeyColumnsFromConnAsync(
-                      GetEffectiveConnectionString(SelectedDatabase!), _editTableSchema, _editTableName);
+                      connStr, _editTableSchema, _editTableName);
+            _editIdentityColumn = await DatabaseService.GetIdentityColumnAsync(
+                      connStr, _editTableSchema, _editTableName);
 
             if (_editPkColumns.Count == 0)
             {
@@ -676,6 +680,7 @@ public partial class QueryTabViewModel : ObservableObject
         EditableRows = null;
         EditColumnNames = null;
         _editPkColumns = null;
+        _editIdentityColumn = null;
         PendingChangeCount = 0;
         StatusText = "";
         EditModeChanged?.Invoke();
@@ -879,6 +884,7 @@ public partial class QueryTabViewModel : ObservableObject
 
         return DataEditService.GeneratePreviewSql(
             _editTableSchema, _editTableName,
-            EditColumnNames, _editPkColumns, pendingRows);
+            EditColumnNames, _editPkColumns, pendingRows,
+            _editIdentityColumn);
     }
 }

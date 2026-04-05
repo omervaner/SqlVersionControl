@@ -205,6 +205,33 @@ public partial class DatabaseService
     }
 
     /// <summary>
+    /// Detect if a table has an identity column, and return its name (or null).
+    /// </summary>
+    public static async Task<string?> GetIdentityColumnAsync(string connectionString, string schema, string table)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var safeDb = builder.InitialCatalog.Replace("]", "]]");
+
+        using var conn = new SqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var sql = $@"
+            SELECT c.name
+            FROM [{safeDb}].sys.columns c
+            JOIN [{safeDb}].sys.tables t ON c.object_id = t.object_id
+            JOIN [{safeDb}].sys.schemas s ON t.schema_id = s.schema_id
+            WHERE c.is_identity = 1
+              AND s.name = @schema AND t.name = @table";
+
+        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@schema", schema);
+        cmd.Parameters.AddWithValue("@table", table);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return result as string;
+    }
+
+    /// <summary>
     /// Builds a connection string targeting a specific database, using the current server credentials.
     /// Used by Query Editor so it runs on a dedicated connection.
     /// </summary>

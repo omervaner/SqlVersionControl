@@ -179,6 +179,10 @@
                             <Style Selector="DataGridCell.numericCell TextBlock">
                                 <Setter Property="TextAlignment" Value="Right"/>
                             </Style>
+                            <Style Selector="DataGridCell.nullCell TextBlock">
+                                <Setter Property="FontStyle" Value="Italic"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextNull}"/>
+                            </Style>
                             <Style Selector="DataGridCell.numericCell TextBox">
                                 <Setter Property="TextAlignment" Value="Right"/>
                             </Style>

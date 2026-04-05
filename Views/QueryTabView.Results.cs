@@ -1220,7 +1220,7 @@ public partial class QueryTabView
             var col = new DataGridTextColumn
             {
                 Header = result.ColumnNames[i],
-                Binding = new Binding($"[{i}]", BindingMode.TwoWay),
+                Binding = new Binding($"[{i}]", BindingMode.OneWay) { TargetNullValue = "NULL" },
                 IsReadOnly = true,
                 FontSize = fontSize,
             };
@@ -1239,7 +1239,17 @@ public partial class QueryTabView
     {
         foreach (var col in ResultsGrid.Columns)
             if (col is DataGridBoundColumn bc)
+            {
                 bc.IsReadOnly = readOnly;
+                // Switch binding mode: OneWay for read-only (TargetNullValue won't corrupt data),
+                // TwoWay for edit mode
+                if (bc.Binding is Binding b)
+                {
+                    var newBinding = new Binding(b.Path, readOnly ? BindingMode.OneWay : BindingMode.TwoWay);
+                    if (readOnly) newBinding.TargetNullValue = "NULL";
+                    bc.Binding = newBinding;
+                }
+            }
     }
 
     private void OnColumnHeaderDoubleTapped(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

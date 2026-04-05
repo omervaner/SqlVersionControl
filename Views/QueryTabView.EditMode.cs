@@ -437,9 +437,11 @@ public partial class QueryTabView
 
         void OnRowLayoutForNulls(object? s, EventArgs args)
         {
+            var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
+            if (cells.Count == 0) return; // Visual tree not ready, keep listening
+
             row.LayoutUpdated -= OnRowLayoutForNulls;
 
-            // Get the underlying values array from either row type
             object?[]? values = row.DataContext switch
             {
                 object?[] arr => arr,
@@ -448,23 +450,12 @@ public partial class QueryTabView
             };
             if (values == null) return;
 
-            var cells = row.GetVisualDescendants().OfType<DataGridCell>().ToList();
             for (int i = 0; i < values.Length && i < cells.Count; i++)
             {
-                var tb = cells[i].FindDescendantOfType<TextBlock>();
-                if (tb == null) continue;
-
                 if (values[i] == null || values[i] == DBNull.Value)
-                {
-                    tb.Text = "NULL";
-                    tb.FontStyle = FontStyle.Italic;
-                    tb.Foreground = GetNullForeground();
-                }
+                    cells[i].Classes.Add("nullCell");
                 else
-                {
-                    tb.FontStyle = FontStyle.Normal;
-                    tb.ClearValue(TextBlock.ForegroundProperty);
-                }
+                    cells[i].Classes.Remove("nullCell");
             }
         }
     }

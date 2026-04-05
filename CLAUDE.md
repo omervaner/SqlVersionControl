@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.13.1 (April 2026)
+## PROJECT STATUS: v2.13.2 (April 2026)
 
-Results grid overhaul: column-scoped cell selection with custom highlight/border, click-drag and multi-column drag selection (Avalonia DataGrid doesn't support either natively), numeric right-alignment, cell padding. Escape exits edit mode with unsaved changes prompt. Compare tab database dropdowns. Settings admin/normal mode. Editor gutter SSMS-style click/drag line selection. Results grid row header drag-to-select with clean full-row borders.
+Results grid overhaul: column-scoped cell selection with custom highlight/border, click-drag and multi-column drag selection (Avalonia DataGrid doesn't support either natively), numeric right-alignment, cell padding. Escape exits edit mode with unsaved changes prompt. Compare tab database dropdowns. Settings admin/normal mode. Editor gutter SSMS-style click/drag line selection. Results grid row header drag-to-select with clean full-row borders. Identity columns auto-skipped on INSERT. NULL display overhaul — reliable text, italic/grey styling via CSS class, clean edit mode.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 

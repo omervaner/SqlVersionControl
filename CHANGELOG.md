@@ -4,6 +4,22 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.13.2 (April 2026)
+
+### Identity Column Handling
+- **Skip identity columns on INSERT**: Edit mode and Data Compare deploy now automatically omit identity columns from INSERT statements instead of failing or using IDENTITY_INSERT
+- **Success message**: Shows "omitted identity column [ColName]" when identity values were skipped
+- **Preview SQL**: Shows identity column omission in Show SQL preview
+- **Single source of truth**: `DatabaseService.GetIdentityColumnAsync()` shared by both DataEditService and DataCompareService
+
+### NULL Display Overhaul
+- **Reliable NULL text**: Uses `TargetNullValue` on column binding so "NULL" text is always shown for null values — no more intermittent blank cells
+- **Italic/grey styling**: CSS class `nullCell` applied via `LoadingRow` with AXAML style selector — works with virtualization and theme switching
+- **Clean edit mode**: Double-clicking a NULL cell shows an empty TextBox instead of pre-filling with "NULL" text
+- **Paste fix**: Pasting "NULL" as text (from copied rows) correctly converts to actual null value
+
+---
+
 ## v2.13.1 (April 2026)
 
 ### Editor — Line Number Gutter Polish
