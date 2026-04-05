@@ -4,6 +4,28 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.13.0 (April 2026)
+
+### Results Grid — Selection Overhaul
+- **Column-scoped cell highlighting**: Clicking a cell highlights only that column across selected rows instead of full rows — visual now matches Cmd+C copy behavior
+- **Click-drag row selection**: Implemented from scratch (Avalonia DataGrid doesn't support this natively) via PointerPressed/Moved/Released handlers
+- **Multi-column drag selection**: Drag horizontally and vertically to select rectangular cell ranges across multiple columns
+- **Selection border**: Custom per-cell border forms a continuous rectangle around the selection (no interior lines)
+- **Hidden default focus rectangle**: Avalonia's white focus border suppressed; replaced by our highlight system
+- **Copy with Headers respects selection**: Right-click → Copy with Headers copies only selected columns with their headers (tab-separated, newline between rows)
+- **Right-click preserves selection**: Multi-column selections no longer reset when you right-click to open context menu
+- **Numeric column right-alignment**: Columns with numeric types (int, decimal, float, etc.) are right-aligned — matches SSMS behavior
+- **6px cell padding**: Horizontal padding on all cells for better readability
+- **Grid line visibility**: Vertical grid line opacity bumped from 0.6 to 0.8
+- **Editor click clears selection**: Clicking back into the SQL editor clears the results grid selection
+
+### Edit Mode — Escape & Discard Fix
+- **Escape exits edit mode**: First Escape cancels cell edit, second Escape exits edit mode entirely
+- **Unsaved changes prompt**: If there are pending edits, second Escape shows Save/Don't Save/Cancel dialog
+- **Don't Save properly discards**: Fixed bug where cancelling edit mode still persisted changes — `EditableRow` arrays are now cloned on edit mode entry so original Results data is never mutated
+
+---
+
 ## v2.12.0 (April 2026)
 
 ### Compare Tab — Database Dropdowns

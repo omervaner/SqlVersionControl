@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.12.0 (April 2026)
+## PROJECT STATUS: v2.13.0 (April 2026)
 
-Compare tab database dropdowns: switch databases on any connected server without re-connecting. Settings admin/normal mode: hides DDL audit and Git export config from normal users. Job detail panel close button. Dev environment seed scripts for two-server Docker setup.
+Results grid overhaul: column-scoped cell selection with custom highlight/border, click-drag and multi-column drag selection (Avalonia DataGrid doesn't support either natively), numeric right-alignment, cell padding. Escape exits edit mode with unsaved changes prompt. Compare tab database dropdowns. Settings admin/normal mode.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -291,6 +291,34 @@ private async Task DoSomethingAsync()
     StatusText = result; // [ObservableProperty] bound in XAML
 }
 ```
+
+### 6. Results Grid — Custom Cell Selection (IMPORTANT!)
+
+Avalonia's DataGrid does NOT support click-drag selection or column-scoped visual highlighting natively. We implemented both from scratch. **Do not modify this code without understanding the full system.**
+
+**Key files:**
+- `QueryTabView.Results.cs` — `RepaintCellSelection()`, `ApplyCellSelectionToRow()`, `WireDragSelection()`, drag handlers, `GetColIndexAtPoint()`
+- `QueryTabView.EditMode.cs` — `OnResultsGridKeyDown()` (Cmd+C copy logic uses column range)
+- `QueryTabView.Export.cs` — `CopyWithHeadersAsync()` (respects column range)
+- `QueryTabView.axaml` — Inline styles: `DataGridRow:selected` transparent background, `DataGridCell:current` transparent border
+
+**How it works:**
+1. **Row selection background is hidden** — XAML style sets `DataGridRow:selected { Background: Transparent }` and code clears all internal `Rectangle` Fill/Stroke in selected rows
+2. **Cell-level highlighting** — `RepaintCellSelection()` walks all realized rows and paints `CellSelectionHighlight` brush only on cells within the column range (`colRangeMin` to `colRangeMax`)
+3. **Selection border** — Per-cell `BorderBrush`/`BorderThickness` forms a continuous rectangle: top on first row, bottom on last, left on leftmost column, right on rightmost
+4. **Click-drag selection** — `PointerPressed`/`Moved`/`Released` handlers (Tunnel routing) manually manage `SelectedItems`. Guards skip edit mode, Ctrl/Shift/right-click, column headers, row headers
+5. **Multi-column drag** — `GetColIndexAtPoint()` uses accumulated column `ActualWidth` values (not visual hit-testing, which fails during pointer capture). Tracks `_dragStartColIndex`/`_dragEndColIndex`
+6. **Right-click preservation** — `PointerReleased` only processes left-button releases; right-click `PointerPressed` blocks DataGrid from changing selection when multi-column range is active
+7. **Cmd+C copy** — Uses column range for multi-column (tab-separated), falls back to `CurrentColumn` for single column
+8. **Virtualization** — `ApplyCellSelectionToRow()` in `LoadingRow` handles rows scrolling into view via `LayoutUpdated` one-shot
+9. **Edit mode isolation** — `EditableRow` arrays are cloned from `Results` on edit mode entry (`(object?[])r.Clone()`) so cancelling edits doesn't mutate original data
+
+**What will break if you're not careful:**
+- Removing the `DataGridRow:selected` transparent style → full-row blue highlight returns
+- Changing `CellPointerPressed` handler → can reset `_dragStartColIndex`/`_dragEndColIndex` and break multi-column selection
+- Adding `PointerReleased` handlers that don't filter by button → right-click will reset drag state
+- Modifying `BuildColumnsForGrid` without preserving `CellStyleClasses` → numeric right-alignment breaks
+- Removing the `.Clone()` in `EnterEditModeAsync` → cancel/discard edits will mutate original Results
 
 ---
 
