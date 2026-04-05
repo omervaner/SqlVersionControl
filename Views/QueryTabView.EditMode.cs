@@ -215,26 +215,52 @@ public partial class QueryTabView
             return;
         }
 
-        // Cell copy: Cmd/Ctrl+C copies the focused column value from all selected rows
+        // Cell copy: Cmd/Ctrl+C copies selected column(s) from all selected rows
         if (ctrl && !shift && e.Key == Key.C)
         {
             var grid = _activeResultsGrid;
-            if (grid.CurrentColumn != null && grid.SelectedItems != null && grid.SelectedItems.Count > 0)
+            if (grid.SelectedItems != null && grid.SelectedItems.Count > 0)
             {
-                var colIndex = grid.Columns.IndexOf(grid.CurrentColumn);
-                if (colIndex >= 0)
+                // Determine column range
+                int minCol, maxCol;
+                if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+                {
+                    minCol = Math.Min(_dragStartColIndex, _dragEndColIndex);
+                    maxCol = Math.Max(_dragStartColIndex, _dragEndColIndex);
+                }
+                else if (grid.CurrentColumn != null)
+                {
+                    minCol = maxCol = grid.Columns.IndexOf(grid.CurrentColumn);
+                }
+                else if (_fullRowSelectionMode)
+                {
+                    minCol = 0;
+                    maxCol = grid.Columns.Count - 1;
+                }
+                else
+                {
+                    minCol = maxCol = -1;
+                }
+
+                if (minCol >= 0)
                 {
                     var values = new System.Text.StringBuilder();
                     foreach (var item in grid.SelectedItems)
                     {
-                        object? cellValue = null;
-                        if (item is object?[] row && colIndex < row.Length)
-                            cellValue = row[colIndex];
-                        else if (item is EditableRow editRow)
-                            cellValue = editRow[colIndex];
-
                         if (values.Length > 0) values.AppendLine();
-                        values.Append(cellValue == null || cellValue == DBNull.Value ? "" : cellValue.ToString() ?? "");
+
+                        for (int c = minCol; c <= maxCol; c++)
+                        {
+                            if (c > minCol) values.Append('\t');
+
+                            object? cellValue = null;
+                            if (item is object?[] row && c < row.Length)
+                                cellValue = row[c];
+                            else if (item is EditableRow editRow)
+                                cellValue = editRow[c];
+
+                            values.Append(cellValue == null || cellValue == DBNull.Value ? "" : cellValue.ToString() ?? "");
+                        }
                     }
 
                     var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;

@@ -21,6 +21,8 @@ public partial class QueryTabView
     // Drag-to-select state
     private bool _isDragSelecting;
     private int _dragStartRowIndex = -1;
+    private int _dragStartColIndex = -1;
+    private int _dragEndColIndex = -1;
 
     // When true, RepaintCellSelection highlights all cells (full row) instead of one column
     private bool _fullRowSelectionMode;
@@ -72,9 +74,27 @@ public partial class QueryTabView
         var grid = _activeResultsGrid;
         if (grid == null) return;
 
-        var focusedCol = grid.CurrentColumn;
-        var focusedColIndex = _fullRowSelectionMode ? -1
-            : focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+        // Determine column range to highlight
+        int colRangeMin, colRangeMax;
+        if (_fullRowSelectionMode)
+        {
+            colRangeMin = -1; // -1 signals "all columns"
+            colRangeMax = -1;
+        }
+        else if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+        {
+            // Multi-column drag range
+            colRangeMin = Math.Min(_dragStartColIndex, _dragEndColIndex);
+            colRangeMax = Math.Max(_dragStartColIndex, _dragEndColIndex);
+        }
+        else
+        {
+            // Single column from CurrentColumn (click or shift+click)
+            var focusedCol = grid.CurrentColumn;
+            var idx = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+            colRangeMin = idx;
+            colRangeMax = idx;
+        }
 
         // Get the set of selected items for fast lookup
         var selectedItems = grid.SelectedItems;
@@ -107,15 +127,14 @@ public partial class QueryTabView
 
             for (int i = 0; i < cells.Count; i++)
             {
-                // Highlight the focused column cell, or ALL cells if no column focused (row header / select-all)
-                if (isSelected && (focusedColIndex == -1 || i == focusedColIndex))
+                // Highlight cells in the column range, or ALL cells if full-row mode
+                bool inRange = colRangeMin == -1 || (i >= colRangeMin && i <= colRangeMax);
+                if (isSelected && inRange)
                     cells[i].Background = highlightBrush;
                 else
                     cells[i].Background = Brushes.Transparent;
             }
         }
-
-        _highlightedColumn = focusedCol;
     }
 
     /// <summary>
@@ -126,8 +145,25 @@ public partial class QueryTabView
         var grid = _activeResultsGrid;
         if (grid == null) return;
 
-        var focusedCol = grid.CurrentColumn;
-        var focusedColIndex = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+        // Determine column range (same logic as RepaintCellSelection)
+        int colRangeMin, colRangeMax;
+        if (_fullRowSelectionMode)
+        {
+            colRangeMin = -1;
+            colRangeMax = -1;
+        }
+        else if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+        {
+            colRangeMin = Math.Min(_dragStartColIndex, _dragEndColIndex);
+            colRangeMax = Math.Max(_dragStartColIndex, _dragEndColIndex);
+        }
+        else
+        {
+            var focusedCol = grid.CurrentColumn;
+            var idx = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+            colRangeMin = idx;
+            colRangeMax = idx;
+        }
 
         bool isSelected = row.DataContext != null && grid.SelectedItems != null &&
                           grid.SelectedItems.Contains(row.DataContext);
@@ -150,7 +186,8 @@ public partial class QueryTabView
 
             for (int i = 0; i < cells.Count; i++)
             {
-                if (isSelected && (focusedColIndex == -1 || i == focusedColIndex))
+                bool inRange = colRangeMin == -1 || (i >= colRangeMin && i <= colRangeMax);
+                if (isSelected && inRange)
                     cells[i].Background = highlightBrush;
                 else
                     cells[i].Background = Brushes.Transparent;
@@ -170,6 +207,38 @@ public partial class QueryTabView
         while (visual != null && visual is not DataGridRow)
             visual = visual.GetVisualParent() as Visual;
         return visual is DataGridRow row ? row.GetIndex() : -1;
+    }
+
+    private static int GetColIndexAtPoint(DataGrid grid, Point position)
+    {
+        // Use column actual widths to determine which column the X position falls in.
+        // RowHeaderWidth can be NaN if not explicitly set — measure from the first visible row header instead.
+        double headerWidth = grid.RowHeaderWidth;
+        if (double.IsNaN(headerWidth))
+        {
+            // Find actual row header width from the visual tree
+            var firstRow = grid.GetVisualDescendants().OfType<DataGridRow>().FirstOrDefault();
+            var rowHeader = firstRow?.GetVisualDescendants()
+                .FirstOrDefault(v => v.GetType().Name == "DataGridRowHeader");
+            headerWidth = rowHeader?.Bounds.Width ?? 40;
+        }
+        double x = position.X - headerWidth;
+
+        // Account for horizontal scroll
+        var scrollViewer = grid.FindDescendantOfType<ScrollViewer>();
+        if (scrollViewer != null)
+            x += scrollViewer.Offset.X;
+
+        if (x < 0) return -1;
+
+        double accumulated = 0;
+        for (int i = 0; i < grid.Columns.Count; i++)
+        {
+            accumulated += grid.Columns[i].ActualWidth;
+            if (x < accumulated)
+                return i;
+        }
+        return grid.Columns.Count - 1; // past the last column, clamp to last
     }
 
     private void OnDragSelectPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -200,10 +269,14 @@ public partial class QueryTabView
         if (pos.X < grid.RowHeaderWidth)
             return;
 
-        var rowIndex = GetRowIndexAtPoint(grid, e.GetPosition(grid));
+        var rowIndex = GetRowIndexAtPoint(grid, pos);
         if (rowIndex < 0) return;
 
+        var colIndex = GetColIndexAtPoint(grid, pos);
+
         _dragStartRowIndex = rowIndex;
+        _dragStartColIndex = colIndex;
+        _dragEndColIndex = colIndex;
         _isDragSelecting = false;
         e.Pointer.Capture(grid);
     }
@@ -213,13 +286,23 @@ public partial class QueryTabView
         if (_dragStartRowIndex < 0) return;
         if (sender is not DataGrid grid) return;
 
-        var currentRowIndex = GetRowIndexAtPoint(grid, e.GetPosition(grid));
+        var pos = e.GetPosition(grid);
+        var currentRowIndex = GetRowIndexAtPoint(grid, pos);
         if (currentRowIndex < 0) return;
-        if (currentRowIndex == _dragStartRowIndex && !_isDragSelecting) return;
+
+        var currentColIndex = GetColIndexAtPoint(grid, pos);
+        if (currentColIndex < 0) currentColIndex = _dragEndColIndex; // keep last known
+
+        bool rowChanged = currentRowIndex != _dragStartRowIndex;
+        bool colChanged = _dragStartColIndex >= 0 && currentColIndex >= 0 && currentColIndex != _dragStartColIndex;
+
+        if (!rowChanged && !colChanged && !_isDragSelecting)
+            return;
 
         _isDragSelecting = true;
+        _dragEndColIndex = currentColIndex;
 
-        // Select the range from drag start to current row
+        // Select the row range from drag start to current row
         var items = grid.ItemsSource?.Cast<object>().ToList();
         if (items == null) return;
 
@@ -241,6 +324,11 @@ public partial class QueryTabView
         var wasDragging = _isDragSelecting;
         _isDragSelecting = false;
         _dragStartRowIndex = -1;
+        if (!wasDragging)
+        {
+            _dragStartColIndex = -1;
+            _dragEndColIndex = -1;
+        }
 
         e.Pointer.Capture(null);
 
