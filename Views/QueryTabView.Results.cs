@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using SqlVersionControl.Converters;
 using SqlVersionControl.Models;
@@ -44,6 +45,11 @@ public partial class QueryTabView
 
     /// <summary>True when showing stacked multi-result view.</summary>
     private bool _isStackedMode;
+
+    /// <summary>Runtime pixel heights for each stacked result section. Cleared on mode change.</summary>
+    private List<double> _stackedSectionHeights = [];
+
+    private const double StackedHeaderHeight = 18;
 
     private static IBrush GetNullForeground()
     {
@@ -501,10 +507,11 @@ public partial class QueryTabView
                 double neededHeight;
                 if (goodResults.Count > 1)
                 {
-                    // Stacked: sum all results (header bar per result + rows + column header)
+                    // Stacked: sum all results (compact header + column header + capped rows + resize handle)
+                    var colHeaderHeight = rowHeight + 4;
                     neededHeight = 28; // tab bar
                     foreach (var r in goodResults)
-                        neededHeight += 28 + (Math.Min(r.RowCount, 8) + 1) * rowHeight; // cap per-grid preview at 8 rows
+                        neededHeight += StackedHeaderHeight + colHeaderHeight + (Math.Min(r.RowCount, 8) * rowHeight) + 4; // 4 = resize handle
                     neededHeight += 10;
                 }
                 else
@@ -1008,6 +1015,7 @@ public partial class QueryTabView
 
         _selectedTabIndex = index;
         _isStackedMode = false;
+        _stackedSectionHeights.Clear();
         MessagesPanel.IsVisible = false;
         TracePanel.IsVisible = false;
         PlanPanel.IsVisible = false;
@@ -1035,7 +1043,7 @@ public partial class QueryTabView
         UpdateTabHighlight(index);
     }
 
-    /// <summary>Build the stacked results view with one DataGrid per result set, with splitters.</summary>
+    /// <summary>Build the stacked results view with one DataGrid per result set, with per-section resize handles.</summary>
     private void ShowStackedResults()
     {
         if (_viewModel == null) return;
@@ -1046,51 +1054,62 @@ public partial class QueryTabView
         if (results.Count == 0) return;
 
         var rowHeight = _settings?.Settings.GridRowHeight ?? 22;
-        var gridRow = 0;
+        var colHeaderHeight = rowHeight + 4;
+
+        // Compute initial section heights (grid area only, excludes header and resize handle)
+        _stackedSectionHeights.Clear();
+        for (int i = 0; i < results.Count; i++)
+        {
+            var rc = results[i].RowCount;
+            double gridHeight;
+            if (rc == 0)
+                gridHeight = colHeaderHeight; // just column headers
+            else if (rc <= 8)
+                gridHeight = colHeaderHeight + (rc * rowHeight); // exact fit
+            else
+                gridHeight = colHeaderHeight + (8 * rowHeight); // capped at 8 data rows
+            _stackedSectionHeights.Add(gridHeight);
+        }
+
+        // Minimum: header + column header + 2 data rows
+        var minSectionGridHeight = colHeaderHeight + (2 * rowHeight);
+
+        // Build outer ScrollViewer + StackPanel inside the existing StackedResultsPanel Grid
+        var stackPanel = new StackPanel { Orientation = Avalonia.Layout.Orientation.Vertical };
+        var scrollViewer = new ScrollViewer
+        {
+            Content = stackPanel,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            Background = Brushes.Transparent,
+        };
+        stackPanel.Background = Brushes.Transparent;
+        StackedResultsPanel.RowDefinitions.Add(new RowDefinition(new GridLength(1, GridUnitType.Star)));
+        Grid.SetRow(scrollViewer, 0);
+        StackedResultsPanel.Children.Add(scrollViewer);
+
+        // Collect per-section RowDefinitions so resize handles can reference adjacent pairs
+        var gridHeightDefs = new List<RowDefinition>();
 
         for (int i = 0; i < results.Count; i++)
         {
             var result = results[i];
             var resultNumber = i + 1;
 
-            // Splitter between results (not before first)
-            if (i > 0)
-            {
-                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-                var splitter = new GridSplitter
-                {
-                    Height = 4,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-                    Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeNorthSouth),
-                };
-                if (Application.Current?.Resources.TryGetResource("BorderDefault", null, out var splitterBg) == true && splitterBg is IBrush splitterBrush)
-                    splitter.Background = splitterBrush;
-                Grid.SetRow(splitter, gridRow);
-                StackedResultsPanel.Children.Add(splitter);
-                gridRow++;
-            }
-
-            // Container for header + grid — empty results get Auto (just header + column headers),
-            // others get Star weight proportional to row count (capped at 20)
-            if (result.RowCount == 0)
-            {
-                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            }
-            else
-            {
-                var weight = Math.Max(1, Math.Min(result.RowCount, 20));
-                StackedResultsPanel.RowDefinitions.Add(new RowDefinition(new GridLength(weight, GridUnitType.Star)));
-            }
-
+            // Container: header (Auto) + grid (Pixel)
+            var gridHeightDef = new RowDefinition(new GridLength(_stackedSectionHeights[i], GridUnitType.Pixel));
+            gridHeightDefs.Add(gridHeightDef);
             var container = new Grid
             {
-                RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(new GridLength(1, GridUnitType.Star)) },
+                RowDefinitions = { new RowDefinition(GridLength.Auto), gridHeightDef },
             };
-            Grid.SetRow(container, gridRow);
-            gridRow++;
 
-            // Header bar
-            var header = new Border { Padding = new Thickness(10, 4) };
+            // ── Compact header ──
+            var header = new Border
+            {
+                Padding = new Thickness(6, 0),
+                Height = StackedHeaderHeight,
+            };
             if (Application.Current?.Resources.TryGetResource("PanelHeaderBackground", null, out var bg) == true && bg is IBrush bgBrush)
                 header.Background = bgBrush;
 
@@ -1099,8 +1118,8 @@ public partial class QueryTabView
             var label = new TextBlock
             {
                 Text = $"Result {resultNumber} — {result.RowCount:N0} rows",
-                FontSize = 11,
-                FontWeight = FontWeight.SemiBold,
+                FontSize = 10,
+                Opacity = 0.8,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             };
             if (Application.Current?.Resources.TryGetResource("TextPrimary", null, out var fg) == true && fg is IBrush fgBrush)
@@ -1114,12 +1133,15 @@ public partial class QueryTabView
             var pinBtn = new Button
             {
                 Content = "\u25CF",
-                FontSize = 9,
-                Padding = new Thickness(4, 2),
+                FontSize = 8,
+                Padding = new Thickness(2, 0),
+                MinWidth = 0,
+                MinHeight = 0,
+                Height = 14,
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
                 Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
-                Opacity = 0.5,
+                Opacity = 0.4,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             };
             if (Application.Current?.Resources.TryGetResource("TextSecondary", null, out var pinFg) == true && pinFg is IBrush pinBrush)
@@ -1131,7 +1153,10 @@ public partial class QueryTabView
 
             // Copy button
             var copyBtn = BuildCopyButton(result);
-            copyBtn.Padding = new Thickness(4, 2);
+            copyBtn.Padding = new Thickness(2, 0);
+            copyBtn.MinWidth = 0;
+            copyBtn.MinHeight = 0;
+            copyBtn.Height = 14;
             Grid.SetColumn(copyBtn, 2);
             headerGrid.Children.Add(copyBtn);
 
@@ -1139,8 +1164,7 @@ public partial class QueryTabView
             Grid.SetRow(header, 0);
             container.Children.Add(header);
 
-            // DataGrid for this result
-            var gridFontSize = Application.Current?.Resources.TryGetResource("GridFontSize", null, out var fs) == true && fs is double d ? d : 12;
+            // ── DataGrid ──
             var grid = new DataGrid
             {
                 IsReadOnly = true,
@@ -1154,11 +1178,11 @@ public partial class QueryTabView
                 FrozenColumnCount = 0,
                 RowHeaderWidth = 40,
                 RowHeight = rowHeight,
-                ColumnHeaderHeight = rowHeight + 4,
-                FontSize = gridFontSize,
-                FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
+                ColumnHeaderHeight = colHeaderHeight,
+                Margin = new Thickness(0, -1, 0, 0),
             };
 
+            ApplyGridStyles(grid);
             BuildColumnsForGrid(grid, result);
             grid.ItemsSource = result.Rows;
 
@@ -1166,23 +1190,40 @@ public partial class QueryTabView
             grid.SelectionChanged += (s, _) =>
             {
                 var clickedGrid = (DataGrid)s!;
-                _activeResultsGrid = clickedGrid;
-                // Clear selection on all other stacked grids
-                foreach (var otherGrid in StackedResultsPanel.GetVisualDescendants().OfType<DataGrid>())
+                if (_activeResultsGrid != clickedGrid)
                 {
-                    if (otherGrid != clickedGrid)
-                        otherGrid.SelectedIndex = -1;
+                    // Switching active grid — clear old grids and reset drag state
+                    foreach (var otherGrid in stackPanel.GetVisualDescendants().OfType<DataGrid>())
+                    {
+                        if (otherGrid != clickedGrid)
+                            ClearGridSelection(otherGrid);
+                    }
+                    _dragStartColIndex = -1;
+                    _dragEndColIndex = -1;
+                    _fullRowSelectionMode = false;
+                    _activeResultsGrid = clickedGrid;
                 }
                 UpdateCellDetail();
                 Avalonia.Threading.Dispatcher.UIThread.Post(RepaintCellSelection, Avalonia.Threading.DispatcherPriority.Background);
             };
             grid.CellPointerPressed += (s, _) =>
             {
-                _activeResultsGrid = (DataGrid)s!;
+                var clickedGrid = (DataGrid)s!;
+                if (_activeResultsGrid != clickedGrid)
+                {
+                    foreach (var otherGrid in stackPanel.GetVisualDescendants().OfType<DataGrid>())
+                    {
+                        if (otherGrid != clickedGrid)
+                            ClearGridSelection(otherGrid);
+                    }
+                    _dragStartColIndex = -1;
+                    _dragEndColIndex = -1;
+                    _fullRowSelectionMode = false;
+                    _activeResultsGrid = clickedGrid;
+                }
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => { UpdateCellDetail(); RepaintCellSelection(); });
             };
 
-            // Wire LoadingRow for NULL styling + keyboard handler for copy + drag-select
             grid.LoadingRow += OnDataGridLoadingRow;
             grid.AddHandler(KeyDownEvent, OnResultsGridKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
             WireDragSelection(grid);
@@ -1190,13 +1231,194 @@ public partial class QueryTabView
             Grid.SetRow(grid, 1);
             container.Children.Add(grid);
 
-            StackedResultsPanel.Children.Add(container);
+            stackPanel.Children.Add(container);
+        }
+
+        // ── Resize handles between adjacent sections (not after last) ──
+        for (int h = 0; h < results.Count - 1; h++)
+        {
+            var aboveDef = gridHeightDefs[h];
+            var belowDef = gridHeightDefs[h + 1];
+            var aboveIdx = h;
+            var belowIdx = h + 1;
+
+            var resizeHandle = new Border
+            {
+                Height = 4,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeNorthSouth),
+            };
+            if (Application.Current?.Resources.TryGetResource("BorderDefault", null, out var handleBg) == true && handleBg is IBrush handleBrush)
+                resizeHandle.Background = handleBrush;
+
+            double dragStartY = 0;
+            double dragStartAbove = 0;
+            double dragStartBelow = 0;
+            bool isDragging = false;
+
+            resizeHandle.PointerPressed += (s, e) =>
+            {
+                if (e.GetCurrentPoint(resizeHandle).Properties.IsLeftButtonPressed)
+                {
+                    isDragging = true;
+                    dragStartY = e.GetPosition(stackPanel).Y;
+                    dragStartAbove = aboveDef.Height.Value;
+                    dragStartBelow = belowDef.Height.Value;
+                    e.Pointer.Capture((Avalonia.Input.IInputElement)s!);
+                    e.Handled = true;
+                }
+            };
+            resizeHandle.PointerMoved += (_, e) =>
+            {
+                if (!isDragging) return;
+                var delta = e.GetPosition(stackPanel).Y - dragStartY;
+
+                // Clamp: both sections must stay >= minimum
+                var maxGrow = dragStartBelow - minSectionGridHeight;
+                var maxShrink = dragStartAbove - minSectionGridHeight;
+                delta = Math.Max(-maxShrink, Math.Min(delta, maxGrow));
+
+                var newAbove = dragStartAbove + delta;
+                var newBelow = dragStartBelow - delta;
+
+                aboveDef.Height = new GridLength(newAbove, GridUnitType.Pixel);
+                belowDef.Height = new GridLength(newBelow, GridUnitType.Pixel);
+                _stackedSectionHeights[aboveIdx] = newAbove;
+                _stackedSectionHeights[belowIdx] = newBelow;
+                e.Handled = true;
+            };
+            resizeHandle.PointerReleased += (_, e) =>
+            {
+                if (isDragging)
+                {
+                    isDragging = false;
+                    e.Pointer.Capture(null);
+                    e.Handled = true;
+                }
+            };
+
+            // Insert handle after section[h]'s container (before section[h+1]'s container)
+            // StackPanel children: [container0, container1, ..., containerN]
+            // Insert handle at position (h+1) + h = 2h+1 (accounting for previously inserted handles)
+            stackPanel.Children.Insert(h + 1 + h, resizeHandle);
+        }
+
+        // After layout settles, give leftover viewport space to the last section's grid
+        var capturedGridHeightDefs = gridHeightDefs;
+        var capturedScrollViewer = scrollViewer;
+        scrollViewer.LayoutUpdated += OnSlackFill;
+        void OnSlackFill(object? s, EventArgs args)
+        {
+            capturedScrollViewer.LayoutUpdated -= OnSlackFill;
+            // Post to Background priority so the viewport size is fully resolved
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var viewportHeight = capturedScrollViewer.Viewport.Height;
+                if (viewportHeight <= 0 || capturedGridHeightDefs.Count == 0) return;
+
+                var handleCount = capturedGridHeightDefs.Count - 1;
+                var totalContentHeight = capturedGridHeightDefs.Count * StackedHeaderHeight
+                    + _stackedSectionHeights.Sum()
+                    + handleCount * 4;
+                if (viewportHeight > totalContentHeight)
+                {
+                    var slack = viewportHeight - totalContentHeight;
+                    var lastIdx = capturedGridHeightDefs.Count - 1;
+                    var newLastHeight = _stackedSectionHeights[lastIdx] + slack;
+                    capturedGridHeightDefs[lastIdx].Height = new GridLength(newLastHeight, GridUnitType.Pixel);
+                    _stackedSectionHeights[lastIdx] = newLastHeight;
+                }
+            }, Avalonia.Threading.DispatcherPriority.Background);
         }
 
         // Set active to first grid
-        var firstGrid = StackedResultsPanel.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
+        var firstGrid = stackPanel.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
         if (firstGrid != null)
             _activeResultsGrid = firstGrid;
+    }
+
+    /// <summary>
+    /// Fully clear selection and custom highlight on a stacked grid that is no longer active.
+    /// </summary>
+    private static void ClearGridSelection(DataGrid grid)
+    {
+        grid.SelectedItems?.Clear();
+        grid.SelectedIndex = -1;
+
+        // Clear custom cell highlight/border on all visible rows
+        foreach (var row in grid.GetVisualDescendants().OfType<DataGridRow>())
+        {
+            foreach (var rect in row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Rectangle>())
+            {
+                rect.Fill = Brushes.Transparent;
+                rect.Stroke = Brushes.Transparent;
+            }
+            foreach (var cell in row.GetVisualDescendants().OfType<DataGridCell>())
+            {
+                cell.Background = Brushes.Transparent;
+                cell.BorderBrush = null;
+                cell.BorderThickness = new Thickness(0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies the shared DataGrid cell/header styles that ResultsGrid gets from XAML.
+    /// Stacked grids are created in code-behind and miss inline XAML styles.
+    /// </summary>
+    private static void ApplyGridStyles(DataGrid grid)
+    {
+        var gridFontSize = Application.Current?.Resources.TryGetResource("GridFontSize", null, out var fs) == true && fs is double d ? d : 12.0;
+        var gridFontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace");
+        IBrush? nullFg = null;
+        if (Application.Current?.Resources.TryGetResource("TextNull", null, out var nullRes) == true && nullRes is IBrush nb)
+            nullFg = nb;
+
+        // DataGridCell MinHeight=0
+        var cellStyle = new Style(x => x.OfType<DataGridCell>());
+        cellStyle.Setters.Add(new Setter(Avalonia.Controls.Primitives.TemplatedControl.MinHeightProperty, 0.0));
+        grid.Styles.Add(cellStyle);
+
+        // DataGridCell TextBlock: font, margin
+        var cellTextStyle = new Style(x => x.OfType<DataGridCell>().Descendant().OfType<TextBlock>());
+        cellTextStyle.Setters.Add(new Setter(TextBlock.FontSizeProperty, gridFontSize));
+        cellTextStyle.Setters.Add(new Setter(TextBlock.FontFamilyProperty, gridFontFamily));
+        cellTextStyle.Setters.Add(new Setter(TextBlock.MarginProperty, new Thickness(6, 0)));
+        grid.Styles.Add(cellTextStyle);
+
+        // DataGridCell.numericCell TextBlock: right-align
+        var numericTextStyle = new Style(x => x.OfType<DataGridCell>().Class("numericCell").Descendant().OfType<TextBlock>());
+        numericTextStyle.Setters.Add(new Setter(TextBlock.TextAlignmentProperty, TextAlignment.Right));
+        grid.Styles.Add(numericTextStyle);
+
+        // DataGridCell.nullCell TextBlock: italic, grey
+        var nullTextStyle = new Style(x => x.OfType<DataGridCell>().Class("nullCell").Descendant().OfType<TextBlock>());
+        nullTextStyle.Setters.Add(new Setter(TextBlock.FontStyleProperty, FontStyle.Italic));
+        if (nullFg != null)
+            nullTextStyle.Setters.Add(new Setter(TextBlock.ForegroundProperty, nullFg));
+        grid.Styles.Add(nullTextStyle);
+
+        // DataGridColumnHeader: font, MinHeight=0
+        var colHeaderStyle = new Style(x => x.OfType<DataGridColumnHeader>());
+        colHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.FontSizeProperty, gridFontSize));
+        colHeaderStyle.Setters.Add(new Setter(Avalonia.Controls.Primitives.TemplatedControl.MinHeightProperty, 0.0));
+        grid.Styles.Add(colHeaderStyle);
+
+        // DataGridRow MinHeight=0
+        var rowStyle = new Style(x => x.OfType<DataGridRow>());
+        rowStyle.Setters.Add(new Setter(Avalonia.Controls.Primitives.TemplatedControl.MinHeightProperty, 0.0));
+        grid.Styles.Add(rowStyle);
+
+        // DataGridRow:selected transparent background (custom selection system)
+        var selectedRowStyle = new Style(x => x.OfType<DataGridRow>().Class(":selected"));
+        selectedRowStyle.Setters.Add(new Setter(DataGridRow.BackgroundProperty, Brushes.Transparent));
+        grid.Styles.Add(selectedRowStyle);
+
+        // DataGridCell:current transparent border (custom selection system)
+        var currentCellStyle = new Style(x => x.OfType<DataGridCell>().Class(":current"));
+        currentCellStyle.Setters.Add(new Setter(DataGridCell.BorderBrushProperty, Brushes.Transparent));
+        currentCellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
+        grid.Styles.Add(currentCellStyle);
     }
 
     /// <summary>
@@ -1359,6 +1581,7 @@ public partial class QueryTabView
     {
         _selectedTabIndex = MessagesTabTag;
         _isStackedMode = false;
+        _stackedSectionHeights.Clear();
         ResultsGrid.IsVisible = false;
         StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = true;
@@ -1373,6 +1596,7 @@ public partial class QueryTabView
     {
         _selectedTabIndex = TraceTabTag;
         _isStackedMode = false;
+        _stackedSectionHeights.Clear();
         ResultsGrid.IsVisible = false;
         StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = false;
@@ -1387,6 +1611,7 @@ public partial class QueryTabView
     {
         _selectedTabIndex = PlanTabTag;
         _isStackedMode = false;
+        _stackedSectionHeights.Clear();
         ResultsGrid.IsVisible = false;
         StackedResultsPanel.IsVisible = false;
         MessagesPanel.IsVisible = false;

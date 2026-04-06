@@ -4,6 +4,31 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.14.0 (April 2026)
+
+### Paste Overhaul
+- **Single-cell paste fix**: Tracks cell-edit state via `BeginningEdit`/`CellEditEnding`/`CellEditEnded` instead of unreliable focus queries — Ctrl+V in an active cell editor now correctly pastes into that cell
+- **Column-aware TSV paste**: `PasteRows` accepts `startCol` parameter, paste anchor resolves from drag selection range, current column, or column 0 for full-row mode
+- **Auto-enter edit mode on paste**: Ctrl+V in read-only mode auto-enters edit mode and pastes at the captured anchor; flashes "Result is not editable" warning for non-editable results
+- **Shared paste helpers**: `ParseTsvClipboard`, `ResolveStartRow`, `ResolveStartCol`, `ApplyPasteRows` — single source of truth for both edit-mode and read-only paste paths
+
+### Execution Feedback Normalization
+- **ExecutionSummary model**: New `ExecutionSummary` (Outcome, RowsReturned, RowsAffected, StatusText, FlashText) built once in `DatabaseService`, consumed by ViewModel
+- **"Rows returned" vs "rows affected"**: SELECT messages now correctly say "(N row(s) returned)" instead of "(N row(s) affected)"
+- **StatementCompleted/NextResult pairing**: Queues StatementCompleted counts and pairs with NextResult steps for correct classification — SELECT, DML, DDL each get appropriate messages
+- **RowsAffected accuracy**: Only accumulated from classified DML results, not polluted by SELECT row counts
+- **Partial success detection**: `hadSuccessfulWork` flag detects intra-batch success before later errors
+- **Durable query status**: QueryStatusText now preserves the semantic message (e.g., "Commands completed successfully, 12ms") instead of just elapsed time
+
+### Stacked Results Layout Overhaul
+- **Independent per-section resize**: Each resize handle is the boundary between adjacent sections — dragging changes both heights inversely without affecting other sections
+- **Compact headers**: 18px headers with FontSize 10, reduced padding, compact pin/copy buttons (MinWidth=0, MinHeight=0, Height=14)
+- **Shared DataGrid styles**: New `ApplyGridStyles` helper applies the same cell/header/selection styles that ResultsGrid gets from XAML — stacked grids now match single-result mode exactly
+- **Slack fill**: After layout, leftover viewport space is absorbed by the last section's grid instead of leaving a blank block
+- **Selection clearing**: Switching active stacked grid fully clears selection, custom highlights, and drag state on all other grids
+
+---
+
 ## v2.13.2 (April 2026)
 
 ### Identity Column Handling
