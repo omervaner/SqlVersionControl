@@ -360,49 +360,22 @@ public partial class QueryTabViewModel : ObservableObject
             if (Results.Count > 0)
                 SelectedResultIndex = 0;
 
-            var totalSelectRows = execResult.Results.Where(r => r.Error == null).Sum(r => r.RowCount);
-            var totalDmlRows = execResult.TotalRowsAffected;
+            var summary = execResult.Summary!;
             var elapsed = sw.ElapsedMilliseconds < 1000
                 ? $"{sw.ElapsedMilliseconds}ms"
                 : $"{sw.Elapsed.TotalSeconds:F1}s";
 
-            // Status bar text
-            if (totalSelectRows > 0)
-            {
-                StatusText = totalSelectRows > 10_000
-                    ? $"{Results.Count} result set(s), {totalSelectRows:N0} total rows (large)"
-                    : $"{Results.Count} result set(s), {totalSelectRows:N0} total rows";
-            }
-            else
-            {
-                StatusText = totalDmlRows > 0
-                    ? $"{totalDmlRows:N0} row(s) affected"
-                    : "Commands completed successfully";
-            }
+            StatusText = summary.StatusText;
 
-            // SSMS-style binary flash: error or success, no middle ground
-            if (execResult.HasErrors)
+            if (summary.Outcome == ExecutionOutcome.Error || summary.Outcome == ExecutionOutcome.PartialSuccess)
             {
-                QueryFlash?.Invoke("Query completed with errors", QueryStatusSeverity.Error);
-                QueryStatusText = $"Errors, {elapsed}";
+                QueryFlash?.Invoke(summary.FlashText, QueryStatusSeverity.Error);
+                QueryStatusText = $"{summary.StatusText}, {elapsed}";
             }
             else if (!_suppressNextFlash)
             {
-                if (totalSelectRows > 0)
-                {
-                    QueryFlash?.Invoke($"\u2713 {totalSelectRows:N0} rows", QueryStatusSeverity.Success);
-                    QueryStatusText = $"{totalSelectRows:N0} rows, {elapsed}";
-                }
-                else if (totalDmlRows > 0)
-                {
-                    QueryFlash?.Invoke($"\u2713 {totalDmlRows:N0} row(s) affected", QueryStatusSeverity.Success);
-                    QueryStatusText = $"{totalDmlRows:N0} affected, {elapsed}";
-                }
-                else
-                {
-                    QueryFlash?.Invoke("Commands completed successfully", QueryStatusSeverity.Success);
-                    QueryStatusText = elapsed;
-                }
+                QueryFlash?.Invoke(summary.FlashText, QueryStatusSeverity.Success);
+                QueryStatusText = $"{summary.StatusText}, {elapsed}";
             }
             _suppressNextFlash = false;
 
@@ -411,7 +384,7 @@ public partial class QueryTabViewModel : ObservableObject
                 ExpandResultsForMessages?.Invoke();
 
             // Record in query history
-            QueryExecuted?.Invoke(sql, SelectedDatabase, totalSelectRows > 0 ? totalSelectRows : totalDmlRows);
+            QueryExecuted?.Invoke(sql, SelectedDatabase, summary.RowsReturned > 0 ? summary.RowsReturned : summary.RowsAffected);
 
             // Check if result is eligible for edit mode
             CheckEditEligibility(sql);

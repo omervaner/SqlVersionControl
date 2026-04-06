@@ -16,4 +16,5 @@ public class QueryExecutionResult
     public int TotalRowsAffected { get; set; }
     public bool HasErrors { get; set; }
     public int ErrorCount { get; set; }
+    public ExecutionSummary? Summary { get; set; }
 }

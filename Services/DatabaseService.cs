@@ -448,6 +448,7 @@ public partial class DatabaseService
         var totalRowsAffected = 0;
         var hasErrors = false;
         var errorCount = 0;
+        var hadSuccessfulWork = false;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var conn = new SqlConnection(connStr);
 
@@ -471,18 +472,11 @@ public partial class DatabaseService
                 using var cmd = new SqlCommand(batch, conn);
                 cmd.CommandTimeout = timeoutSeconds;
 
-                // Track per-statement row counts (fires even if a later statement errors)
+                // Queue every StatementCompleted count (including -1) for pairing with NextResult steps
+                var statementCounts = new Queue<int>();
                 cmd.StatementCompleted += (_, sce) =>
                 {
-                    if (sce.RecordCount >= 0)
-                    {
-                        totalRowsAffected += sce.RecordCount;
-                        messages.Add(new QueryMessage
-                        {
-                            Type = MessageType.RowCount,
-                            Text = $"({sce.RecordCount} row(s) affected)"
-                        });
-                    }
+                    statementCounts.Enqueue(sce.RecordCount);
                 };
 
                 // Register cancellation to call SqlCommand.Cancel()
@@ -495,44 +489,65 @@ public partial class DatabaseService
 
                 do
                 {
+                    // Consume paired StatementCompleted count for this NextResult step
+                    var pairedCount = statementCounts.Count > 0 ? statementCounts.Dequeue() : -1;
                     var colCount = reader.FieldCount;
-                    if (colCount == 0) continue; // non-SELECT batch (UPDATE/INSERT/etc.)
 
-                    var colNames = new string[colCount];
-                    var colTypes = new Type[colCount];
-                    for (int i = 0; i < colCount; i++)
+                    if (colCount > 0)
                     {
-                        colNames[i] = reader.GetName(i);
-                        colTypes[i] = reader.GetFieldType(i);
-                    }
-
-                    var rows = new List<object?[]>();
-                    while (await reader.ReadAsync(ct))
-                    {
-                        var row = new object?[colCount];
+                        // Row-returning result (SELECT): read data, emit "returned", ignore paired count
+                        var colNames = new string[colCount];
+                        var colTypes = new Type[colCount];
                         for (int i = 0; i < colCount; i++)
                         {
-                            row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                            colNames[i] = reader.GetName(i);
+                            colTypes[i] = reader.GetFieldType(i);
                         }
-                        rows.Add(row);
+
+                        var rows = new List<object?[]>();
+                        while (await reader.ReadAsync(ct))
+                        {
+                            var row = new object?[colCount];
+                            for (int i = 0; i < colCount; i++)
+                            {
+                                row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                            }
+                            rows.Add(row);
+                        }
+
+                        var qr = new QueryResult
+                        {
+                            ColumnNames = colNames,
+                            ColumnTypes = colTypes,
+                            Rows = rows,
+                            RowCount = rows.Count,
+                            ExecutionTimeMs = batchSw.ElapsedMilliseconds
+                        };
+                        results.Add(qr);
+
+                        messages.Add(new QueryMessage
+                        {
+                            Type = MessageType.RowCount,
+                            Text = $"({qr.RowCount} row(s) returned)"
+                        });
+                        hadSuccessfulWork = true;
                     }
-
-                    var qr = new QueryResult
+                    else if (pairedCount >= 0)
                     {
-                        ColumnNames = colNames,
-                        ColumnTypes = colTypes,
-                        Rows = rows,
-                        RowCount = rows.Count,
-                        ExecutionTimeMs = batchSw.ElapsedMilliseconds
-                    };
-                    results.Add(qr);
-
-                    // SELECT row count in Messages (SSMS shows this too)
-                    messages.Add(new QueryMessage
+                        // Non-row result with positive count (DML): emit "affected"
+                        totalRowsAffected += pairedCount;
+                        messages.Add(new QueryMessage
+                        {
+                            Type = MessageType.RowCount,
+                            Text = $"({pairedCount} row(s) affected)"
+                        });
+                        hadSuccessfulWork = true;
+                    }
+                    else
                     {
-                        Type = MessageType.RowCount,
-                        Text = $"({qr.RowCount} row(s) affected)"
-                    });
+                        // DDL/DECLARE/SET — no message, but still successful work
+                        hadSuccessfulWork = true;
+                    }
                 } while (await reader.NextResultAsync(ct));
             }
             catch (OperationCanceledException)
@@ -587,13 +602,78 @@ public partial class DatabaseService
             Text = $"Total execution time: {sw.ElapsedMilliseconds}ms"
         });
 
+        // Build execution summary
+        var resultSetCount = results.Count(r => r.Error == null);
+        var rowsReturned = results.Where(r => r.Error == null).Sum(r => r.RowCount);
+
+        var summary = new ExecutionSummary
+        {
+            ResultSetCount = resultSetCount,
+            RowsReturned = rowsReturned,
+            RowsAffected = totalRowsAffected,
+            ErrorCount = errorCount,
+        };
+
+        // Determine outcome
+        if (hasErrors)
+            summary.Outcome = hadSuccessfulWork
+                ? ExecutionOutcome.PartialSuccess
+                : ExecutionOutcome.Error;
+        else
+            summary.Outcome = ExecutionOutcome.Success;
+
+        // Build StatusText and FlashText
+        switch (summary.Outcome)
+        {
+            case ExecutionOutcome.Success:
+                if (totalRowsAffected > 0 && rowsReturned > 0)
+                {
+                    summary.StatusText = $"{totalRowsAffected:N0} affected, {resultSetCount} result set{(resultSetCount == 1 ? "" : "s")}, {rowsReturned:N0} rows";
+                    summary.FlashText = $"\u2713 {totalRowsAffected:N0} affected, {rowsReturned:N0} rows";
+                }
+                else if (rowsReturned > 0)
+                {
+                    summary.StatusText = rowsReturned > 10_000
+                        ? $"{resultSetCount} result set{(resultSetCount == 1 ? "" : "s")}, {rowsReturned:N0} total rows (large)"
+                        : $"{resultSetCount} result set{(resultSetCount == 1 ? "" : "s")}, {rowsReturned:N0} total rows";
+                    summary.FlashText = $"\u2713 {rowsReturned:N0} rows";
+                }
+                else if (totalRowsAffected > 0)
+                {
+                    summary.StatusText = $"{totalRowsAffected:N0} row(s) affected";
+                    summary.FlashText = $"\u2713 {totalRowsAffected:N0} row(s) affected";
+                }
+                else
+                {
+                    summary.StatusText = "Commands completed successfully";
+                    summary.FlashText = "Commands completed successfully";
+                }
+                break;
+
+            case ExecutionOutcome.PartialSuccess:
+                var parts = new List<string>();
+                if (rowsReturned > 0) parts.Add($"{rowsReturned:N0} rows returned");
+                if (totalRowsAffected > 0) parts.Add($"{totalRowsAffected:N0} row(s) affected");
+                summary.StatusText = parts.Count > 0
+                    ? $"{string.Join(", ", parts)}, completed with errors"
+                    : "Completed with errors";
+                summary.FlashText = "Completed with errors";
+                break;
+
+            case ExecutionOutcome.Error:
+                summary.StatusText = "Error";
+                summary.FlashText = "\u2717 Error";
+                break;
+        }
+
         return new QueryExecutionResult
         {
             Results = results,
             Messages = messages,
             TotalRowsAffected = totalRowsAffected,
             HasErrors = hasErrors,
-            ErrorCount = errorCount
+            ErrorCount = errorCount,
+            Summary = summary
         };
     }
 
