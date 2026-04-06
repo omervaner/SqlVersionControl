@@ -714,7 +714,7 @@ public partial class QueryTabViewModel : ObservableObject
     /// Paste parsed TSV rows into the editable grid, starting at the given row index.
     /// Overwrites existing rows (marking Modified) and appends new rows beyond the end.
     /// </summary>
-    public void PasteRows(List<string[]> parsedRows, int startIndex)
+    public void PasteRows(List<string[]> parsedRows, int startIndex, int startCol = 0)
     {
         if (!IsEditMode || EditableRows == null || EditColumnNames == null) return;
 
@@ -735,8 +735,8 @@ public partial class QueryTabViewModel : ObservableObject
                 if (existing.State == RowEditState.Deleted) continue;
 
                 existing.TakeSnapshot();
-                for (int c = 0; c < cells.Length && c < colCount; c++)
-                    existing[c] = cells[c];
+                for (int c = 0; c < cells.Length && (c + startCol) < colCount; c++)
+                    existing[c + startCol] = cells[c];
 
                 if (existing.State != RowEditState.New)
                     existing.State = existing.HasChanges() ? RowEditState.Modified : RowEditState.None;
@@ -746,8 +746,8 @@ public partial class QueryTabViewModel : ObservableObject
                 // Append new row
                 var values = new object?[colCount];
                 var newRow = new EditableRow(values, result.ColumnTypes, RowEditState.New);
-                for (int c = 0; c < cells.Length && c < colCount; c++)
-                    newRow[c] = cells[c];
+                for (int c = 0; c < cells.Length && (c + startCol) < colCount; c++)
+                    newRow[c + startCol] = cells[c];
                 EditableRows.Add(newRow);
             }
         }

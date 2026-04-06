@@ -132,6 +132,11 @@ public partial class QueryTabView : UserControl
         ResultsGrid.LoadingRow += OnDataGridLoadingRow;
         ResultsGrid.RowEditEnded += OnDataGridRowEditEnded;
 
+        // Track cell-edit lifecycle for paste routing
+        ResultsGrid.BeginningEdit += (_, _) => _isCellEditing = true;
+        ResultsGrid.CellEditEnding += (_, _) => _isCellEditing = false;
+        ResultsGrid.CellEditEnded += (_, _) => _isCellEditing = false;
+
         // Double-click result grid to auto-enter edit mode
         ResultsGrid.DoubleTapped += OnResultsGridDoubleTapped;
 

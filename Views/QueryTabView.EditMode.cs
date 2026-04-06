@@ -10,6 +10,9 @@ namespace SqlVersionControl.Views;
 
 public partial class QueryTabView
 {
+    // ── Cell Edit State Tracking ───────────────────────────────────
+    private bool _isCellEditing; // true while DataGrid has an active cell editor
+
     // ── Cell Detail Panel Resize ────────────────────────────────────
     private bool _cellDetailResizing;
     private bool _cellDetailEnabled; // toggle for cell detail panel (off by default)
@@ -21,6 +24,7 @@ public partial class QueryTabView
     private void OnEditModeChanged()
     {
         if (_viewModel == null) return;
+        _isCellEditing = false; // force-clear on any edit mode transition
         CellDetailPanel.IsVisible = false;
 
         var resultIndex = _selectedTabIndex >= 0 && _selectedTabIndex < _viewModel.Results.Count
@@ -274,6 +278,47 @@ public partial class QueryTabView
             }
         }
 
+        // Paste from read-only mode: auto-enter edit mode, then paste at captured anchor
+        if (ctrl && e.Key == Key.V && _viewModel is { IsEditMode: false })
+        {
+            if (!_viewModel.CanEditMode)
+            {
+                _viewModel.Flash("Result is not editable", QueryStatusSeverity.Warning);
+                return;
+            }
+
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard == null) return;
+
+            var text = await clipboard.GetTextAsync();
+            if (string.IsNullOrEmpty(text)) return;
+
+            var lines = ParseTsvClipboard(text);
+            if (lines.Count == 0) return;
+
+            // Capture anchor before edit mode swaps ItemsSource
+            int startRow = ResolveStartRow();
+            int startCol = ResolveStartCol();
+
+            e.Handled = true;
+            await _viewModel.ToggleEditModeCommand.ExecuteAsync(null);
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                // Restore UI selection for visual feedback
+                if (startRow >= 0 && startRow < (ResultsGrid.ItemsSource?.Cast<object>().Count() ?? 0))
+                {
+                    ResultsGrid.SelectedIndex = startRow;
+                    if (startCol >= 0 && startCol < ResultsGrid.Columns.Count)
+                        ResultsGrid.CurrentColumn = ResultsGrid.Columns[startCol];
+                }
+
+                ApplyPasteRows(lines, startRow, startCol);
+            }, Avalonia.Threading.DispatcherPriority.Background);
+
+            return;
+        }
+
         if (_viewModel is not { IsEditMode: true }) return;
 
         if (e.Key == Key.Escape)
@@ -316,6 +361,10 @@ public partial class QueryTabView
 
         if (ctrl && e.Key == Key.V)
         {
+            // If a cell editor is active, let native paste handle single-cell editing
+            if (_isCellEditing)
+                return; // Native editor paste will fire — don't intercept
+
             e.Handled = true;
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard == null) return;
@@ -323,23 +372,64 @@ public partial class QueryTabView
             var text = await clipboard.GetTextAsync();
             if (string.IsNullOrEmpty(text)) return;
 
-            // Parse TSV: rows separated by newlines, columns by tabs
-            var lines = text.Split('\n')
-                .Select(l => l.TrimEnd('\r'))
-                .Where(l => l.Length > 0)  // Skip trailing empty line
-                .Select(l => l.Split('\t'))
-                .ToList();
-
+            var lines = ParseTsvClipboard(text);
             if (lines.Count == 0) return;
 
-            // Paste starting at selected row, or append at end
-            var startIndex = ResultsGrid.SelectedIndex >= 0
-                ? ResultsGrid.SelectedIndex
-                : _viewModel.EditableRows?.Count ?? 0;
-
-            _viewModel.PasteRows(lines, startIndex);
-            RefreshRowVisuals();
+            ApplyPasteRows(lines, ResolveStartRow(), ResolveStartCol());
         }
+    }
+
+    private static List<string[]> ParseTsvClipboard(string text)
+    {
+        return text.Split('\n')
+            .Select(l => l.TrimEnd('\r'))
+            .Where(l => l.Length > 0)
+            .Select(l => l.Split('\t'))
+            .ToList();
+    }
+
+    private int ResolveStartRow()
+    {
+        var items = ResultsGrid.ItemsSource?.Cast<object>().ToList();
+        if (ResultsGrid.SelectedItems is { Count: > 0 } selected && items != null)
+        {
+            var minRow = int.MaxValue;
+            foreach (var item in selected)
+            {
+                var idx = items.IndexOf(item);
+                if (idx >= 0 && idx < minRow) minRow = idx;
+            }
+            if (minRow != int.MaxValue) return minRow;
+        }
+
+        if (ResultsGrid.SelectedIndex >= 0)
+            return ResultsGrid.SelectedIndex;
+
+        return _viewModel?.EditableRows?.Count ?? 0;
+    }
+
+    private int ResolveStartCol()
+    {
+        if (_fullRowSelectionMode)
+            return 0;
+
+        if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+            return Math.Min(_dragStartColIndex, _dragEndColIndex);
+
+        if (ResultsGrid.CurrentColumn != null)
+        {
+            var idx = ResultsGrid.Columns.IndexOf(ResultsGrid.CurrentColumn);
+            if (idx >= 0) return idx;
+        }
+
+        return 0;
+    }
+
+    private void ApplyPasteRows(List<string[]> lines, int startRow, int startCol)
+    {
+        if (_viewModel == null) return;
+        _viewModel.PasteRows(lines, startRow, startCol);
+        RefreshRowVisuals();
     }
 
     private void UpdateEditModeButton()
