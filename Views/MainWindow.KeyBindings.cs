@@ -248,8 +248,15 @@ public partial class MainWindow
                 break;
 
             case Key.R:
-                if (QueryEditorTab.IsChecked == true)
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && QueryEditorTab.IsChecked == true)
                 {
+                    // Cmd+Shift+R → Reopen closed tab
+                    var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+                    qeHost?.ReopenClosedTab();
+                }
+                else if (QueryEditorTab.IsChecked == true)
+                {
+                    // Cmd+R → Toggle results panel
                     var qeHost = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
                     qeHost?.ToggleActiveResultsPanel();
                 }
@@ -358,6 +365,7 @@ public partial class MainWindow
 
             // Tabs
             new() { Name = "Close Tab", Shortcut = $"{mod}+W", Description = "Close active query tab", Execute = () => { if (host != null) _ = host.CloseActiveTabAsync(); } },
+            new() { Name = "Reopen Closed Tab", Shortcut = $"{mod}+Shift+R", Description = "Reopen the last closed tab", Execute = () => host?.ReopenClosedTab() },
 
             // Navigation
             new() { Name = "Query Editor", Shortcut = $"{mod}+1", Description = "Switch to editor", Execute = () => QueryEditorTab.IsChecked = true },

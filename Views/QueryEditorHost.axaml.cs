@@ -160,6 +160,7 @@ public partial class QueryEditorHost : UserControl
         OeRefreshButton.Click += async (_, _) => await ReloadDatabasesAsync();
         OeCollapseButton.Click += (_, _) => ToggleObjectExplorer();
         OeExpandButton.Click += (_, _) => ToggleObjectExplorer();
+        OeToggleButton.Click += (_, _) => ToggleObjectExplorer();
         RestoreObjectExplorerState();
 
         // Wire merged toolbar buttons (Run/Stop → active tab VM)

@@ -115,7 +115,10 @@ public partial class QueryTabView
             var peekHeight = totalHeight > 0 ? totalHeight * 0.4 : 250;
             EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
             EditorResultsGrid.RowDefinitions[2].Height = new GridLength(peekHeight, GridUnitType.Pixel);
+            ResultsPanel.IsVisible = true;
+            ResultsSplitter.IsVisible = true;
             ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.IsVisible = true;
             ResultsCollapseButton.Content = "\u25BC"; // ▼
         }
     }

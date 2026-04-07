@@ -100,7 +100,10 @@ public partial class QueryTabView : UserControl
                 var msgHeight = Math.Max(totalHeight > 0 ? totalHeight * 0.25 : 150, 80);
                 EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 EditorResultsGrid.RowDefinitions[2].Height = new GridLength(msgHeight, GridUnitType.Pixel);
+                ResultsPanel.IsVisible = true;
+                ResultsSplitter.IsVisible = true;
                 ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.IsVisible = true;
                 ResultsCollapseButton.Content = "\u25BC";
             }
             // Build tab bar (so Messages tab button exists) and switch to it
@@ -215,10 +218,12 @@ public partial class QueryTabView : UserControl
         if (SqlEditor.SyntaxHighlighting != null)
             PeekEditor.SyntaxHighlighting = SqlEditor.SyntaxHighlighting;
 
-        // Start with results panel collapsed — editor gets full height
+        // Start with results panel closed — editor gets full height
         EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
+        ResultsPanel.IsVisible = false;
+        ResultsSplitter.IsVisible = false;
         ResultsSplitter.IsEnabled = false;
-        ResultsCollapseButton.Content = "\u25B2"; // ▲
+        ResultsCollapseButton.IsVisible = false;
     }
 
     /// <summary>

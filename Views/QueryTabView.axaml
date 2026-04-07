@@ -56,7 +56,7 @@
                     ZIndex="1"/>
 
             <!-- Results Panel -->
-            <Grid Grid.Row="2" RowDefinitions="Auto,*">
+            <Grid Grid.Row="2" x:Name="ResultsPanel" RowDefinitions="Auto,*" Margin="0,-3,0,0">
                 <!-- Result Tabs Header + Edit Mode Toggle + Edit Buttons -->
                 <Border Grid.Row="0" x:Name="ResultsTabBar" Background="{DynamicResource PanelHeaderBackground}"
                         BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,0,0,1"

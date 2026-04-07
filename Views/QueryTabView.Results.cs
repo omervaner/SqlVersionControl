@@ -526,7 +526,10 @@ public partial class QueryTabView
 
                 EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
                 EditorResultsGrid.RowDefinitions[2].Height = new GridLength(resultHeight, GridUnitType.Pixel);
+                ResultsPanel.IsVisible = true;
+                ResultsSplitter.IsVisible = true;
                 ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.IsVisible = true;
                 ResultsCollapseButton.Content = "\u25BC"; // ▼
                 if (_settings != null)
                 {
@@ -550,25 +553,30 @@ public partial class QueryTabView
             var rowDefs = EditorResultsGrid.RowDefinitions;
             if (_resultsCollapsed)
             {
-                // Expand — restore saved height
+                // Open — restore saved height, show splitter
                 var h = _settings?.Settings.ResultsPanelHeight ?? 200;
                 if (h <= 0 || double.IsNaN(h) || double.IsInfinity(h)) h = 200;
                 rowDefs[2].Height = new GridLength(h, GridUnitType.Pixel);
+                ResultsPanel.IsVisible = true;
+                ResultsSplitter.IsVisible = true;
                 ResultsSplitter.IsEnabled = true;
+                ResultsCollapseButton.IsVisible = true;
                 ResultsCollapseButton.Content = "\u25BC"; // ▼
                 _resultsCollapsed = false;
             }
             else
             {
-                // Save current height before collapsing
+                // Close — save height, fully hide panel, splitter and collapse button
                 var currentHeight = rowDefs[2].ActualHeight;
                 if (currentHeight > 30 && !double.IsNaN(currentHeight) && !double.IsInfinity(currentHeight) && _settings != null)
                 {
                     _settings.Settings.ResultsPanelHeight = currentHeight;
                 }
                 rowDefs[2].Height = new GridLength(0, GridUnitType.Pixel);
+                ResultsPanel.IsVisible = false;
+                ResultsSplitter.IsVisible = false;
                 ResultsSplitter.IsEnabled = false;
-                ResultsCollapseButton.Content = "\u25B2"; // ▲
+                ResultsCollapseButton.IsVisible = false;
                 _resultsCollapsed = true;
             }
 
@@ -637,8 +645,10 @@ public partial class QueryTabView
             if (s.ResultsPanelCollapsed)
             {
                 EditorResultsGrid.RowDefinitions[2].Height = new GridLength(0, GridUnitType.Pixel);
+                ResultsPanel.IsVisible = false;
+                ResultsSplitter.IsVisible = false;
                 ResultsSplitter.IsEnabled = false;
-                ResultsCollapseButton.Content = "\u25B2"; // ▲
+                ResultsCollapseButton.IsVisible = false;
                 _resultsCollapsed = true;
             }
         }
@@ -1643,7 +1653,10 @@ public partial class QueryTabView
             var planHeight = totalHeight > 0 ? totalHeight * 0.5 : 300;
             EditorResultsGrid.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
             EditorResultsGrid.RowDefinitions[2].Height = new GridLength(planHeight, GridUnitType.Pixel);
+            ResultsPanel.IsVisible = true;
+            ResultsSplitter.IsVisible = true;
             ResultsSplitter.IsEnabled = true;
+            ResultsCollapseButton.IsVisible = true;
             ResultsCollapseButton.Content = "\u25BC";
         }
 

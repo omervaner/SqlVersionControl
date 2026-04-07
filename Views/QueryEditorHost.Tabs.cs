@@ -9,6 +9,16 @@ namespace SqlVersionControl.Views;
 
 public partial class QueryEditorHost
 {
+    // ── Closed Tab Stack (for reopen) ───────────────────────────────
+
+    private record ClosedTabState(
+        string SqlText, string? TabTitle, string? SelectedDatabase,
+        string? ConnectionString, SavedConnection? ConnectionProfile,
+        string? QueryPath, string? QueryName, int CursorPosition);
+
+    private readonly Stack<ClosedTabState> _closedTabs = new();
+    private const int MaxClosedTabs = 10;
+
     // ── Tab Lifecycle ────────────────────────────────────────────────
 
     public void AddNewTab(string? connectionString = null, SavedConnection? profile = null)
@@ -163,6 +173,18 @@ public partial class QueryEditorHost
             // dialog.Result == false → Don't Save — proceed
         }
 
+        // Save state for reopen before removing
+        if (vm != null)
+        {
+            var editor = tabView.FindControl<AvaloniaEdit.TextEditor>("SqlEditor");
+            _closedTabs.Push(new ClosedTabState(
+                vm.SqlText ?? "", vm.TabTitle, vm.SelectedDatabase,
+                vm.TabConnectionString, vm.TabConnectionProfile,
+                vm.CurrentQueryPath, vm.CurrentQueryName,
+                editor?.CaretOffset ?? 0));
+            while (_closedTabs.Count > MaxClosedTabs) _closedTabs.TryPop(out _);
+        }
+
         _tabs.RemoveAt(index);
         TabContentPanel.Children.Remove(tabView);
 
@@ -189,6 +211,39 @@ public partial class QueryEditorHost
     {
         if (_activeTabIndex >= 0)
             await CloseTabAsync(_activeTabIndex);
+    }
+
+    public void ReopenClosedTab()
+    {
+        if (_closedTabs.Count == 0) return;
+
+        var state = _closedTabs.Pop();
+        AddNewTab(state.ConnectionString, state.ConnectionProfile);
+
+        var tabView = _tabs[^1];
+        var vm = tabView.DataContext as QueryTabViewModel;
+        if (vm == null) return;
+
+        // Restore state
+        var editor = tabView.FindControl<AvaloniaEdit.TextEditor>("SqlEditor");
+        if (editor != null) editor.Text = state.SqlText;
+        vm.SetInitialText(state.SqlText);
+        vm.CurrentQueryPath = state.QueryPath;
+        vm.CurrentQueryName = state.QueryName;
+        if (state.SelectedDatabase != null) vm.SelectedDatabase = state.SelectedDatabase;
+        if (state.QueryName != null) vm.TabTitle = state.QueryName;
+
+        // Mark dirty if no saved file
+        if (state.QueryPath == null && !string.IsNullOrWhiteSpace(state.SqlText))
+            vm.HasUnsavedChanges = true;
+
+        // Restore cursor
+        if (editor != null && state.CursorPosition >= 0 && state.CursorPosition <= state.SqlText.Length)
+            editor.CaretOffset = state.CursorPosition;
+
+        SwitchToTab(_tabs.Count - 1);
+        RebuildTabStrip();
+        SaveSession();
     }
 
     private void SwitchToTab(int index)
