@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.14.1 (April 2026)
+## PROJECT STATUS: v2.14.2 (April 2026)
 
-Object Explorer search fix: per-database query isolation (replaces brittle cross-database UNION ALL), system DB exclusion, fallback to managed.Databases when tree not expanded. Windows DPI fix: PerMonitorV2 DPI awareness in app.manifest.
+Window jump fix (narrowed BeginMoveDrag to empty title bar region). Reopen closed tab (Cmd+Shift+R, stack of 10). OE and results panels fully close/open (IsVisible, no gaps). Toolbar polish (uniform 26x22 buttons, OE toggle, separator, icon colors). Tab close prompt fix for session-restored tabs. CloseTabDialog redesign. TextCompare as detached window.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 

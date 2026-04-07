@@ -4,6 +4,32 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.14.2 (April 2026)
+
+### Window Jump Fix
+- **Narrowed drag region**: `BeginMoveDrag` wired to empty title bar space only — clicking menus no longer moves the window on macOS
+
+### Reopen Closed Tab
+- **Cmd+Shift+R**: Reopens the last closed tab, restoring text, cursor position, database, and connection (stack of 10)
+
+### Panel Close/Open Overhaul
+- **Object Explorer**: Fully hidden when closed (panel + splitter invisible, column width 0), new toolbar toggle button, no gap or arrow stub
+- **Results panel**: Fully hidden when collapsed (panel + splitter invisible, row height 0), no placeholder bleed-through
+
+### Tab Close Prompt Fix
+- **Session-restored tabs**: Tabs restored from session without a saved file path now correctly prompt "Unsaved Changes" on close
+
+### UI Polish
+- **Toolbar buttons**: Uniform 26x22 sizing, consistent spacing, OE toggle button with separator
+- **Autocomplete icon**: Lights up correctly on startup when active
+- **Icon colors**: Quote and Format buttons match clock icon color (TextSecondary)
+- **CloseTabDialog**: Equal-width button grid layout
+- **TextCompare**: Opens as detached non-modal window on macOS
+- **Duplicate styles**: Removed redundant MenuFlyoutPresenter block in App.axaml
+- **Crash banner**: Hardcoded colors replaced with DynamicResource
+
+---
+
 ## v2.14.1 (April 2026)
 
 ### Object Explorer Search Fix
