@@ -84,7 +84,8 @@
                         </MenuItem>
                     </Menu>
 
-                    <!-- Flexible space (Column 1 is star-sized) -->
+                    <!-- Drag region (Column 1 — empty space between menu and tabs) -->
+                    <Border x:Name="DragRegion" Grid.Column="1" Background="Transparent"/>
 
                     <!-- View Tabs + Settings (right-aligned) -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
@@ -140,7 +141,7 @@
 
         <!-- Crash Report Banner -->
         <Border Grid.Row="2" x:Name="CrashBanner" IsVisible="False"
-                Background="#d9534f" Padding="8,6">
+                Background="{DynamicResource ButtonDanger}" Padding="8,6">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                 <TextBlock Grid.Column="0" x:Name="CrashBannerText"
                            Text="Lookout crashed last session."
@@ -148,7 +149,7 @@
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1" x:Name="CrashViewButton"
                         Content="View Report" Padding="12,4"
-                        Background="White" Foreground="#d9534f"
+                        Background="White" Foreground="{DynamicResource ButtonDanger}"
                         FontWeight="Bold" FontSize="11"
                         Cursor="Hand" Margin="8,0"/>
                 <Button Grid.Column="2" x:Name="CrashCopyButton"

@@ -166,6 +166,10 @@ public partial class QueryEditorHost
                 tabView.Editor.Text = tabState.SqlText;
                 vm.SetInitialText(tabState.SqlText);
 
+                // Session-restored tabs without a saved file should prompt on close
+                if (vm.CurrentQueryPath == null && !string.IsNullOrWhiteSpace(tabState.SqlText))
+                    vm.HasUnsavedChanges = true;
+
                 // Restore cursor position
                 if (tabState.CursorPosition >= 0 && tabState.CursorPosition <= tabState.SqlText.Length)
                     tabView.Editor.CaretOffset = tabState.CursorPosition;

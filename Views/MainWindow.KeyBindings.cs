@@ -353,7 +353,7 @@ public partial class MainWindow
             new() { Name = "Format SQL", Shortcut = "Ctrl+Shift+F", Description = "Format selected SQL", Execute = () => host?.FormatSqlInEditor() },
             new() { Name = "Quick Quote Selection", Shortcut = "Ctrl+Shift+Q", Description = "Quote selected text", Execute = () => host?.QuickQuoteSelection(false) },
             new() { Name = "SQL Quoter", Shortcut = "", Description = "Open SQL Quoter dialog", Execute = () => _ = ShowSqlQuoterDialogAsync() },
-            new() { Name = "Text Compare", Shortcut = "", Description = "Compare two text blocks", Execute = () => _ = new TextCompareDialog().ShowDialog(this) },
+            new() { Name = "Text Compare", Shortcut = "", Description = "Compare two text blocks", Execute = () => _ = new TextCompareDialog().ShowDialogDetached(this) },
             new() { Name = "Index Analysis", Shortcut = "", Description = "Analyze unused/missing indexes", Execute = () => _ = ShowIndexAnalysisDialogAsync() },
 
             // Tabs

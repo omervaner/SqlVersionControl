@@ -100,10 +100,10 @@ public partial class MainWindow : Window
             qeHost.SessionRestoreWarning += msg => _viewModel.StatusMessage = msg;
         }
 
-        // Enable window dragging from title bar area (macOS only — Windows has its own title bar)
+        // Enable window dragging from empty title bar space only (macOS only — Windows has its own title bar)
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            TitleBarBorder.PointerPressed += (s, e) =>
+            DragRegion.PointerPressed += (s, e) =>
             {
                 if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
                     BeginMoveDrag(e);

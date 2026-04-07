@@ -86,7 +86,7 @@ public partial class MainWindow
         // Tools menu
         MenuFormatSql.Click += (_, _) => FormatSqlInEditor();
         MenuSqlQuoter.Click += async (_, _) => await ShowSqlQuoterDialogAsync();
-        MenuTextCompare.Click += async (_, _) => await new TextCompareDialog().ShowDialog(this);
+        MenuTextCompare.Click += async (_, _) => await new TextCompareDialog().ShowDialogDetached(this);
         MenuIndexAnalysis.Click += async (_, _) => await ShowIndexAnalysisDialogAsync();
 
         // Help menu

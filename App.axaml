@@ -87,36 +87,28 @@
         <Style Selector="ContextMenu Separator">
             <Setter Property="Background" Value="{DynamicResource BorderDefault}"/>
         </Style>
-        <Style Selector="MenuFlyoutPresenter">
-            <Setter Property="Background" Value="{DynamicResource ToolbarBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="2"/>
-            <Setter Property="CornerRadius" Value="6"/>
-        </Style>
-
-        <!-- Overlay auto-hide scrollbars: thin, semi-transparent, fade in/out -->
+        <!-- Scrollbars: always visible at rest, brighter on hover -->
         <Style Selector="ScrollBar">
             <Setter Property="Width" Value="6"/>
             <Setter Property="MinWidth" Value="6"/>
-            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="Opacity" Value="0.35"/>
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.3"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2"/>
                     <DoubleTransition Property="Width" Duration="0:0:0.15"/>
                 </Transitions>
             </Setter>
         </Style>
         <Style Selector="ScrollBar:pointerover">
-            <Setter Property="Opacity" Value="0.7"/>
+            <Setter Property="Opacity" Value="0.85"/>
             <Setter Property="Width" Value="8"/>
             <Setter Property="MinWidth" Value="8"/>
         </Style>
         <Style Selector="ScrollViewer:pointerover ScrollBar">
-            <Setter Property="Opacity" Value="0.4"/>
+            <Setter Property="Opacity" Value="0.5"/>
         </Style>
         <Style Selector="ScrollViewer:pointerover ScrollBar:pointerover">
-            <Setter Property="Opacity" Value="0.7"/>
+            <Setter Property="Opacity" Value="0.85"/>
         </Style>
         <Style Selector="ScrollBar /template/ Rectangle#TrackRect">
             <Setter Property="IsVisible" Value="False"/>

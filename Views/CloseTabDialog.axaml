@@ -2,20 +2,28 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SqlVersionControl.Views.CloseTabDialog"
         Title="Unsaved Changes"
-        Width="380" Height="160"
+        Width="400" Height="170"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
 
-    <Grid RowDefinitions="*,Auto" Margin="24">
+    <Grid RowDefinitions="*,Auto" Margin="28,24">
         <TextBlock x:Name="MessageText" Grid.Row="0"
-                   TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
-                   TextAlignment="Center" FontSize="14"/>
+                   TextWrapping="Wrap" VerticalAlignment="Center"
+                   FontSize="13" Foreground="{DynamicResource TextPrimary}"/>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center"
-                    Spacing="10" Margin="0,15,0,0">
-            <Button x:Name="CancelButton" Content="Cancel" Classes="btn-secondary" Padding="16,8"/>
-            <Button x:Name="DontSaveButton" Content="Don't Save" Classes="btn-danger" Padding="16,8"/>
-            <Button x:Name="SaveButton" Content="Save" Classes="btn-primary" Padding="16,8"/>
-        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,20,0,0">
+            <Button x:Name="CancelButton" Grid.Column="0" Content="Cancel"
+                    Classes="btn-secondary" Padding="0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Margin="0,0,5,0"/>
+            <Button x:Name="DontSaveButton" Grid.Column="1" Content="Don't Save"
+                    Classes="btn-danger" Padding="0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Margin="5,0"/>
+            <Button x:Name="SaveButton" Grid.Column="2" Content="Save"
+                    Classes="btn-primary" Padding="0,8"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Margin="5,0,0,0"/>
+        </Grid>
     </Grid>
 </Window>
