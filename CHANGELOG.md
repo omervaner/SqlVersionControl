@@ -4,6 +4,18 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.14.1 (April 2026)
+
+### Object Explorer Search Fix
+- **Per-database query isolation**: Replaced single cross-database UNION ALL with individual per-database queries — one inaccessible or collation-mismatched database no longer kills the entire search
+- **System database exclusion**: Search now skips system databases (master, tempdb, model, msdb), matching the same set shown in Object Explorer expansion
+- **Collapsed tree fallback**: Search works even when the tree hasn't been expanded yet, falling back to the cached database list with system DBs filtered out
+
+### Windows DPI Fix
+- **PerMonitorV2 DPI awareness**: Added DPI awareness declaration to app.manifest — Windows no longer bitmap-stretches the app, rendering is sharp at all display scaling levels
+
+---
+
 ## v2.14.0 (April 2026)
 
 ### Paste Overhaul

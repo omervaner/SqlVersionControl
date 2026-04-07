@@ -741,37 +741,42 @@ public partial class DatabaseService
         using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync(ct);
 
-        // Build a UNION ALL across all databases for a single round-trip
-        var unions = new List<string>();
+        // Query each database individually so one failure doesn't kill the whole search
         foreach (var db in databases)
         {
             ct.ThrowIfCancellationRequested();
             var safeDb = db.Replace("]", "]]");
-            unions.Add($@"
+            var sql = $@"
                 SELECT '{safeDb}' AS db, s.name AS [schema], o.name, o.type
                 FROM [{safeDb}].sys.objects o
                 JOIN [{safeDb}].sys.schemas s ON o.schema_id = s.schema_id
                 WHERE o.is_ms_shipped = 0
                   AND o.type IN ('U','V','P','FN','TF','IF','SO','TR')
-                  AND o.name LIKE @filter");
-        }
+                  AND o.name LIKE @filter
+                ORDER BY s.name, o.name";
 
-        if (unions.Count == 0) return results;
+            try
+            {
+                using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 10 };
+                cmd.Parameters.AddWithValue("@filter", $"%{filter}%");
 
-        var sql = string.Join("\nUNION ALL\n", unions) + "\nORDER BY db, [schema], name";
-
-        using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 15 };
-        cmd.Parameters.AddWithValue("@filter", $"%{filter}%");
-
-        using var reader = await cmd.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-        {
-            results.Add((
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3).Trim()
-            ));
+                using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    results.Add((
+                        reader.GetString(0),
+                        reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3).Trim()
+                    ));
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                AppLogger.LogError($"ObjectExplorer.SearchDb[{db}]", ex);
+                // Skip this database, continue with the rest
+            }
         }
 
         return results;

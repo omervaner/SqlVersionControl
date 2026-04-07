@@ -9,6 +9,9 @@ namespace SqlVersionControl.ViewModels;
 
 public partial class ObjectExplorerViewModel : ObservableObject
 {
+    private static readonly HashSet<string> _systemDatabases =
+        new(StringComparer.OrdinalIgnoreCase) { "master", "tempdb", "model", "msdb" };
+
     private readonly DatabaseService _db;
     private ConnectionRegistry? _registry;
     private Timer? _filterDebounce;
@@ -255,12 +258,30 @@ public partial class ObjectExplorerViewModel : ObservableObject
             {
                 foreach (var managed in _registry.ActiveConnections)
                 {
-                    if (managed.ResolvedConnectionString == null || managed.Databases == null) continue;
+                    if (managed.ResolvedConnectionString == null) continue;
                     ct.ThrowIfCancellationRequested();
+
+                    // Try the expanded tree first (already filtered to user DBs),
+                    // fall back to managed.Databases minus system DBs if tree isn't expanded yet
+                    var databases = _savedFilterNodes?
+                        .Where(n => n.ConnectionId == managed.Id)
+                        .SelectMany(n => n.Children)
+                        .Where(n => n.NodeType == ObjectExplorerNodeType.Database)
+                        .Select(n => n.Name)
+                        .ToList();
+
+                    if (databases == null || databases.Count == 0)
+                    {
+                        databases = managed.Databases?
+                            .Where(db => !_systemDatabases.Contains(db, StringComparer.OrdinalIgnoreCase))
+                            .ToList();
+                    }
+
+                    if (databases == null || databases.Count == 0) continue;
 
                     connectionInfos.Add((managed.Id, managed.Color, managed.Config.Name ?? managed.Config.Server));
                     searchTasks.Add(_db.SearchObjectsAsync(
-                        managed.ResolvedConnectionString, managed.Databases, filter, ct));
+                        managed.ResolvedConnectionString, databases, filter, ct));
                 }
             }
             else if (_activeConnectionString != null)

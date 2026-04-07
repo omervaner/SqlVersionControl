@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.14.0 (April 2026)
+## PROJECT STATUS: v2.14.1 (April 2026)
 
-Paste overhaul: single-cell paste fix (cell-edit state tracking via BeginningEdit/CellEditEnding), column-aware TSV paste (startCol parameter), auto-enter edit mode on Ctrl+V from read-only. Execution feedback normalization: ExecutionSummary model, "rows returned" vs "rows affected" distinction, StatementCompleted/NextResult pairing for correct classification, partial success detection. Stacked results layout: independent per-section resize with boundary handles, compact 18px headers, shared DataGrid styles via ApplyGridStyles helper, slack fill for last section.
+Object Explorer search fix: per-database query isolation (replaces brittle cross-database UNION ALL), system DB exclusion, fallback to managed.Databases when tree not expanded. Windows DPI fix: PerMonitorV2 DPI awareness in app.manifest.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
