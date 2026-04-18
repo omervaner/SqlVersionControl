@@ -4,6 +4,36 @@ All version history in reverse chronological order.
 
 ---
 
+## v2.15.0 (April 2026)
+
+### BackgroundPollManager — Energy Fix
+- **Pause pollers on tab/window inactive**: New `BackgroundPollManager` service gates Activity auto-refresh (FullyGated) on window focus + active tab — eliminates ~5,800 idle DMV round-trips per day, resolves macOS "significant energy" flag
+- **Trace recording always runs (NeverGated)**: XE ring buffer read continues regardless of tab/window state to prevent silent event loss from buffer overflow
+- **Catch-up on resume**: Immediate refresh fires when switching back to a gated tab, then periodic timer resets to avoid double-fire
+- **Reentrancy guard**: `_isTicking` flag per poller prevents overlapping async ticks
+- **Status bar poll indicator**: Shows "polling" / "recording" / "idle" state, event-driven (no timer), theme-aware (`PollIdleBrush`, `PollActiveBrush`)
+
+### Editor Crash Fix (VisualLinesInvalidException)
+- **Root cause**: `UpdateOccurrenceHighlight` and `UpdateBracketHighlight` called `TextView.Redraw()` on every caret/selection change, racing with `SelectionLayer.Render()` during multi-segment selection
+- **Pointer block**: Option+Shift+drag consumed at tunnel level before AvaloniaEdit sees it (gesture produced SimpleSelection, not RectangleSelection — verified empirically)
+- **Dispatcher exception filter**: `VisualLinesInvalidException` swallowed at `Dispatcher.UIThread.UnhandledExceptionFilter` as crash insurance
+- **Part A guards**: Occurrence highlight skips redraw when `SelectedWord` unchanged; bracket highlight skips when offsets unchanged + uses targeted `Redraw(DocumentLine)` instead of full-view `Redraw()`
+
+### Column (Rectangle) Selection
+- **Option+Drag**: Constructs `AvaloniaEdit.Editing.RectangleSelection` directly via custom pointer handlers at tunnel priority
+- **Character-cell throttling**: Only updates on cell boundary changes (nullable `TextViewPosition?`), not per-pixel
+- **Clipboard**: Copy/paste semantics handled natively by AvaloniaEdit's `RectangleSelection`
+
+### Copy Fixes
+- **Row-header Cmd+C copies all columns**: Reordered branch logic — `_fullRowSelectionMode` checked before `grid.CurrentColumn` (was dead code)
+- **Two column-range helpers**: `ResolveCopyColumnRange` (concrete bounds for copy) and `ResolveRenderColumnRange` (-1 sentinel for render) — DRYs up 4 call sites
+- **Right-click Copy no longer includes headers**: Removed unconditional `sb.AppendLine(columnNames)` from `CopySelectedRowsAsync`
+
+### Removed
+- **Shift+Click Quick Execute**: Misfired on non-procs, overloaded universal extend-selection gesture, thin cost/benefit. Context menu path remains for proc execution
+
+---
+
 ## v2.14.2 (April 2026)
 
 ### Window Jump Fix

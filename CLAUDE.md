@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.14.2 (April 2026)
+## PROJECT STATUS: v2.15.0 (April 2026)
 
-Window jump fix (narrowed BeginMoveDrag to empty title bar region). Reopen closed tab (Cmd+Shift+R, stack of 10). OE and results panels fully close/open (IsVisible, no gaps). Toolbar polish (uniform 26x22 buttons, OE toggle, separator, icon colors). Tab close prompt fix for session-restored tabs. CloseTabDialog redesign. TextCompare as detached window.
+BackgroundPollManager pauses Activity auto-refresh on tab/window inactive (eliminates macOS "significant energy" flag). Trace recording (NeverGated) keeps draining XE buffer always. Status bar poll indicator (idle/polling/recording). Editor crash fix (VisualLinesInvalidException on Option+Shift+drag — pointer block + dispatcher filter). Row-header Cmd+C copies all columns (branch reorder + ResolveCopyColumnRange helper). Right-click Copy no longer includes headers. Option+Drag column (rectangle) selection. Removed Shift+Click Quick Execute.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
