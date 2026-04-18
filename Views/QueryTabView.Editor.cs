@@ -25,6 +25,19 @@ public partial class QueryTabView
     private AvaloniaEdit.TextViewPosition _columnSelectStart;
     private AvaloniaEdit.TextViewPosition? _lastColumnSelectPos;
 
+    /// <summary>
+    /// Try to copy a column (rectangle) selection to clipboard.
+    /// Returns true if a column selection was active and copied; false to fall through to normal Cmd+C.
+    /// </summary>
+    public bool TryCopyColumnSelection()
+    {
+        if (!_lastColumnSelectPos.HasValue) return false;
+        SqlEditor.TextArea.Selection = new AvaloniaEdit.Editing.RectangleSelection(
+            SqlEditor.TextArea, _columnSelectStart, _lastColumnSelectPos.Value);
+        SqlEditor.Copy();
+        return true;
+    }
+
     private void ApplyGridRowHeight()
     {
         var height = _settings?.Settings.GridRowHeight ?? 22;
@@ -270,6 +283,23 @@ public partial class QueryTabView
                 e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
+        // Clear stored column selection on any non-Alt click
+        SqlEditor.TextArea.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
+        {
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+                _lastColumnSelectPos = null;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Capture column selection text+positions from ANY source (our handler or AvaloniaEdit native)
+        SqlEditor.TextArea.SelectionChanged += (_, _) =>
+        {
+            if (SqlEditor.TextArea.Selection is AvaloniaEdit.Editing.RectangleSelection rect && !rect.IsEmpty)
+            {
+                _columnSelectStart = rect.StartPosition;
+                _lastColumnSelectPos = rect.EndPosition;
+            }
+        };
+
         // Column (rectangle) selection via Option+Drag
         SqlEditor.TextArea.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
         {
@@ -303,8 +333,9 @@ public partial class QueryTabView
                 return;
 
             _lastColumnSelectPos = current;
-            SqlEditor.TextArea.Selection = new AvaloniaEdit.Editing.RectangleSelection(
+            var rectSel = new AvaloniaEdit.Editing.RectangleSelection(
                 SqlEditor.TextArea, _columnSelectStart, current);
+            SqlEditor.TextArea.Selection = rectSel;
             SqlEditor.TextArea.Caret.Position = current;
             SqlEditor.TextArea.Caret.BringCaretToView();
             e.Handled = true;
@@ -320,8 +351,12 @@ public partial class QueryTabView
             if (!_lastColumnSelectPos.HasValue)
                 SqlEditor.TextArea.ClearSelection();
 
+            SqlEditor.TextArea.Focus();
             e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Column selection Cmd+C is handled at Window level in MainWindow.KeyBindings.cs
+        // via TryCopyColumnSelection() — bypasses Menu's Alt-activation focus state.
 
         WidenLineNumberGutter(SqlEditor);
 

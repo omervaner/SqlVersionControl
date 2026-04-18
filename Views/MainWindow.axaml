@@ -21,7 +21,7 @@
                     <!-- Menus (left) -->
                     <Menu Grid.Column="0" Background="Transparent" Foreground="{DynamicResource TextPrimary}"
                           Margin="80,0,0,0">
-                        <MenuItem Header="_File">
+                        <MenuItem Header="File">
                             <MenuItem x:Name="MenuNewQuery" Header="New Query" InputGesture="Ctrl+N"/>
                             <Separator/>
                             <MenuItem x:Name="MenuOpenFile" Header="Open File..." InputGesture="Ctrl+O"/>
@@ -38,7 +38,7 @@
                             <Separator/>
                             <MenuItem x:Name="MenuExit" Header="Exit"/>
                         </MenuItem>
-                        <MenuItem Header="_Edit">
+                        <MenuItem Header="Edit">
                             <MenuItem x:Name="MenuUndo" Header="Undo" InputGesture="Ctrl+Z"/>
                             <MenuItem x:Name="MenuRedo" Header="Redo" InputGesture="Ctrl+Y"/>
                             <Separator/>
@@ -57,7 +57,7 @@
                             <MenuItem x:Name="MenuSelectAll" Header="Select All" InputGesture="Ctrl+A"/>
                             <MenuItem x:Name="MenuToggleWordWrap" Header="Toggle Word Wrap" InputGesture="Alt+Z"/>
                         </MenuItem>
-                        <MenuItem Header="_View">
+                        <MenuItem Header="View">
                             <MenuItem x:Name="MenuToggleOE" Header="Toggle Object Explorer" InputGesture="Ctrl+B"/>
                             <MenuItem x:Name="MenuToggleResults" Header="Toggle Results Panel" InputGesture="Ctrl+J"/>
                             <Separator/>
@@ -68,14 +68,14 @@
                             <MenuItem x:Name="MenuToggleTheme" Header="Toggle Theme" InputGesture="Ctrl+Shift+T"/>
                             <MenuItem x:Name="MenuViewWordWrap" Header="Word Wrap" InputGesture="Alt+Z"/>
                         </MenuItem>
-                        <MenuItem Header="_Tools">
+                        <MenuItem Header="Tools">
                             <MenuItem x:Name="MenuFormatSql" Header="Format SQL" InputGesture="Ctrl+Shift+F"/>
                             <MenuItem x:Name="MenuSqlQuoter" Header="SQL Quoter"/>
                             <MenuItem x:Name="MenuTextCompare" Header="Text Compare"/>
                             <Separator/>
                             <MenuItem x:Name="MenuIndexAnalysis" Header="Index Analysis"/>
                         </MenuItem>
-                        <MenuItem Header="_Help">
+                        <MenuItem Header="Help">
                             <MenuItem x:Name="MenuKeyboardShortcuts" Header="Keyboard Shortcuts"/>
                             <MenuItem x:Name="MenuViewLog" Header="View Log File"/>
                             <Separator/>

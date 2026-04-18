@@ -29,6 +29,20 @@ public partial class MainWindow
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) ||
                    e.KeyModifiers.HasFlag(KeyModifiers.Meta);
 
+        // Cmd+C for column (rectangle) selection — handled at Window level to bypass
+        // Menu's Alt-activation focus state that interferes with TextArea KeyBindings.
+        if (ctrl && e.Key == Key.C && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && QueryEditorTab.IsChecked == true)
+        {
+            var host = this.FindControl<QueryEditorHost>("QueryEditorHostControl");
+            var activeTab = host?.GetActiveQueryTab();
+            if (activeTab?.TryCopyColumnSelection() == true)
+            {
+                e.Handled = true;
+                return;
+            }
+            // Fall through — normal Cmd+C for SimpleSelection, results grid, etc.
+        }
+
         // Ctrl+Tab / Ctrl+Shift+Tab — switch query tabs
         if (ctrl && e.Key == Key.Tab && QueryEditorTab.IsChecked == true)
         {

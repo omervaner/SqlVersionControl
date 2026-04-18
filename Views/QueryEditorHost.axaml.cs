@@ -55,6 +55,10 @@ public partial class QueryEditorHost : UserControl
             ? _tabs[_activeTabIndex].DataContext as QueryTabViewModel
             : null;
 
+    /// <summary>Get the active QueryTabView instance.</summary>
+    public QueryTabView? GetActiveQueryTab() =>
+        _activeTabIndex >= 0 && _activeTabIndex < _tabs.Count ? _tabs[_activeTabIndex] : null;
+
     /// <summary>Fired when the active query tab changes (for status bar rebinding).</summary>
     public event Action? ActiveTabChanged;
 
