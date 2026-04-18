@@ -78,6 +78,39 @@ public partial class QueryTabView
     }
 
     /// <summary>
+    /// Column range for rendering: returns (-1, -1) sentinel when full-row mode is active,
+    /// so the render loop can skip per-cell inRange checks entirely.
+    /// </summary>
+    private (int min, int max) ResolveRenderColumnRange(DataGrid grid)
+    {
+        if (_fullRowSelectionMode)
+            return (-1, -1);
+        if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+            return (Math.Min(_dragStartColIndex, _dragEndColIndex), Math.Max(_dragStartColIndex, _dragEndColIndex));
+        var focusedCol = grid.CurrentColumn;
+        var idx = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
+        return (idx, idx);
+    }
+
+    /// <summary>
+    /// Column range for copy operations: returns concrete (0, totalColumns-1) when full-row
+    /// mode is active, so copy paths never see a -1 sentinel.
+    /// </summary>
+    private (int min, int max) ResolveCopyColumnRange(DataGrid grid, int totalColumns)
+    {
+        if (_fullRowSelectionMode)
+            return (0, totalColumns - 1);
+        if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
+            return (Math.Min(_dragStartColIndex, _dragEndColIndex), Math.Max(_dragStartColIndex, _dragEndColIndex));
+        if (grid.CurrentColumn != null)
+        {
+            var idx = grid.Columns.IndexOf(grid.CurrentColumn);
+            return (idx, idx);
+        }
+        return (-1, -1);
+    }
+
+    /// <summary>
     /// Repaint cell-level selection highlights on the active grid.
     /// Clears all cell highlights, then applies highlight only to cells
     /// in the focused column for selected rows.
@@ -87,27 +120,8 @@ public partial class QueryTabView
         var grid = _activeResultsGrid;
         if (grid == null) return;
 
-        // Determine column range to highlight
-        int colRangeMin, colRangeMax;
-        if (_fullRowSelectionMode)
-        {
-            colRangeMin = -1; // -1 signals "all columns"
-            colRangeMax = -1;
-        }
-        else if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
-        {
-            // Multi-column drag range
-            colRangeMin = Math.Min(_dragStartColIndex, _dragEndColIndex);
-            colRangeMax = Math.Max(_dragStartColIndex, _dragEndColIndex);
-        }
-        else
-        {
-            // Single column from CurrentColumn (click or shift+click)
-            var focusedCol = grid.CurrentColumn;
-            var idx = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
-            colRangeMin = idx;
-            colRangeMax = idx;
-        }
+        // Determine column range to highlight (-1 = all columns sentinel)
+        var (colRangeMin, colRangeMax) = ResolveRenderColumnRange(grid);
 
         // Get the set of selected items for fast lookup
         var selectedItems = grid.SelectedItems;
@@ -182,25 +196,8 @@ public partial class QueryTabView
         var grid = _activeResultsGrid;
         if (grid == null) return;
 
-        // Determine column range (same logic as RepaintCellSelection)
-        int colRangeMin, colRangeMax;
-        if (_fullRowSelectionMode)
-        {
-            colRangeMin = -1;
-            colRangeMax = -1;
-        }
-        else if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
-        {
-            colRangeMin = Math.Min(_dragStartColIndex, _dragEndColIndex);
-            colRangeMax = Math.Max(_dragStartColIndex, _dragEndColIndex);
-        }
-        else
-        {
-            var focusedCol = grid.CurrentColumn;
-            var idx = focusedCol != null ? grid.Columns.IndexOf(focusedCol) : -1;
-            colRangeMin = idx;
-            colRangeMax = idx;
-        }
+        // Determine column range (-1 = all columns sentinel)
+        var (colRangeMin, colRangeMax) = ResolveRenderColumnRange(grid);
 
         bool isSelected = row.DataContext != null && grid.SelectedItems != null &&
                           grid.SelectedItems.Contains(row.DataContext);

@@ -225,26 +225,8 @@ public partial class QueryTabView
             var grid = _activeResultsGrid;
             if (grid.SelectedItems != null && grid.SelectedItems.Count > 0)
             {
-                // Determine column range
-                int minCol, maxCol;
-                if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
-                {
-                    minCol = Math.Min(_dragStartColIndex, _dragEndColIndex);
-                    maxCol = Math.Max(_dragStartColIndex, _dragEndColIndex);
-                }
-                else if (grid.CurrentColumn != null)
-                {
-                    minCol = maxCol = grid.Columns.IndexOf(grid.CurrentColumn);
-                }
-                else if (_fullRowSelectionMode)
-                {
-                    minCol = 0;
-                    maxCol = grid.Columns.Count - 1;
-                }
-                else
-                {
-                    minCol = maxCol = -1;
-                }
+                // Determine column range (full-row mode → all columns, concrete bounds)
+                var (minCol, maxCol) = ResolveCopyColumnRange(grid, grid.Columns.Count);
 
                 if (minCol >= 0)
                 {

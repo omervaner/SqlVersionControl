@@ -124,7 +124,6 @@ public partial class QueryEditorHost
         tabView.SetAutocompleteCheck(() => IsAutocompleteEnabled);
         tabView.ProcDropRequested += OnProcDropRequested;
         tabView.PeekDefinitionRequested += OnPeekDefinitionRequested;
-        tabView.QuickExecuteRequested += OnQuickExecuteRequested;
         tabView.OpenSourceQueryRequested += sql => OpenScriptInNewTab(sql);
         tabView.FilterByValueRequested += sql => OpenScriptInNewTab(sql);
         tabView.FileDropped += path => OpenDroppedFile(path);

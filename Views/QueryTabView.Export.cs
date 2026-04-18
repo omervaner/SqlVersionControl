@@ -346,22 +346,8 @@ public partial class QueryTabView
         var selected = GetSelectedRows();
         var rows = selected.Count > 0 ? selected : result.Rows;
 
-        // Determine column range (multi-column drag or single column or all)
-        int minCol, maxCol;
-        if (_dragStartColIndex >= 0 && _dragEndColIndex >= 0)
-        {
-            minCol = Math.Min(_dragStartColIndex, _dragEndColIndex);
-            maxCol = Math.Max(_dragStartColIndex, _dragEndColIndex);
-        }
-        else if (!_fullRowSelectionMode && _activeResultsGrid?.CurrentColumn != null)
-        {
-            minCol = maxCol = _activeResultsGrid.Columns.IndexOf(_activeResultsGrid.CurrentColumn);
-        }
-        else
-        {
-            minCol = 0;
-            maxCol = result.ColumnNames.Length - 1;
-        }
+        // Determine column range (full-row mode → all columns, concrete bounds)
+        var (minCol, maxCol) = ResolveCopyColumnRange(_activeResultsGrid, result.ColumnNames.Length);
 
         // Clamp to valid range
         minCol = Math.Max(0, minCol);
@@ -618,7 +604,6 @@ public partial class QueryTabView
             if (result == null) return;
 
             var sb = new StringBuilder();
-            sb.AppendLine(string.Join("\t", result.ColumnNames));
             foreach (var row in rows)
             {
                 sb.AppendLine(string.Join("\t", row.Select(v => v?.ToString() ?? "NULL")));

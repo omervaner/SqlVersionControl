@@ -20,6 +20,11 @@ public partial class QueryTabView
     private ExecutionFlashHighlighter? _flashHighlighter;
     private TextBox? _goToLineBox;
 
+    // Column (rectangle) selection via Option+Drag
+    private bool _isColumnSelecting;
+    private AvaloniaEdit.TextViewPosition _columnSelectStart;
+    private AvaloniaEdit.TextViewPosition? _lastColumnSelectPos;
+
     private void ApplyGridRowHeight()
     {
         var height = _settings?.Settings.GridRowHeight ?? 22;
@@ -256,6 +261,68 @@ public partial class QueryTabView
         SqlEditor.Options.ConvertTabsToSpaces = true;
         SqlEditor.Options.IndentationSize = 4;
 
+        // Block Option+Shift+drag: triggers an upstream AvaloniaEdit race in
+        // SelectionLayer.Render() vs TextView.VisualLines. The gesture doesn't
+        // produce rectangle selection anyway — just flaky SimpleSelection.
+        SqlEditor.TextArea.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
+        {
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        // Column (rectangle) selection via Option+Drag
+        SqlEditor.TextArea.AddHandler(InputElement.PointerPressedEvent, (s, e) =>
+        {
+            if (!e.GetCurrentPoint(SqlEditor.TextArea).Properties.IsLeftButtonPressed) return;
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Alt) || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
+
+            var tv = SqlEditor.TextArea.TextView;
+            var pos = tv.GetPosition(e.GetPosition(tv));
+            if (pos == null) return;
+
+            _isColumnSelecting = true;
+            _columnSelectStart = pos.Value;
+            _lastColumnSelectPos = null;
+            e.Pointer.Capture(SqlEditor.TextArea);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        SqlEditor.TextArea.AddHandler(InputElement.PointerMovedEvent, (s, e) =>
+        {
+            if (!_isColumnSelecting) return;
+
+            var tv = SqlEditor.TextArea.TextView;
+            var pos = tv.GetPosition(e.GetPosition(tv));
+            if (pos == null) return;
+            var current = pos.Value;
+
+            // Throttle: only update when character cell changes
+            if (_lastColumnSelectPos.HasValue &&
+                _lastColumnSelectPos.Value.Line == current.Line &&
+                _lastColumnSelectPos.Value.VisualColumn == current.VisualColumn)
+                return;
+
+            _lastColumnSelectPos = current;
+            SqlEditor.TextArea.Selection = new AvaloniaEdit.Editing.RectangleSelection(
+                SqlEditor.TextArea, _columnSelectStart, current);
+            SqlEditor.TextArea.Caret.Position = current;
+            SqlEditor.TextArea.Caret.BringCaretToView();
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
+        SqlEditor.TextArea.AddHandler(InputElement.PointerReleasedEvent, (s, e) =>
+        {
+            if (!_isColumnSelecting) return;
+            _isColumnSelecting = false;
+            e.Pointer.Capture(null);
+
+            // Alt+click with no drag: clear stale selection
+            if (!_lastColumnSelectPos.HasValue)
+                SqlEditor.TextArea.ClearSelection();
+
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+
         WidenLineNumberGutter(SqlEditor);
 
         SqlEditor.Text = "";
@@ -313,24 +380,20 @@ public partial class QueryTabView
 
         var selection = SqlEditor.SelectedText?.Trim();
 
-        // Only highlight if it's a whole word (no spaces, not empty)
-        if (string.IsNullOrWhiteSpace(selection) || selection.Contains(' ') || selection.Contains('\n'))
+        // Determine new word: null if not a valid single word
+        string? newWord = null;
+        if (!string.IsNullOrWhiteSpace(selection) && !selection.Contains(' ') && !selection.Contains('\n')
+            && selection.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '#' || c == '@'))
         {
-            _occurrenceHighlighter.SelectedWord = null;
-            SqlEditor.TextArea.TextView.Redraw();
-            return;
+            newWord = selection;
         }
 
-        // Check it's a "word" (alphanumeric/underscore)
-        if (!selection.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '#' || c == '@'))
-        {
-            _occurrenceHighlighter.SelectedWord = null;
-            SqlEditor.TextArea.TextView.Redraw();
-            return;
-        }
+        // Skip redraw if the highlighted word hasn't changed
+        if (_occurrenceHighlighter.SelectedWord == newWord) return;
 
-        _occurrenceHighlighter.SelectedWord = selection;
-        _occurrenceHighlighter.HighlightColor = GetWordHighlightColor();
+        _occurrenceHighlighter.SelectedWord = newWord;
+        if (newWord != null)
+            _occurrenceHighlighter.HighlightColor = GetWordHighlightColor();
         SqlEditor.TextArea.TextView.Redraw();
     }
 
@@ -342,9 +405,27 @@ public partial class QueryTabView
         var text = SqlEditor.Text;
         var match = FindMatchingBracket(text, offset);
 
-        _bracketHighlighter.OpenOffset = match?.openOffset ?? -1;
-        _bracketHighlighter.CloseOffset = match?.closeOffset ?? -1;
-        SqlEditor.TextArea.TextView.Redraw();
+        var newOpen = match?.openOffset ?? -1;
+        var newClose = match?.closeOffset ?? -1;
+
+        // Skip redraw if bracket positions haven't changed
+        if (_bracketHighlighter.OpenOffset == newOpen && _bracketHighlighter.CloseOffset == newClose) return;
+
+        // Targeted line redraws: only invalidate the affected bracket lines
+        var doc = SqlEditor.Document;
+        var tv = SqlEditor.TextArea.TextView;
+        if (_bracketHighlighter.OpenOffset >= 0 && _bracketHighlighter.OpenOffset <= doc.TextLength)
+            tv.Redraw(doc.GetLineByOffset(_bracketHighlighter.OpenOffset));
+        if (_bracketHighlighter.CloseOffset >= 0 && _bracketHighlighter.CloseOffset <= doc.TextLength)
+            tv.Redraw(doc.GetLineByOffset(_bracketHighlighter.CloseOffset));
+
+        _bracketHighlighter.OpenOffset = newOpen;
+        _bracketHighlighter.CloseOffset = newClose;
+
+        if (newOpen >= 0 && newOpen <= doc.TextLength)
+            tv.Redraw(doc.GetLineByOffset(newOpen));
+        if (newClose >= 0 && newClose <= doc.TextLength)
+            tv.Redraw(doc.GetLineByOffset(newClose));
     }
 
     private static (int openOffset, int closeOffset)? FindMatchingBracket(string text, int offset)

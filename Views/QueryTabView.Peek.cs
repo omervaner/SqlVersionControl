@@ -13,9 +13,6 @@ public partial class QueryTabView
     /// <summary>Fired when user Cmd/Ctrl+Clicks a word — host fetches definition and calls ShowPeekDefinition.</summary>
     public event Func<string, Task<string?>>? PeekDefinitionRequested;
 
-    /// <summary>Fired when user Shift+Clicks a word — host fetches params and opens exec template.</summary>
-    public event Func<string, Task>? QuickExecuteRequested;
-
     /// <summary>Fired when context menu requests Format SQL (lives on host).</summary>
     public event Action? FormatSqlRequested;
 
@@ -32,9 +29,8 @@ public partial class QueryTabView
 
         var mods = e.KeyModifiers;
         var hasCmdCtrl = mods.HasFlag(KeyModifiers.Meta) || mods.HasFlag(KeyModifiers.Control);
-        var hasShift = mods.HasFlag(KeyModifiers.Shift);
 
-        if (!hasCmdCtrl && !hasShift) return;
+        if (!hasCmdCtrl) return;
 
         var word = GetWordAtCaret();
         if (string.IsNullOrWhiteSpace(word)) return;
@@ -43,16 +39,8 @@ public partial class QueryTabView
         word = word.Trim('[', ']');
         if (word.Length == 0) return;
 
-        if (hasShift && !hasCmdCtrl)
-        {
-            // Shift+Click → Quick Execute
-            _ = QuickExecuteRequested?.Invoke(word);
-        }
-        else if (hasCmdCtrl)
-        {
-            // Cmd/Ctrl+Click → Peek Definition
-            _ = PeekDefinitionAsync(word);
-        }
+        // Cmd/Ctrl+Click → Peek Definition
+        _ = PeekDefinitionAsync(word);
         e.Handled = true;
     }
 
@@ -190,7 +178,6 @@ public partial class QueryTabView
         {
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateEditorMenuItem($"Peek Definition: {word}", $"{mod}+Click", () => _ = PeekDefinitionAsync(word)));
-            menu.Items.Add(CreateEditorMenuItem($"Quick Execute: {word}", "Shift+Click", () => _ = QuickExecuteRequested?.Invoke(word)));
             menu.Items.Add(CreateEditorMenuItem($"Show Dependencies: {word}", "", () => ShowDependenciesRequested?.Invoke(word)));
         }
 
