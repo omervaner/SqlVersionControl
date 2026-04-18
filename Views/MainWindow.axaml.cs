@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private readonly SessionService _sessionService;
     private readonly QueryFileService _queryFileService;
     private readonly SleepDetector _sleepDetector;
+    private readonly BackgroundPollManager _pollManager = new();
     private UpdateService? _updateService;
     private bool _isOffline;
     private string? _lastConnectionColor;
@@ -78,10 +79,13 @@ public partial class MainWindow : Window
         // Initialize ActivityView with shared services
         var activityView = this.FindControl<ActivityView>("ActivityViewControl");
         activityView?.Initialize(_viewModel.DatabaseService);
+        activityView?.ViewModel?.SetPollManager(_pollManager);
 
         // Initialize TraceView with registry
         var traceView = this.FindControl<TraceView>("TraceViewControl");
         traceView?.Initialize(_registry);
+        if (traceView?.DataContext is TraceViewModel traceVm2)
+            traceVm2.SetPollManager(_pollManager);
         if (traceView != null)
             traceView.NewConnectionRequested += () => _ = OnMenuManageConnectionsAsync();
 
@@ -205,10 +209,16 @@ public partial class MainWindow : Window
 
         // Status bar: track tab switches and connection changes
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        QueryEditorTab.Click += (_, _) => UpdateStatusBar();
-        VersionHistoryTab.Click += (_, _) => UpdateStatusBar();
-        CompareTab.Click += (_, _) => UpdateStatusBar();
-        ActivityTab.Click += (_, _) => UpdateStatusBar();
+        QueryEditorTab.Click += (_, _) => { _pollManager.SetActiveTab("Editor"); UpdateStatusBar(); };
+        VersionHistoryTab.Click += (_, _) => { _pollManager.SetActiveTab("History"); UpdateStatusBar(); };
+        CompareTab.Click += (_, _) => { _pollManager.SetActiveTab("Compare"); UpdateStatusBar(); };
+        ActivityTab.Click += (_, _) => { _pollManager.SetActiveTab("Activity"); UpdateStatusBar(); };
+        TraceTab.Click += (_, _) => { _pollManager.SetActiveTab("Trace"); UpdateStatusBar(); };
+
+        // Wire window focus → poll manager (lets macOS App Nap engage when unfocused)
+        Activated += (_, _) => { _pollManager.SetWindowFocused(true); UpdatePollIndicator(); };
+        Deactivated += (_, _) => { _pollManager.SetWindowFocused(false); UpdatePollIndicator(); };
+        _pollManager.StateChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(UpdatePollIndicator);
 
         // Error counter in status bar
         ErrorCountButton.Click += (_, _) => OpenSessionErrorsInNewTab();
@@ -220,6 +230,9 @@ public partial class MainWindow : Window
                 ErrorCountButton.IsVisible = true;
             });
         };
+
+        // Set initial active tab for poll manager (Editor is default)
+        _pollManager.SetActiveTab("Editor");
 
         // Active connections tooltip on status bar
         InitConnectionTooltip();

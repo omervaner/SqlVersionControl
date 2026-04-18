@@ -229,6 +229,25 @@ public partial class MainWindow
         _queryStatusTimer.Start();
     }
 
+    private void UpdatePollIndicator()
+    {
+        var state = _pollManager.CurrentState;
+        PollIndicator.IsVisible = state.PollerCount > 0;
+
+        if (state.IsAnyPolling)
+        {
+            PollDot.Fill = GetBrush("PollActiveBrush");
+            PollLabel.Text = state.ActivePollerLabel ?? "polling";
+            PollLabel.Opacity = 1.0;
+        }
+        else
+        {
+            PollDot.Fill = GetBrush("PollIdleBrush");
+            PollLabel.Text = "idle";
+            PollLabel.Opacity = 0.5;
+        }
+    }
+
     private static Avalonia.Media.IBrush GetBrush(string key) => ThemeManager.GetBrush(key);
 
     private void InitConnectionTooltip()

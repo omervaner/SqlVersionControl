@@ -11,7 +11,8 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
     private readonly DatabaseService _db;
     private string? _connectionString;
     private int _currentSpid;
-    private DispatcherTimer? _autoRefreshTimer;
+    private BackgroundPollManager? _pollManager;
+    private string? _pollerId;
 
     // ── Observable Properties ─────────────────────────────────────
 
@@ -1082,38 +1083,39 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
     // ── Auto-Refresh ──────────────────────────────────────────────
 
+    public void SetPollManager(BackgroundPollManager manager)
+    {
+        _pollManager = manager;
+        _pollerId = manager.Register(
+            owningTab: "Activity",
+            interval: TimeSpan.FromSeconds(AutoRefreshIntervalSeconds),
+            tick: RefreshAsync,
+            gating: PollerGating.FullyGated,
+            label: "polling");
+
+        // Respect current toggle state — disable if auto-refresh is off
+        if (!AutoRefreshEnabled)
+            manager.SetPollerEnabled(_pollerId, false);
+    }
+
     partial void OnAutoRefreshEnabledChanged(bool value)
     {
-        if (value)
-            StartAutoRefresh();
-        else
-            StopAutoRefresh();
+        if (_pollManager == null || _pollerId == null)
+        {
+            AppLogger.Log("[Warn] ActivityViewModel: PollManager not set, skipping auto-refresh toggle");
+            return;
+        }
+        _pollManager.SetPollerEnabled(_pollerId, value);
     }
 
     partial void OnAutoRefreshIntervalSecondsChanged(int value)
     {
-        if (AutoRefreshEnabled)
+        if (_pollManager == null || _pollerId == null)
         {
-            StopAutoRefresh();
-            StartAutoRefresh();
+            AppLogger.Log("[Warn] ActivityViewModel: PollManager not set, skipping interval change");
+            return;
         }
-    }
-
-    private void StartAutoRefresh()
-    {
-        _autoRefreshTimer?.Stop();
-        _autoRefreshTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(AutoRefreshIntervalSeconds)
-        };
-        _autoRefreshTimer.Tick += async (_, _) => await RefreshAsync();
-        _autoRefreshTimer.Start();
-    }
-
-    private void StopAutoRefresh()
-    {
-        _autoRefreshTimer?.Stop();
-        _autoRefreshTimer = null;
+        _pollManager.SetPollerInterval(_pollerId, TimeSpan.FromSeconds(value));
     }
 
     // ── Sub-tab switching ─────────────────────────────────────────
@@ -1140,7 +1142,8 @@ public partial class ActivityViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        StopAutoRefresh();
+        if (_pollManager != null && _pollerId != null)
+            _pollManager.Unregister(_pollerId);
     }
 }
 

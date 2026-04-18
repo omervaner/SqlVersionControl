@@ -448,7 +448,7 @@
         <Border Grid.Row="4" Background="{DynamicResource TitleBarBackground}"
                 BorderBrush="{DynamicResource BorderDefault}" BorderThickness="0,1,0,0"
                 Padding="8,2" Height="24">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
                 <!-- Connection indicator (with active connections tooltip) -->
                 <StackPanel x:Name="ConnectionArea" Grid.Column="0" Grid.ColumnSpan="2"
                             Orientation="Horizontal" VerticalAlignment="Stretch"
@@ -508,8 +508,20 @@
                            Text="" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center" Margin="8,0,0,0" IsVisible="False"/>
 
+                <!-- Poll indicator (idle/polling/recording) -->
+                <StackPanel x:Name="PollIndicator" Grid.Column="8" Orientation="Horizontal"
+                            Spacing="4" Margin="8,0" VerticalAlignment="Center"
+                            IsVisible="False">
+                    <Ellipse x:Name="PollDot" Width="6" Height="6"
+                             Fill="{DynamicResource PollIdleBrush}"
+                             VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PollLabel" Text="idle" FontSize="10"
+                               Foreground="{DynamicResource TextSecondary}"
+                               VerticalAlignment="Center" Opacity="0.7"/>
+                </StackPanel>
+
                 <!-- General status (right-aligned) -->
-                <TextBlock Grid.Column="8" Text="{Binding StatusMessage}"
+                <TextBlock Grid.Column="9" Text="{Binding StatusMessage}"
                            Foreground="{DynamicResource TextSecondary}" FontSize="11"
                            VerticalAlignment="Center"/>
             </Grid>

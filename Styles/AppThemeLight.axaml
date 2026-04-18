@@ -136,4 +136,8 @@
     <SolidColorBrush x:Key="StatusPillSleepingBg" Color="#15999999"/>
     <SolidColorBrush x:Key="BlockingHighlight" Color="#30a85250"/>
 
+    <!-- Poll indicator -->
+    <SolidColorBrush x:Key="PollIdleBrush" Color="#bbbbbb"/>
+    <SolidColorBrush x:Key="PollActiveBrush" Color="#4a8a3a"/>
+
 </ResourceDictionary>

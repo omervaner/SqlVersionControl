@@ -13,7 +13,8 @@ public partial class TraceViewModel : ObservableObject
     private readonly TraceService _traceService = new();
     private string? _connectionString;
     private string? _activeSessionName;
-    private Timer? _counterTimer;
+    private BackgroundPollManager? _pollManager;
+    private string? _pollerId;
     private DateTime _startTime;
 
     // ── State ────────────────────────────────────────────────────────
@@ -63,6 +64,20 @@ public partial class TraceViewModel : ObservableObject
 
         if (ConnectionNames.Count > 0)
             SelectedConnectionName = ConnectionNames[0];
+    }
+
+    public void SetPollManager(BackgroundPollManager manager)
+    {
+        _pollManager = manager;
+    }
+
+    private async Task ReadAndUpdateCounterAsync()
+    {
+        if (_activeSessionName == null || _connectionString == null) return;
+        var events = await _traceService.ReadEventsAsync(_connectionString, _activeSessionName);
+        CapturedCount = events.Count;
+        var elapsed = DateTime.Now - _startTime;
+        ElapsedText = $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
     }
 
     partial void OnSelectedConnectionNameChanged(string? value)
@@ -118,23 +133,16 @@ public partial class TraceViewModel : ObservableObject
             CapturedCount = 0;
             _startTime = DateTime.Now;
 
-            // Poll counter every 5 seconds
-            _counterTimer = new Timer(async _ =>
+            // Poll counter every 5 seconds via BackgroundPollManager (NeverGated — runs always while recording)
+            if (_pollManager != null)
             {
-                try
-                {
-                    if (_activeSessionName == null || _connectionString == null) return;
-                    var events = await _traceService.ReadEventsAsync(_connectionString, _activeSessionName);
-
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    {
-                        CapturedCount = events.Count;
-                        var elapsed = DateTime.Now - _startTime;
-                        ElapsedText = $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
-                    });
-                }
-                catch { /* polling failure is non-fatal */ }
-            }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5));
+                _pollerId = _pollManager.Register(
+                    owningTab: "Trace",
+                    interval: TimeSpan.FromSeconds(5),
+                    tick: ReadAndUpdateCounterAsync,
+                    gating: PollerGating.NeverGated,
+                    label: "recording");
+            }
         }
         catch (Exception ex)
         {
@@ -145,8 +153,11 @@ public partial class TraceViewModel : ObservableObject
     [RelayCommand]
     private async Task StopCaptureAsync()
     {
-        _counterTimer?.Dispose();
-        _counterTimer = null;
+        if (_pollManager != null && _pollerId != null)
+        {
+            _pollManager.Unregister(_pollerId);
+            _pollerId = null;
+        }
 
         if (_activeSessionName == null || _connectionString == null)
         {
