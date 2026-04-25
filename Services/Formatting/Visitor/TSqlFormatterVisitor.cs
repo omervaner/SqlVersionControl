@@ -76,12 +76,28 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
 
     public override void ExplicitVisit(SelectStatement statement)
     {
+        // 4d-ii: peel QueryParenthesisExpression wrappers (e.g. `AS (SELECT ...)` view bodies)
+        // so the niche-feature trip-flag check and QuerySpec/BQE dispatcher operate on the
+        // underlying expression. Without this, `EmitGeneratorRaw` on a bare-QPE drops trailing
+        // clauses (same root cause as the documented bare-QuerySpec quirk — SSMS strips these
+        // parens too, so dropping them is ScriptDom-canonical). Guard: only unwrap if the
+        // parens carry no clauses of their own (OrderBy / Offset / For at the parens level
+        // would be silently dropped otherwise — fall through to generator in that case).
+        var qe = statement.QueryExpression;
+        while (qe is QueryParenthesisExpression qpe
+               && qpe.OrderByClause == null
+               && qpe.OffsetClause == null
+               && qpe.ForClause == null)
+        {
+            qe = qpe.QueryExpression;
+        }
+
         // SelectStatement-level fallback (4b-ii): if the inner QuerySpec has trip-flags we
         // can't handle yet, emit the whole SelectStatement via the generator. Reason —
         // Sql170ScriptGenerator on a *bare* QuerySpec drops trailing clauses (WHERE / GROUP BY
         // / HAVING / ORDER BY) when JOINs are present; calling it on the surrounding
         // SelectStatement produces full output. Picked up by 4b-iii.
-        if (statement.QueryExpression is QuerySpecification qsBail && QuerySpecRequiresFallback(qsBail))
+        if (qe is QuerySpecification qsBail && QuerySpecRequiresFallback(qsBail))
         {
             EmitGeneratorRaw(statement);                                   // bypass EmitFragmentDefault routing (would re-enter and stack-overflow)
             return;
@@ -93,13 +109,13 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
             _emitter.NewLine();
         }
 
-        if (statement.QueryExpression is QuerySpecification qs)
+        if (qe is QuerySpecification qs)
         {
             qs.Accept(this);
         }
-        else if (statement.QueryExpression != null)
+        else if (qe != null)
         {
-            EmitFragmentDefault(statement.QueryExpression);
+            EmitFragmentDefault(qe);
         }
 
         if (statement.Into != null || statement.On != null
@@ -952,6 +968,71 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         _emitter.Write((t ?? string.Empty).Trim());
     }
 
+    public override void ExplicitVisit(CreateViewStatement stmt) => EmitViewBody(stmt, "CREATE VIEW");
+
+    public override void ExplicitVisit(AlterViewStatement stmt) => EmitViewBody(stmt, "ALTER VIEW");
+
+    public override void ExplicitVisit(CreateOrAlterViewStatement stmt) => EmitViewBody(stmt, "CREATE OR ALTER VIEW");
+
+    private void EmitViewBody(ViewStatementBody stmt, string keywordPrefix)
+    {
+        // Materialized views (Synapse) carry extra DDL we don't model — fall back.
+        if (stmt.IsMaterialized) { EmitGeneratorRaw(stmt); return; }
+
+        _emitter.WriteKeyword(keywordPrefix);
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.SchemaObjectName, out var nameText);
+        _emitter.Write((nameText ?? string.Empty).Trim());
+
+        // Optional column list (a, b). Inline-only — mirrors CommonTableExpression columns
+        // (cf. ExplicitVisit(CommonTableExpression) above). Promotion to EmitWrappedList is
+        // deferred jointly with CTE columns until corpus surfaces a long view column list.
+        if (stmt.Columns != null && stmt.Columns.Count > 0)
+        {
+            _emitter.Write(" (");
+            for (int i = 0; i < stmt.Columns.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.Columns[i], out var colText);
+                _emitter.Write((colText ?? string.Empty).Trim());
+            }
+            _emitter.Write(")");
+        }
+
+        // WITH ENCRYPTION / SCHEMABINDING / VIEW_METADATA — generator-render per option,
+        // comma-joined. Same pattern as procedure WITH options.
+        if (stmt.ViewOptions != null && stmt.ViewOptions.Count > 0)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("WITH");
+            _emitter.Write(" ");
+            for (int i = 0; i < stmt.ViewOptions.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.ViewOptions[i], out var optText);
+                _emitter.Write((optText ?? string.Empty).Trim());
+            }
+        }
+
+        _emitter.NewLine();
+        _emitter.WriteKeyword("AS");
+        _emitter.NewLine();
+
+        // Body SELECT routes through EmitFragmentDefault → SelectStatement override (handles
+        // CTE prelude, QuerySpec dispatch, niche fallback). Body is at indent 0 — flat, no
+        // extra Indent() — matches SSMS / GittyExport convention for view bodies.
+        EmitFragmentDefault(stmt.SelectStatement);
+
+        // WITH CHECK OPTION trailer — grammar puts it before `;`. SelectStatement leaves a
+        // trailing `;` and NewLine; emit on a fresh line at col 0.
+        if (stmt.WithCheckOption)
+        {
+            if (!_emitter.AtLineStart) _emitter.NewLine();
+            _emitter.WriteKeyword("WITH CHECK OPTION");
+            _emitter.NewLine();
+        }
+    }
+
     public override void ExplicitVisit(BeginEndBlockStatement stmt)
     {
         // BEGIN ATOMIC blocks have Options we don't render — fall back to keep content correct.
@@ -1343,6 +1424,9 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is CreateProcedureStatement cp) { ExplicitVisit(cp); return; }
         if (fragment is AlterProcedureStatement ap) { ExplicitVisit(ap); return; }
         if (fragment is CreateOrAlterProcedureStatement coap) { ExplicitVisit(coap); return; }
+        if (fragment is CreateViewStatement cv) { ExplicitVisit(cv); return; }
+        if (fragment is AlterViewStatement av) { ExplicitVisit(av); return; }
+        if (fragment is CreateOrAlterViewStatement coav) { ExplicitVisit(coav); return; }
         if (fragment is BeginEndBlockStatement beb) { ExplicitVisit(beb); return; }
         if (fragment is TryCatchStatement tc) { ExplicitVisit(tc); return; }
         if (fragment is IfStatement ifs) { ExplicitVisit(ifs); return; }

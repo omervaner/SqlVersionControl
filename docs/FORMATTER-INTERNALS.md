@@ -73,6 +73,7 @@ Overridden:
 - `ExplicitVisit(MergeStatement)` *(4c)* — header scope (`MERGE INTO` / `USING` / `ON`, `maxKw = 10`). WHEN clauses stack at statement indent outside the scope (D4); each WHEN emits `WHEN [NOT] MATCHED [BY TARGET|SOURCE] [AND <cond>] THEN\n<action at +IndentSize>`. OUTPUT (D5 shared dispatcher) lands after all WHENs per grammar. Terminating `;` emitted when `IncludeSemicolons` — required for re-parse; retires the 3 MERGE-variant harness regressions.
 - `ExplicitVisit(IfStatement)` *(4e-ii)* — `IF <predicate>` on header line; `ThenStatement` recursed via `EmitConditionalBody` (BEGIN/END body lands at IF column; single-statement body wrapped in `Indent()`). Optional `ELSE` on its own line at IF column. Predicate routes through `EmitConditionalPredicate` — separate from `EmitSearchConditionBody` because IF/WHILE have no clause scope; same dispatch table minus BBE, plus a `BooleanNotExpression` branch so `NOT EXISTS (subq)` decomposes to `NOT ` + recurse. Subquery-bearing predicates break to indented block via the 4b-ii overrides.
 - `ExplicitVisit(WhileStatement)` *(4e-ii)* — same shape as IfStatement minus the ELSE branch.
+- `ExplicitVisit(CreateViewStatement)` / `ExplicitVisit(AlterViewStatement)` / `ExplicitVisit(CreateOrAlterViewStatement)` *(4d-ii)* — three thin overrides delegating to `EmitViewBody(ViewStatementBody, keywordPrefix)`. Header: keyword + generator-rendered `SchemaObjectName` + optional inline `(col1, col2)` column list (mirrors `CommonTableExpression.Columns` — per-identifier generator scaffold, no wrap) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS` + `SelectStatement` body via `EmitFragmentDefault` (flat indent — no `Indent()`, matches SSMS) + optional `WITH CHECK OPTION` trailer at col 0. `IsMaterialized` (Synapse materialized views) trips an `EmitGeneratorRaw` fallback — same defensive guard pattern as `BeginEndAtomicBlockStatement`.
 
 Not yet overridden (planned per sub-step):
 - **4b** — split into four slices (see docs/4B-PLAN.md); 4b-iii is itself split into a+b:
@@ -85,7 +86,7 @@ Not yet overridden (planned per sub-step):
 - ~~**4c-ii**~~: Landed 2026-04-25. Pre-parse auto-repair (`SqlPreRepair.Normalize`) — `;WITH` rule. Corpus-driven against `Sorgu/`; 224/264 already parsed, no `;WITH` cases in this corpus, retained as regression guard.
 - **4d**: CREATE / ALTER variants by object type. Five sub-slices.
   - ~~**4d-i**~~: Landed 2026-04-25. `CreateProcedureStatement`, `AlterProcedureStatement`, `CreateOrAlterProcedureStatement` via shared `EmitProcedureBody` helper. Bundled with 4e-i (procedure body needs BEGIN/END recursion to be useful). Bundled fixes: `WithCtesAndXmlNamespaces` handling on the four DML overrides; `SqlEmitter.EnsureTrailingSemicolon` on body recursion (control-flow statement terminators).
-  - **4d-ii**: CREATE / ALTER VIEW
+  - ~~**4d-ii**~~: Landed 2026-04-25. `CreateViewStatement`, `AlterViewStatement`, `CreateOrAlterViewStatement` via shared `EmitViewBody` helper. Body SELECT routes through `EmitFragmentDefault` so the `SelectStatement` override fires (CTE prelude + clause-keyword right alignment).
   - **4d-iii**: CREATE / ALTER FUNCTION (scalar / inline TVF / multi-statement TVF)
   - **4d-iv**: CREATE / ALTER TRIGGER
   - **4d-v**: CREATE / ALTER TABLE (column defs, constraints, indexes — different shape from the others)
@@ -294,6 +295,27 @@ OUTPUT (when present) emits after all WHENs. Terminating `;` always emitted when
 `04-merge.sql` / `pathA.sql` / `original.sql` harness REGRESSION parse failures; 48/0/5
 → 51/0/2 (remaining 2 are the hogimn-baseline parse failures carried over since 4a).
 
+### CreateViewStatement / AlterViewStatement / CreateOrAlterViewStatement (4d-ii)
+
+Three thin overrides delegate to `EmitViewBody(ViewStatementBody, keywordPrefix)`. Header
+shape: `CREATE [OR ALTER]/ALTER VIEW <name>` + optional inline `(col1, col2)` column list
+(per-identifier generator scaffold, no wrap — mirrors `CommonTableExpression.Columns`;
+promotion to `EmitWrappedList` deferred jointly with CTE columns until corpus surfaces a
+long view column list) + optional `WITH <opts>` line (`ENCRYPTION` / `SCHEMABINDING` /
+`VIEW_METADATA`, generator-rendered per option, comma-joined) + `AS` + body `SelectStatement`
+recursed via `EmitFragmentDefault` (so the `SelectStatement` override fires, picking up CTE
+prelude + clause-keyword right-alignment) + optional `WITH CHECK OPTION` trailer at col 0
+(grammar: before terminating `;`). Body indent is flat (no `Indent()` around the body
+SELECT) — matches SSMS / GittyExport convention for view scripting.
+
+`ViewStatementBody.IsMaterialized` (Synapse materialized views — extra DDL not modeled)
+trips an `EmitGeneratorRaw` fallback at the top of `EmitViewBody`. Defensive guard, same
+pattern as `BeginEndAtomicBlockStatement` falling out of `BeginEndBlockStatement`'s
+override.
+
+No trailing `;` is emitted — the body `SelectStatement` doesn't emit one, and views don't
+require one for parse. `WITH CHECK OPTION` lands on its own line after the body.
+
 ### Known AND/OR byproduct in ON (4b-iii-a, carried into 4b-iv)
 `Sql170ScriptGenerator` renders `BooleanBinaryExpression` (AND / OR) as multi-line by default. Our `EmitBooleanScaffold`-style inline scaffold for ON writes the rendered text as a raw string, so embedded newlines from the generator land in the body without getting the scope's body-column prefix applied to each sub-line — continuation lines sit at column 1 instead of at the WHERE/ON body column. Same root cause as the WHERE-with-AND visual glitch seen in the staffing-report smoke. Fixed when 4b-iv takes over `BooleanBinaryExpression` rendering; the long-ON test avoids it by using a simple single comparison.
 
@@ -474,6 +496,18 @@ OUTPUT (when present) emits after all WHENs. Terminating `;` always emitted when
 - **Implementation**: shared `EmitBodyStatements(StatementList?)` helper + `IsBlockLevelStatement(TSqlStatement)` predicate. All three former for-loops collapse into `EmitBodyStatements(list)`. The blank-line decision is made before each child after the first; `EnsureTrailingSemicolon` already leaves the cursor at line-start, so an extra `NewLine()` produces one blank line.
 - **Tests**: 6 new in `Tests/BlockStatementTests.cs` covering pairwise spacing decisions — DECLARE+DECLARE tight, DECLARE+INSERT spaced, INSERT+SET spaced (the rule's interesting case), two-blocks spaced, IF+RETURN spaced, plus a mixed cluster matching the staffing-report CATCH shape. Existing `Format_BeginEnd_MixedOverriddenAndGeneratorFallback` updated (was DECLARE/SET/SELECT tight, now DECLARE/SET tight + blank + SELECT). Full suite **131 → 137**, all pass. Harness **51 / 0 / 2** unchanged.
 - **Out of scope / deferred**: configurable spacing (off-toggle for users who want tight); category-based rule with finer granularity (e.g. blank line on statement-kind change even between two single-liners) — corpus-driven if it surfaces.
+
+### 4d-ii — 2026-04-25
+
+- **Slice motivation**: real `ALTER VIEW` from `Sorgu/view_duplicates.sql` was hitting `EmitGeneratorRaw` (no view override). Whole view rendered through `Sql170ScriptGenerator`, so the body SELECT/JOIN/WHERE didn't right-align and didn't pick up the visitor's CTE/CASE/subquery formatting — visually inconsistent with the surrounding visitor output anywhere a view sat next to a procedure or DML.
+- **Three view overrides** + shared `EmitViewBody(ViewStatementBody, keywordPrefix)` helper. Same shape as `EmitProcedureBody`: header keyword + `SchemaObjectName` + optional column list + optional `WITH` options + `AS` + body via `EmitFragmentDefault` + optional `WITH CHECK OPTION` trailer. Three new branches in `EmitFragmentDefault` (Create / Alter / CreateOrAlter View).
+- **Probe deviations** flagged before coding: (a) the property is `WithCheckOption`, not `IsCheckOption` as predicted; (b) `ViewStatementBody.IsMaterialized` exists (Synapse materialized views) — defensively falls back to `EmitGeneratorRaw` at the top of the helper, same pattern as `BeginEndAtomicBlockStatement`. `ViewOption` is a wrapper over a `ViewOptionKind` enum; generator-rendered for consistency with procedure WITH options.
+- **Column list shape**: inline-only via per-identifier generator scaffold + comma-join — direct mirror of `CommonTableExpression.Columns` rendering. No `EmitWrappedList`. Promotion deferred jointly with CTE columns until corpus surfaces a long view column list.
+- **Body indent**: flat — no `Indent()` around the body SELECT, matches SSMS / GittyExport convention. The body's `QuerySpecification` opens its own clause scope at `_capturedIndentLevel = 0`, so SELECT/FROM/WHERE right-align with their own local `maxKw`.
+- **WITH CHECK OPTION**: emits on its own line at col 0 after the body. No trailing `;` is emitted — `SelectStatement` body doesn't emit one and the parser doesn't require one for views.
+- **Bundled fix — `QueryParenthesisExpression` unwrap in `ExplicitVisit(SelectStatement)`** *(pre-existing data-loss bug, surfaced by `Sorgu/view_duplicates.sql` smoke)*. Real-world `ALTER VIEW … AS (SELECT … WHERE … GROUP BY … HAVING …)` shapes parse with `SelectStatement.QueryExpression` as a `QueryParenthesisExpression` wrapping the inner QuerySpec. Pre-fix, the dispatcher's `is QuerySpecification` check returned false, fell through to `EmitGeneratorRaw`, and the generator's bare-fragment quirk silently dropped trailing clauses (WHERE / GROUP BY / HAVING / ORDER BY) — actual content lost in the formatted output. Fix: peel `QueryParenthesisExpression` layers off `statement.QueryExpression` before the trip-flag check and before the QuerySpec dispatch. Guard: only unwrap when the parens carry no clauses of their own (`OrderBy` / `Offset` / `For` at the parens level fall through to generator unchanged). Dropping the parens is consistent with the formatter's ScriptDom-canonical philosophy — SSMS strips them too.
+- **Tests**: 10 new facts in `Tests/ViewFormattingTests.cs` (capture-and-lock pattern; no `Assert.True(true)` left in committed file). Minimal CREATE / column list / WITH SCHEMABINDING / multi-option / ALTER / CREATE OR ALTER / body has WHERE+AND / WITH CHECK OPTION / body has CTE / realistic body with JOIN+WHERE+GROUP BY+HAVING. Plus 1 new fact in `Tests/QuerySpecificationFormattingTests.cs` (`Format_SelectWithParenthesizedQuery_PreservesAllClauses`) locking the unwrap fix. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **137 → 148**, all pass. Harness **51 / 0 / 2** unchanged.
+- **Out of scope / deferred**: indexed-view trailer index DDL (separate `CreateIndex…` statements, not children of the view AST); long-column-list wrap (joint with CTE columns); comments inside view body (4g); materialized views (defensive fallback retained); `QueryParenthesisExpression` carrying its own ORDER BY/OFFSET/FOR (rare; falls through to generator).
 
 ### Problem
 

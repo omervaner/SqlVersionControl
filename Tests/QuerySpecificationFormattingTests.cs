@@ -96,4 +96,28 @@ public class QuerySpecificationFormattingTests
         Assert.Equal(before.Batches[0].Statements.Count, after.Batches[0].Statements.Count);
         Assert.IsType<SelectStatement>(after.Batches[0].Statements[0]);
     }
+
+    [Fact]
+    public void Format_SelectWithParenthesizedQuery_PreservesAllClauses()
+    {
+        // 4d-ii bundled fix: when SelectStatement.QueryExpression is a QueryParenthesisExpression
+        // (e.g. `CREATE VIEW v AS (SELECT ...)` real-corpus shape), the dispatcher unwraps the
+        // parens and recurses on the inner QuerySpec. Pre-fix, the bare-QPE rendered through
+        // EmitGeneratorRaw and the generator silently dropped WHERE / GROUP BY / HAVING / ORDER BY
+        // (same root cause as the bare-QuerySpec quirk). The four trailing clauses below MUST
+        // appear — the test would have caught the silent data loss the smoke surfaced.
+        var input =
+            "CREATE VIEW dbo.v AS (SELECT id, COUNT(*) AS c " +
+            "FROM dbo.t " +
+            "WHERE active = 1 " +
+            "GROUP BY id " +
+            "HAVING COUNT(*) > 1)";
+        var output = Fmt(input);
+        Assert.Contains("SELECT", output);
+        Assert.Contains("FROM dbo.t", output);
+        Assert.Contains("WHERE active = 1", output);
+        Assert.Contains("GROUP BY id", output);
+        Assert.Contains("HAVING COUNT", output);
+        Assert.NotNull(ReParse(output));
+    }
 }
