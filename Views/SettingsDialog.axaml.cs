@@ -138,6 +138,9 @@ public partial class SettingsDialog : Window
         DdlAuditDatabaseTextBox.Text = s.DdlAuditDatabase ?? "";
         DdlAuditTableTextBox.Text = s.DdlAuditTable ?? "";
 
+        // Preview Features
+        UseNewFormatterCheckBox.IsChecked = s.UseNewFormatter;
+
         // Git Integration
         GitExportPathTextBox.Text = s.GitExportPath ?? "";
         IncludeSystemDbsCheckBox.IsChecked = s.GitIncludeSystemDatabases;
@@ -197,6 +200,12 @@ public partial class SettingsDialog : Window
         var gitPath = GitExportPathTextBox.Text?.Trim();
         s.GitExportPath = string.IsNullOrEmpty(gitPath) ? null : gitPath;
         s.GitIncludeSystemDatabases = IncludeSystemDbsCheckBox.IsChecked == true;
+
+        // Preview Features — env var still wins at runtime if set, settings override otherwise
+        s.UseNewFormatter = UseNewFormatterCheckBox.IsChecked == true;
+        SqlFormatterService.UseNewEngine =
+            Environment.GetEnvironmentVariable("LOOKOUT_USE_NEW_FORMATTER") == "1"
+            || s.UseNewFormatter;
 
         _settings.Save();
 

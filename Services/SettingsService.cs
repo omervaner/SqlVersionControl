@@ -198,6 +198,9 @@ public class AppSettings
     public int GridRowHeight { get; set; } = 22;
     public int ConnectionTimeout { get; set; } = 5;
 
+    // Formatter engine selection (new in v2.16 — ScriptDom-based). Off until validated.
+    public bool UseNewFormatter { get; set; } = false;
+
     // User mode (Normal hides admin-only settings sections)
     public bool IsAdminMode { get; set; }
 

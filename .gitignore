@@ -75,3 +75,16 @@ ROADMAP*.md
 
 # Git export data (user-generated)
 GittyExport/
+
+# Formatter regression test corpus — local-only inputs and reports, README-only in git
+scripts/formatter-test-corpus/*
+!scripts/formatter-test-corpus/README.md
+
+# Local working files (formatter scratch sproc, screenshots, server-specific exports)
+/test_sproc.sql
+/Sorgu/
+/results.xlsx
+/1.png
+/2.png
+scripts/localhost_1433/
+scripts/CHANGELOG.md

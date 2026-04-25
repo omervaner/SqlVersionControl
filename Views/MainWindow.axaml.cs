@@ -54,6 +54,11 @@ public partial class MainWindow : Window
         ThemeManager.ApplyTheme(_settings.Settings.UseDarkTheme, _settings.Settings.FontSize);
         ThemeManager.ApplyGridRowHeight(_settings.Settings.GridRowHeight);
 
+        // Formatter engine selection — env var wins over settings (test harness / debug override)
+        SqlFormatterService.UseNewEngine =
+            Environment.GetEnvironmentVariable("LOOKOUT_USE_NEW_FORMATTER") == "1"
+            || _settings.Settings.UseNewFormatter;
+
         // Restore window position/size
         RestoreWindowPosition();
 
@@ -102,6 +107,14 @@ public partial class MainWindow : Window
             };
             qeHost.NewConnectionRequested += async () => await OnMenuManageConnectionsAsync();
             qeHost.SessionRestoreWarning += msg => _viewModel.StatusMessage = msg;
+
+            // Surface new-formatter fallback errors to opt-in testers via the active tab's
+            // message area. Raised only while the toggle is opt-in (see SqlFormatterService).
+            // Dispatcher hop guards against future off-thread raises (regression harness etc.);
+            // free today because the formatter is UI-thread-only.
+            SqlFormatterService.FallbackOccurred += msg =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    qeHost.ActiveTabViewModel?.SetMessageText(msg));
         }
 
         // Enable window dragging from empty title bar space only (macOS only — Windows has its own title bar)

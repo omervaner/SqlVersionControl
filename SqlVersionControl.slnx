@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/lib/" />
+  <Folder Name="/lib/PerformanceStudio/" />
+  <Folder Name="/lib/PerformanceStudio/src/">
+    <Project Path="lib/PerformanceStudio/src/PlanViewer.Core/PlanViewer.Core.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/SqlVersionControl.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/FormatterRegression/FormatterRegression.csproj" />
+  </Folder>
+  <Project Path="SqlVersionControl.csproj" />
+</Solution>

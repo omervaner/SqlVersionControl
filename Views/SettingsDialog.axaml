@@ -129,6 +129,19 @@
                            TextWrapping="Wrap"/>
             </StackPanel>
 
+            <!-- === Preview Features === -->
+            <Border Height="1" Background="{DynamicResource BorderDefault}" Margin="0,4"/>
+
+            <TextBlock Text="Preview Features" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}"/>
+
+            <StackPanel Spacing="8">
+                <CheckBox x:Name="UseNewFormatterCheckBox"
+                          Content="Use new SQL formatter (ScriptDom-based, experimental)"
+                          ToolTip.Tip="Uses Microsoft's T-SQL parser for structure-aware formatting. Falls back to the legacy formatter on parse errors."/>
+                <TextBlock Text="Applies to the next Format SQL action. Env var LOOKOUT_USE_NEW_FORMATTER=1 forces on regardless of this setting."
+                           FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- === Git Integration (Admin only) === -->
             <StackPanel x:Name="GitIntegrationSection" Spacing="20">
                 <Border Height="1" Background="{DynamicResource BorderDefault}" Margin="0,4"/>

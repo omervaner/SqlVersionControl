@@ -16,18 +16,62 @@ public static class SqlQuoterService
 
     /// <summary>
     /// Parse raw input into trimmed, non-empty values.
-    /// Splits on newlines; each line is trimmed of whitespace.
+    /// Per-line heuristic: split on newlines first, then classify each line.
+    /// Comma → split on comma. No letters + whitespace + no ':' / '/' / '.' → split on whitespace.
+    /// Otherwise → single value (names with spaces, phrases, timestamps, IPs, slash-dates, decimals).
     /// </summary>
     public static List<string> ParseValues(string input)
     {
-        if (string.IsNullOrWhiteSpace(input))
-            return [];
+        if (string.IsNullOrWhiteSpace(input)) return [];
 
-        return input
-            .Split('\n')
-            .Select(line => line.Trim())
-            .Where(line => line.Length > 0)
-            .ToList();
+        input = input.Trim();
+
+        // Strip ONE matched pair of wrapping parens or brackets (not greedy —
+        // avoids eating legitimate trailing parens on values like "abc)")
+        if (input.Length >= 2 &&
+            ((input[0] == '(' && input[^1] == ')') ||
+             (input[0] == '[' && input[^1] == ']')))
+        {
+            input = input.Substring(1, input.Length - 2).Trim();
+        }
+
+        var lines = input.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var result = new List<string>();
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0) continue;
+
+            string[] parts;
+            if (line.Contains(','))
+            {
+                // Comma wins over whitespace — "1, 2, 3" splits cleanly
+                parts = line.Split(',');
+            }
+            else if (!line.Any(char.IsLetter)
+                     && line.Any(char.IsWhiteSpace)
+                     && !line.Any(c => c == ':' || c == '/' || c == '.'))
+            {
+                // Numeric/ID line with whitespace and no structural markers → split on whitespace.
+                // ':' / '/' / '.' mark timestamps, slash-dates, IPs, decimals, version numbers
+                // as single structural values; suppressing the split keeps them whole.
+                parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            }
+            else
+            {
+                // Single value (names with spaces, phrases, structured values, single token)
+                parts = [line];
+            }
+
+            foreach (var p in parts)
+            {
+                var trimmed = p.Trim().Trim('\'', '"');
+                if (trimmed.Length > 0) result.Add(trimmed);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

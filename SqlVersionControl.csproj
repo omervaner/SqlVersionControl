@@ -10,7 +10,7 @@
     <RuntimeIdentifiers>win-x64;osx-arm64</RuntimeIdentifiers>
 
     <!-- App Metadata -->
-    <Version>2.15.1</Version>
+    <Version>3.0.0</Version>
     <AssemblyTitle>Lookout</AssemblyTitle>
     <Product>Lookout</Product>
     <Description>SQL Server desktop IDE — queries, version tracking, database comparison, execution plans, and job management</Description>
@@ -29,6 +29,20 @@
     <None Remove="lib/**" />
     <AvaloniaXaml Remove="lib/**" />
     <AdditionalFiles Remove="lib/**" />
+    <!-- Exclude test project sources from main project compilation -->
+    <Compile Remove="Tests/**" />
+    <Content Remove="Tests/**" />
+    <EmbeddedResource Remove="Tests/**" />
+    <None Remove="Tests/**" />
+    <AvaloniaXaml Remove="Tests/**" />
+    <AdditionalFiles Remove="Tests/**" />
+    <!-- Exclude side-tool project sources (regression harness etc.) -->
+    <Compile Remove="Tools/**" />
+    <Content Remove="Tools/**" />
+    <EmbeddedResource Remove="Tools/**" />
+    <None Remove="Tools/**" />
+    <AvaloniaXaml Remove="Tools/**" />
+    <AdditionalFiles Remove="Tools/**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,6 +59,7 @@
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="Hogimn.Sql.Formatter" Version="2.0.2" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
     <PackageReference Include="DiffPlex" Version="1.7.2" />

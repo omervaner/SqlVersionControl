@@ -1,9 +1,9 @@
 # Lookout — SQL Server Desktop IDE
 
 ---
-## PROJECT STATUS: v2.15.0 (April 2026)
+## PROJECT STATUS: v3.0.0 (April 2026)
 
-BackgroundPollManager pauses Activity auto-refresh on tab/window inactive (eliminates macOS "significant energy" flag). Trace recording (NeverGated) keeps draining XE buffer always. Status bar poll indicator (idle/polling/recording). Editor crash fix (VisualLinesInvalidException on Option+Shift+drag — pointer block + dispatcher filter). Row-header Cmd+C copies all columns (branch reorder + ResolveCopyColumnRange helper). Right-click Copy no longer includes headers. Option+Drag column (rectangle) selection. Removed Shift+Click Quick Execute.
+**Path B SQL formatter overhaul** — opt-in `TSqlFragmentVisitor`-based engine replacing the legacy regex-driven Hogimn formatter for users who toggle it on. Internals at [docs/FORMATTER-INTERNALS.md](docs/FORMATTER-INTERNALS.md); strategic record at [docs/FORMATTER-OVERHAUL.md](docs/FORMATTER-OVERHAUL.md). Slices 4a–4e-ii-b landed: visitor skeleton + clause-keyword right-alignment (4a); `SelectStatement` / `QuerySpecification` / subqueries / joins / CTEs / list-wrap / `CASE` / `UNION` / `BooleanBinaryExpression` (4b); `INSERT` / `UPDATE` / `DELETE` / `MERGE` (4c); pre-parse `;WITH` repair (4c-ii); `CREATE/ALTER PROCEDURE` (4d-i); `BEGIN/END` and `TRY/CATCH` body recursion (4e-i); `IF` and `WHILE` with subquery-in-predicate break-to-block (4e-ii); vertical spacing rule between body siblings (4e-ii-b). Toggle via Settings → Preview Features → "Use new SQL formatter" or `LOOKOUT_USE_NEW_FORMATTER=1`. Falls back to legacy on parse error and surfaces the fallback to the active tab's message area. Suite at 137 tests; regression harness at 51 canonical / 0 mismatch / 2 baseline parse failures across the local corpus.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -46,6 +46,7 @@ SqlVersionControl/
 ├── ViewModels/      - MVVM view models
 ├── Models/          - Data models (ConnectionSettings, ObjectVersion, QueryResult, EditableRow, etc.)
 ├── Services/        - DatabaseService, SettingsService, ThemeManager, DataEditService, etc.
+│   └── Formatting/ - SQL formatter internals (Path B visitor). Public surface is `SqlFormatterService.Format(string)`; internals at [docs/FORMATTER-INTERNALS.md](docs/FORMATTER-INTERNALS.md).
 ├── Styles/          - AppTheme.axaml (dark), AppThemeLight.axaml (warm cream light)
 ├── Assets/          - Logo SVGs, backup icons
 ├── scripts/         - Docker seed scripts (seed-server1.sql, seed-server2.sql)
