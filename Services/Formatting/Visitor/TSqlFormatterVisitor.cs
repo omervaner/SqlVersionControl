@@ -1033,6 +1033,149 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         }
     }
 
+    public override void ExplicitVisit(CreateFunctionStatement stmt) => EmitFunctionBody(stmt, "CREATE FUNCTION");
+
+    public override void ExplicitVisit(AlterFunctionStatement stmt) => EmitFunctionBody(stmt, "ALTER FUNCTION");
+
+    public override void ExplicitVisit(CreateOrAlterFunctionStatement stmt) => EmitFunctionBody(stmt, "CREATE OR ALTER FUNCTION");
+
+    private void EmitFunctionBody(FunctionStatementBody stmt, string keywordPrefix)
+    {
+        // Header: CREATE [OR ALTER] / ALTER FUNCTION <name>
+        _emitter.WriteKeyword(keywordPrefix);
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.Name, out var nameText);
+        _emitter.Write((nameText ?? string.Empty).Trim());
+
+        // Parameters in parens. Functions REQUIRE parens around the list even when empty
+        // (unlike procs, which allow `CREATE PROCEDURE dbo.usp AS ...` — the parser rejects
+        // `CREATE FUNCTION dbo.fn RETURNS ...` outright). Empty list → `()` inline; non-empty
+        // → multi-line with paren on its own line, params indented, matching the Sorgu corpus
+        // and SSMS canonical layout. ProcedureParameter is the shared type from
+        // ProcedureStatementBodyBase, so EmitProcedureParameterBody is reused as-is.
+        if (stmt.Parameters == null || stmt.Parameters.Count == 0)
+        {
+            _emitter.Write("()");
+        }
+        else
+        {
+            _emitter.NewLine();
+            _emitter.Write("(");
+            _emitter.NewLine();
+            using (_emitter.Indent())
+            {
+                for (int i = 0; i < stmt.Parameters.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        _emitter.Write(",");
+                        _emitter.NewLine();
+                    }
+                    EmitProcedureParameterBody(stmt.Parameters[i]);
+                }
+            }
+            _emitter.NewLine();
+            _emitter.Write(")");
+        }
+
+        // RETURNS clause — three concrete ReturnType subclasses:
+        //   ScalarFunctionReturnType { DataType }       — RETURNS <type>
+        //   SelectFunctionReturnType { SelectStatement } — INLINE TVF (RETURNS TABLE)
+        //   TableValuedFunctionReturnType { DeclareTableVariableBody } — MULTI-STMT TVF
+        // (counterintuitive ScriptDom naming: SelectFunctionReturnType is INLINE; TableValued is
+        // multi-stmt). Multi-stmt TVF column DDL lands here as a generator-rendered single line —
+        // per-column wrap is 4d-v territory.
+        switch (stmt.ReturnType)
+        {
+            case ScalarFunctionReturnType srt:
+                _emitter.NewLine();
+                _emitter.WriteKeyword("RETURNS");
+                _emitter.Write(" ");
+                _generator.GenerateScript(srt.DataType, out var dtText);
+                _emitter.Write((dtText ?? string.Empty).Trim());
+                break;
+            case SelectFunctionReturnType _:
+                _emitter.NewLine();
+                _emitter.WriteKeyword("RETURNS TABLE");
+                break;
+            case TableValuedFunctionReturnType trt:
+                _emitter.NewLine();
+                _emitter.WriteKeyword("RETURNS");
+                _emitter.Write(" ");
+                _generator.GenerateScript(trt.DeclareTableVariableBody, out var tvText);
+                _emitter.Write((tvText ?? string.Empty).Trim());
+                break;
+            default:
+                EmitGeneratorRaw(stmt);
+                return;
+        }
+
+        // ORDER hint (inline TVF) — rare. Generator-render if present.
+        if (stmt.OrderHint != null)
+        {
+            _emitter.NewLine();
+            _generator.GenerateScript(stmt.OrderHint, out var ohText);
+            _emitter.Write((ohText ?? string.Empty).Trim());
+        }
+
+        // WITH SCHEMABINDING / RETURNS NULL ON NULL INPUT / CALLED ON NULL INPUT / EXECUTE AS —
+        // generator-render per option, comma-joined. Same pattern as procs / views.
+        if (stmt.Options != null && stmt.Options.Count > 0)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("WITH");
+            _emitter.Write(" ");
+            for (int i = 0; i < stmt.Options.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.Options[i], out var optText);
+                _emitter.Write((optText ?? string.Empty).Trim());
+            }
+        }
+
+        // AS line; CLR functions use AS EXTERNAL NAME ... and have no body.
+        _emitter.NewLine();
+        if (stmt.MethodSpecifier != null)
+        {
+            _emitter.WriteKeyword("AS");
+            _emitter.Write(" ");
+            _emitter.WriteKeyword("EXTERNAL NAME");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.MethodSpecifier, out var msText);
+            _emitter.Write((msText ?? string.Empty).Trim());
+            _emitter.NewLine();
+            return;
+        }
+
+        _emitter.WriteKeyword("AS");
+        _emitter.NewLine();
+
+        // Body branches by shape:
+        //   scalar / multi-stmt TVF: StatementList[0] is always BeginEndBlockStatement
+        //     (BEGIN/END is captured as a real fragment, not implicit). Routing through
+        //     EmitBodyStatements + the existing BeginEndBlockStatement override emits the
+        //     wrapping naturally.
+        //   inline TVF: StatementList is null; SELECT lives at ReturnType.SelectStatement.
+        //     Mirror ScalarSubquery's break-to-block pattern: `RETURN (` + NL + Indent + recurse
+        //     + AtLineStart guard + `)`.
+        if (stmt.ReturnType is SelectFunctionReturnType inline)
+        {
+            _emitter.WriteKeyword("RETURN");
+            _emitter.Write(" (");
+            _emitter.NewLine();
+            using (_emitter.Indent())
+            {
+                EmitFragmentDefault(inline.SelectStatement);
+            }
+            if (!_emitter.AtLineStart) _emitter.NewLine();
+            _emitter.Write(")");
+            _emitter.NewLine();
+            return;
+        }
+
+        EmitBodyStatements(stmt.StatementList);
+    }
+
     public override void ExplicitVisit(BeginEndBlockStatement stmt)
     {
         // BEGIN ATOMIC blocks have Options we don't render — fall back to keep content correct.
@@ -1427,6 +1570,9 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is CreateViewStatement cv) { ExplicitVisit(cv); return; }
         if (fragment is AlterViewStatement av) { ExplicitVisit(av); return; }
         if (fragment is CreateOrAlterViewStatement coav) { ExplicitVisit(coav); return; }
+        if (fragment is CreateFunctionStatement cf) { ExplicitVisit(cf); return; }
+        if (fragment is AlterFunctionStatement af) { ExplicitVisit(af); return; }
+        if (fragment is CreateOrAlterFunctionStatement coaf) { ExplicitVisit(coaf); return; }
         if (fragment is BeginEndBlockStatement beb) { ExplicitVisit(beb); return; }
         if (fragment is TryCatchStatement tc) { ExplicitVisit(tc); return; }
         if (fragment is IfStatement ifs) { ExplicitVisit(ifs); return; }

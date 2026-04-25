@@ -74,6 +74,7 @@ Overridden:
 - `ExplicitVisit(IfStatement)` *(4e-ii)* — `IF <predicate>` on header line; `ThenStatement` recursed via `EmitConditionalBody` (BEGIN/END body lands at IF column; single-statement body wrapped in `Indent()`). Optional `ELSE` on its own line at IF column. Predicate routes through `EmitConditionalPredicate` — separate from `EmitSearchConditionBody` because IF/WHILE have no clause scope; same dispatch table minus BBE, plus a `BooleanNotExpression` branch so `NOT EXISTS (subq)` decomposes to `NOT ` + recurse. Subquery-bearing predicates break to indented block via the 4b-ii overrides.
 - `ExplicitVisit(WhileStatement)` *(4e-ii)* — same shape as IfStatement minus the ELSE branch.
 - `ExplicitVisit(CreateViewStatement)` / `ExplicitVisit(AlterViewStatement)` / `ExplicitVisit(CreateOrAlterViewStatement)` *(4d-ii)* — three thin overrides delegating to `EmitViewBody(ViewStatementBody, keywordPrefix)`. Header: keyword + generator-rendered `SchemaObjectName` + optional inline `(col1, col2)` column list (mirrors `CommonTableExpression.Columns` — per-identifier generator scaffold, no wrap) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS` + `SelectStatement` body via `EmitFragmentDefault` (flat indent — no `Indent()`, matches SSMS) + optional `WITH CHECK OPTION` trailer at col 0. `IsMaterialized` (Synapse materialized views) trips an `EmitGeneratorRaw` fallback — same defensive guard pattern as `BeginEndAtomicBlockStatement`.
+- `ExplicitVisit(CreateFunctionStatement)` / `ExplicitVisit(AlterFunctionStatement)` / `ExplicitVisit(CreateOrAlterFunctionStatement)` *(4d-iii)* — three thin overrides delegating to `EmitFunctionBody(FunctionStatementBody, keywordPrefix)`. `FunctionStatementBody` is a sibling of `ProcedureStatementBody` under `ProcedureStatementBodyBase`, so `Parameters` / `MethodSpecifier` / `StatementList` are inherited; `EmitProcedureParameterBody` is reused as-is. Header: keyword + generator-rendered `Name` (`SchemaObjectName`) + parameter list (always parenthesised — empty `()` inline, non-empty multi-line with paren on its own line and params indented; functions reject the proc-style no-paren form at parse time) + `RETURNS <type>` (`ScalarFunctionReturnType` → DataType; `SelectFunctionReturnType` → literal `TABLE`; `TableValuedFunctionReturnType` → generator-render `DeclareTableVariableBody` for the `@t TABLE (cols)` shape) + optional `OrderHint` (rare) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS`. CLR functions (`MethodSpecifier != null`) emit `AS EXTERNAL NAME <spec>` and return — same shape as procs. Body branches by `ReturnType` shape: `SelectFunctionReturnType` (inline TVF) emits `RETURN (` + NewLine + `Indent()` + `EmitFragmentDefault(SelectStatement)` + `AtLineStart` guard + `)` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF route through `EmitBodyStatements(StatementList)` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END (ScriptDom captures function BEGIN/END as `StatementList[0]`, not implicit). Defensive `EmitGeneratorRaw` for unknown `ReturnType` subclasses.
 
 Not yet overridden (planned per sub-step):
 - **4b** — split into four slices (see docs/4B-PLAN.md); 4b-iii is itself split into a+b:
@@ -87,7 +88,7 @@ Not yet overridden (planned per sub-step):
 - **4d**: CREATE / ALTER variants by object type. Five sub-slices.
   - ~~**4d-i**~~: Landed 2026-04-25. `CreateProcedureStatement`, `AlterProcedureStatement`, `CreateOrAlterProcedureStatement` via shared `EmitProcedureBody` helper. Bundled with 4e-i (procedure body needs BEGIN/END recursion to be useful). Bundled fixes: `WithCtesAndXmlNamespaces` handling on the four DML overrides; `SqlEmitter.EnsureTrailingSemicolon` on body recursion (control-flow statement terminators).
   - ~~**4d-ii**~~: Landed 2026-04-25. `CreateViewStatement`, `AlterViewStatement`, `CreateOrAlterViewStatement` via shared `EmitViewBody` helper. Body SELECT routes through `EmitFragmentDefault` so the `SelectStatement` override fires (CTE prelude + clause-keyword right alignment).
-  - **4d-iii**: CREATE / ALTER FUNCTION (scalar / inline TVF / multi-statement TVF)
+  - ~~**4d-iii**~~: Landed 2026-04-25. `CreateFunctionStatement`, `AlterFunctionStatement`, `CreateOrAlterFunctionStatement` via shared `EmitFunctionBody` helper. Three `ReturnType` shapes branch on subclass (scalar / inline TVF / multi-stmt TVF). Inline TVF body SELECT routes through `EmitFragmentDefault` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF body recurses via `EmitBodyStatements` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END.
   - **4d-iv**: CREATE / ALTER TRIGGER
   - **4d-v**: CREATE / ALTER TABLE (column defs, constraints, indexes — different shape from the others)
 - **4e**: Body-block and control-flow statements.
@@ -316,6 +317,69 @@ override.
 No trailing `;` is emitted — the body `SelectStatement` doesn't emit one, and views don't
 require one for parse. `WITH CHECK OPTION` lands on its own line after the body.
 
+### CreateFunctionStatement / AlterFunctionStatement / CreateOrAlterFunctionStatement (4d-iii)
+
+Three thin overrides delegate to `EmitFunctionBody(FunctionStatementBody, keywordPrefix)`.
+`FunctionStatementBody` is a sibling of `ProcedureStatementBody` under
+`ProcedureStatementBodyBase`, so `Parameters` (same `IList<ProcedureParameter>` type),
+`MethodSpecifier`, and `StatementList` are inherited; `EmitProcedureParameterBody` is reused
+as-is for parameter rendering. The function-specific declared members are `Name`
+(`SchemaObjectName` — note: not `ProcedureReference`), `Options` (`IList<FunctionOption>`),
+`OrderHint`, and `ReturnType`.
+
+**Header shape**: `CREATE [OR ALTER]/ALTER FUNCTION <name>` + parameter list +
+`RETURNS <return-type>` + optional `OrderHint` line + optional `WITH <opts>` + `AS`.
+
+**Parameter-list shape**: always parenthesised. Empty list emits `()` inline immediately
+after the name; non-empty list emits `\n(\n    <param>,\n    <param>\n)` — paren on its own
+line, params indented at `+IndentSize`. Functions reject the proc-style no-paren form at
+parse time (ScriptDom error #46010 `Incorrect syntax near 'RETURNS'`), so this is
+non-negotiable. Always-multi-line (rather than EmitWrappedList's adaptive inline-vs-wrap)
+matches the dominant SSMS / GittyExport convention and the only real function in the
+corpus (`Sorgu/function store freq.sql`).
+
+**RETURNS shape**: switch on `ReturnType` concrete subclass.
+- `ScalarFunctionReturnType { DataType }` → `RETURNS <generator-render(DataType)>`. Scalar
+  functions return a single value via `RETURN <expr>` inside a wrapping BEGIN/END.
+- `SelectFunctionReturnType { SelectStatement }` → `RETURNS TABLE`. **This is the inline
+  TVF case** despite the counterintuitive class name (ScriptDom names the multi-stmt one
+  `TableValuedFunctionReturnType`). The body SELECT lives directly on this `ReturnType`,
+  not in `StatementList` (which is null for inline TVFs).
+- `TableValuedFunctionReturnType { DeclareTableVariableBody }` → `RETURNS @t TABLE (...)`.
+  **This is the multi-stmt TVF case.** The `@t TABLE (col defs)` payload is generator-
+  rendered as a multi-line block via `_generator.GenerateScript(DeclareTableVariableBody)`.
+  Per-column wrap polish (the generator's slightly off `col1 INT         ,` alignment) is
+  4d-v territory — proper column-DDL modelling lands with the `CreateTableStatement` slice.
+- Unknown subclass → `EmitGeneratorRaw(stmt)` defensively, same pattern as
+  `BeginEndAtomicBlockStatement` and `IsMaterialized` views.
+
+**OrderHint**: `OrderBulkInsertOption` for the `WITH ORDER (...)` hint on inline TVFs.
+Generator-rendered on its own line when non-null. Rare in practice; corpus may surface
+issues to revisit.
+
+**WITH options**: `FunctionOption` items rendered per-option via the generator and
+comma-joined on a single `WITH …` line. Same pattern as procs / views. Real options
+(`SCHEMABINDING`, `RETURNS NULL ON NULL INPUT`, `CALLED ON NULL INPUT`, `EXECUTE AS …`)
+all render correctly through the generator.
+
+**CLR functions**: `MethodSpecifier != null` emits `AS EXTERNAL NAME <spec>` and returns
+without a body. Same shape as procs at the matching point in `EmitProcedureBody`.
+
+**Body shape**: branches on `ReturnType`. Inline TVF (`SelectFunctionReturnType`) emits
+`RETURN (` + `NewLine` + `Indent()` scope + `EmitFragmentDefault(returnType.SelectStatement)`
++ `AtLineStart` guard + `)` — mirrors `ScalarSubquery` / `ExistsPredicate` break-to-block
+exactly. The body SELECT routes through the `SelectStatement` override (clause keywords
+right-align, JOINs stack via `QualifiedJoin`, etc.). No trailing `;` inside the parens —
+`EmitFragmentDefault` doesn't add one (only `EmitBodyStatements` does, via
+`EnsureTrailingSemicolon`).
+
+Scalar and multi-stmt TVF route through `EmitBodyStatements(StatementList)`. ScriptDom
+captures the function's outer `BEGIN … END` as a real `BeginEndBlockStatement` at
+`StatementList[0]` (always — not implicit), so the existing `BeginEndBlockStatement`
+override emits the wrapping naturally. Body content recurses through the visitor
+(DECLARE / IF / SELECT / nested control-flow all flow through their respective overrides
+with the 4e-ii-b vertical-spacing rule applied).
+
 ### Known AND/OR byproduct in ON (4b-iii-a, carried into 4b-iv)
 `Sql170ScriptGenerator` renders `BooleanBinaryExpression` (AND / OR) as multi-line by default. Our `EmitBooleanScaffold`-style inline scaffold for ON writes the rendered text as a raw string, so embedded newlines from the generator land in the body without getting the scope's body-column prefix applied to each sub-line — continuation lines sit at column 1 instead of at the WHERE/ON body column. Same root cause as the WHERE-with-AND visual glitch seen in the staffing-report smoke. Fixed when 4b-iv takes over `BooleanBinaryExpression` rendering; the long-ON test avoids it by using a simple single comparison.
 
@@ -508,6 +572,24 @@ require one for parse. `WITH CHECK OPTION` lands on its own line after the body.
 - **Bundled fix — `QueryParenthesisExpression` unwrap in `ExplicitVisit(SelectStatement)`** *(pre-existing data-loss bug, surfaced by `Sorgu/view_duplicates.sql` smoke)*. Real-world `ALTER VIEW … AS (SELECT … WHERE … GROUP BY … HAVING …)` shapes parse with `SelectStatement.QueryExpression` as a `QueryParenthesisExpression` wrapping the inner QuerySpec. Pre-fix, the dispatcher's `is QuerySpecification` check returned false, fell through to `EmitGeneratorRaw`, and the generator's bare-fragment quirk silently dropped trailing clauses (WHERE / GROUP BY / HAVING / ORDER BY) — actual content lost in the formatted output. Fix: peel `QueryParenthesisExpression` layers off `statement.QueryExpression` before the trip-flag check and before the QuerySpec dispatch. Guard: only unwrap when the parens carry no clauses of their own (`OrderBy` / `Offset` / `For` at the parens level fall through to generator unchanged). Dropping the parens is consistent with the formatter's ScriptDom-canonical philosophy — SSMS strips them too.
 - **Tests**: 10 new facts in `Tests/ViewFormattingTests.cs` (capture-and-lock pattern; no `Assert.True(true)` left in committed file). Minimal CREATE / column list / WITH SCHEMABINDING / multi-option / ALTER / CREATE OR ALTER / body has WHERE+AND / WITH CHECK OPTION / body has CTE / realistic body with JOIN+WHERE+GROUP BY+HAVING. Plus 1 new fact in `Tests/QuerySpecificationFormattingTests.cs` (`Format_SelectWithParenthesizedQuery_PreservesAllClauses`) locking the unwrap fix. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **137 → 148**, all pass. Harness **51 / 0 / 2** unchanged.
 - **Out of scope / deferred**: indexed-view trailer index DDL (separate `CreateIndex…` statements, not children of the view AST); long-column-list wrap (joint with CTE columns); comments inside view body (4g); materialized views (defensive fallback retained); `QueryParenthesisExpression` carrying its own ORDER BY/OFFSET/FOR (rare; falls through to generator).
+
+### 4d-iii — 2026-04-25
+
+- **Slice motivation**: `Sorgu/function store freq.sql` (the only real function in the corpus, an `ALTER FUNCTION` scalar with realistic DECLARE / SELECT / IF body) hit `EmitGeneratorRaw` pre-4d-iii. Whole function rendered through `Sql170ScriptGenerator`, so the body SELECTs didn't right-align clause keywords and didn't pick up JOIN stacking / vertical spacing. Visually inconsistent the moment a function sat next to anything else the visitor handled.
+- **ScriptDom probe (run before planning)** pinned the structural facts:
+  - `FunctionStatementBody : ProcedureStatementBodyBase` — sibling of `ProcedureStatementBody`, not parent-child. Shared base provides `Parameters`, `MethodSpecifier`, `StatementList`. So `EmitProcedureBody` is *not* directly reusable, but the parameter helpers (`EmitProcedureParameterBody` taking `ProcedureParameter`) reuse cleanly.
+  - Three `FunctionReturnType` subclasses: `ScalarFunctionReturnType { DataType }` (scalar), `SelectFunctionReturnType { SelectStatement }` (inline TVF — counterintuitive name), `TableValuedFunctionReturnType { DeclareTableVariableBody }` (multi-stmt TVF).
+  - For scalar / multi-stmt TVF: `StatementList[0]` is always `BeginEndBlockStatement` (BEGIN/END is captured as a real fragment, not implicit). For inline TVF: `StatementList` is null, the body SELECT lives at `ReturnType.SelectStatement`. This shapes the body-emission branch cleanly.
+- **Three function overrides** + shared `EmitFunctionBody(FunctionStatementBody, keywordPrefix)` helper. Same overall shape as `EmitProcedureBody` and `EmitViewBody`. Three new branches in `EmitFragmentDefault` (Create / Alter / CreateOrAlter Function).
+- **Parameter-list deviation from procs**: functions REQUIRE parens around the parameter list — even the empty form (`dbo.fn()`). Procs allow no-parens. ScriptDom enforces this at parse time (#46010 `Incorrect syntax near 'RETURNS'`); the first capture pass produced reparse failures across all 10 new tests, surfacing the requirement immediately. Fix: emit `()` inline for the empty case, multi-line `(\n    <param>,\n    ...\n)` with paren on its own line and params at `+IndentSize` for non-empty. Always-multi-line (vs EmitWrappedList's adaptive inline/wrap) matches the dominant SSMS / GittyExport convention and the Sorgu corpus shape; deferred adaptive wrap until corpus surfaces a counter-case.
+- **Inline TVF body** (`SelectFunctionReturnType`): `RETURN (` + NL + `Indent()` + `EmitFragmentDefault(returnType.SelectStatement)` + `AtLineStart` guard + `)`. Mirrors `ScalarSubquery` break-to-block exactly. No trailing `;` inside parens (the dispatch path uses `EmitFragmentDefault`, not `EmitBodyStatements`).
+- **Scalar / multi-stmt TVF body**: `EmitBodyStatements(stmt.StatementList)` — `StatementList[0]` is the `BeginEndBlockStatement`, the existing override emits BEGIN/END with body recursion happening at `+IndentSize`. No new code needed for the wrapping; everything was already in place from 4e-i + 4e-ii-b.
+- **Multi-stmt TVF column DDL**: generator-renders the whole `DeclareTableVariableBody` as a single multi-line block (`@t TABLE (\n    col1 INT         ,\n    col2 VARCHAR (10))`). The off-alignment (`INT         ,`) is a generator artifact; per-column polish is **4d-v territory** — the proper fix is a real `CreateTableStatement`/column-DDL slice that handles CTE / view / TVF column lists with consistent wrap rules.
+- **OrderHint**: generator-renders on its own line when non-null. None of the corpus functions exercise this; defensive emission for completeness.
+- **CLR functions** (`MethodSpecifier != null`): emit `AS EXTERNAL NAME <spec>` and return. Mirrors procs.
+- **Tests**: 10 new facts in `Tests/FunctionFormattingTests.cs` (capture-and-lock; no `Assert.True(true)` left in committed file). Minimal scalar / short params / long params / realistic body (DECLARE + IF + SELECT + RETURN, exercises body recursion + 4e-ii-b vertical spacing) / inline TVF minimal / inline TVF with JOIN+WHERE / multi-stmt TVF / ALTER / CREATE OR ALTER / WITH SCHEMABINDING. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **148 → 158**, all pass. Harness **51 / 0 / 2** unchanged.
+- **Real-function smoke**: `Sorgu/function store freq.sql` formats and re-parses cleanly (errors: 0). The function header lands as expected; body SELECTs right-align clause keywords; JOINs stack; DECLARE clusters stay tight while block-level statements get blank-line separation. Two pre-existing Known Limitations show but are not 4d-iii regressions: (1) the inner subquery with `TOP 2` falls back to generator and drops trailing `WHERE` / `GROUP BY` clauses (4b-iii bare-QuerySpec quirk); (2) the chained `IF / ELSE IF / ELSE IF` stairsteps progressively (4e-ii Known Limitation).
+- **Out of scope / deferred**: per-column DDL wrap for multi-stmt TVF (joint with `CreateTableStatement` in 4d-v); subquery-with-TOP trailing-clause drop fix (separate 4b-iii revisit); ELSE IF flatten (4e-ii Known Limitation has a sketch); CLR function smoke (no corpus example).
 
 ### Problem
 
