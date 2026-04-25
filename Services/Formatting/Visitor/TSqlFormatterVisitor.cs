@@ -821,7 +821,6 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         //   VALUES (...) | SELECT ... | EXEC ...
         //   OUTPUT ...                   -- optional
         var spec = stmt.InsertSpecification;
-        if (spec.TopRowFilter != null) { EmitGeneratorRaw(stmt); return; }                    // D6 trip-fallback
 
         if (stmt.WithCtesAndXmlNamespaces != null)
         {
@@ -829,10 +828,13 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
             _emitter.NewLine();
         }
 
+        // 4f-iii: TOP renders inline between INSERT and INTO/OVER. EmitTopRowFilter writes its
+        // own trailing space, so the next keyword follows directly without a leading space.
         _emitter.WriteKeyword("INSERT");
-        if (spec.InsertOption == InsertOption.Into) { _emitter.Write(" "); _emitter.WriteKeyword("INTO"); }
-        else if (spec.InsertOption == InsertOption.Over) { _emitter.Write(" "); _emitter.WriteKeyword("OVER"); }
         _emitter.Write(" ");
+        if (spec.TopRowFilter != null) EmitTopRowFilter(spec.TopRowFilter);
+        if (spec.InsertOption == InsertOption.Into) { _emitter.WriteKeyword("INTO"); _emitter.Write(" "); }
+        else if (spec.InsertOption == InsertOption.Over) { _emitter.WriteKeyword("OVER"); _emitter.Write(" "); }
         EmitTableReferenceBody(spec.Target);
 
         if (spec.Columns != null && spec.Columns.Count > 0)
@@ -866,7 +868,6 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
     {
         // 4c D1: UPDATE / SET / FROM / WHERE / OUTPUT right-align in one clause scope.
         var spec = stmt.UpdateSpecification;
-        if (spec.TopRowFilter != null) { EmitGeneratorRaw(stmt); return; }
 
         if (stmt.WithCtesAndXmlNamespaces != null)
         {
@@ -876,7 +877,11 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
 
         using (_emitter.BeginClauseScope())
         {
+            // 4f-iii: TOP renders inline within the UPDATE clause body — `TOP <expr> [PERCENT] `
+            // before the target. Mirrors QuerySpec's TOP-in-SELECT pattern from 4f-ii: TOP rides
+            // in the body, so scope maxKw stays at UPDATE/SET/WHERE (not inflated by TOP width).
             _emitter.WriteClauseKeyword("UPDATE");
+            if (spec.TopRowFilter != null) EmitTopRowFilter(spec.TopRowFilter);
             EmitTableReferenceBody(spec.Target);
             _emitter.NewLine();
 
@@ -908,7 +913,6 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         // FromClause null → `DELETE FROM <target>` single keyword phrase.
         // FromClause non-null → extended form: `DELETE <target>` + `FROM <fromclause>`.
         var spec = stmt.DeleteSpecification;
-        if (spec.TopRowFilter != null) { EmitGeneratorRaw(stmt); return; }
 
         if (stmt.WithCtesAndXmlNamespaces != null)
         {
@@ -918,12 +922,16 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
 
         using (_emitter.BeginClauseScope())
         {
+            // 4f-iii: TOP renders inline within the DELETE clause body — `TOP <expr> [PERCENT] `
+            // before either the body `FROM ` (simple form) or the target (extended form). Same
+            // body-not-keyword placement rule as UPDATE: keeps maxKw at DELETE/WHERE width.
             if (spec.FromClause == null)
             {
                 // Simple form. Keyword "DELETE" (6 chars); "FROM " goes into body so scope
                 // maxKw stays at DELETE vs WHERE (not inflated to "DELETE FROM"=11, which would
                 // push WHERE 6 cols further right).
                 _emitter.WriteClauseKeyword("DELETE");
+                if (spec.TopRowFilter != null) EmitTopRowFilter(spec.TopRowFilter);
                 _emitter.Write("FROM ");
                 EmitTableReferenceBody(spec.Target);
                 _emitter.NewLine();
@@ -933,6 +941,7 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
                 // Extended form: DELETE <target> + FROM <join-tree>. DELETE and FROM are separate
                 // keyword lines inside the scope — they right-align with WHERE / OUTPUT.
                 _emitter.WriteClauseKeyword("DELETE");
+                if (spec.TopRowFilter != null) EmitTopRowFilter(spec.TopRowFilter);
                 EmitTableReferenceBody(spec.Target);
                 _emitter.NewLine();
             }

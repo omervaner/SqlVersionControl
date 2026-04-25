@@ -270,4 +270,137 @@ public class DmlFormattingTests
         Assert.Equal(expected, Fmt(input));
         Assert.NotNull(ReParse(Fmt(input)));
     }
+
+    // ===== 4f-iii: TopRowFilter on INSERT / UPDATE / DELETE =====
+    // 4f-iii retired the `EmitGeneratorRaw(stmt)` trip-fallbacks at the three TopRowFilter sites.
+    // TOP renders inline within the lead clause's body (after INSERT / UPDATE / DELETE keyword,
+    // before INTO / target / FROM), so scope maxKw stays at the lead-keyword width — Style-1
+    // staircase preserved across SET / FROM / WHERE. Mirrors 4f-ii's QuerySpec TOP-in-SELECT.
+
+    [Fact]
+    public void Format_InsertTopN_RendersInline()
+    {
+        var input = "INSERT TOP (5) INTO t (a) VALUES (1)";
+        var expected =
+            "INSERT TOP (5) INTO t\n" +
+            "    (a)\n" +
+            "VALUES (1)\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_InsertTopPercent_RendersInline()
+    {
+        var input = "INSERT TOP (5) PERCENT INTO t (a) VALUES (1)";
+        var expected =
+            "INSERT TOP (5) PERCENT INTO t\n" +
+            "    (a)\n" +
+            "VALUES (1)\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_InsertTopWithSelectSource_RendersInline()
+    {
+        var input = "INSERT TOP (5) INTO t (a) SELECT b FROM s";
+        var expected =
+            "INSERT TOP (5) INTO t\n" +
+            "    (a)\n" +
+            "SELECT b\n" +
+            "  FROM s\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_InsertTopWithOutput_RendersInline()
+    {
+        var input = "INSERT TOP (5) INTO t (a) OUTPUT inserted.a VALUES (1)";
+        var expected =
+            "INSERT TOP (5) INTO t\n" +
+            "    (a)\n" +
+            "OUTPUT inserted.a\n" +
+            "VALUES (1)\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_UpdateTopN_RendersInline_PreservesScope()
+    {
+        // UPDATE TOP (5) — TOP rides in body of UPDATE keyword line so scope maxKw stays at
+        // UPDATE/SET/WHERE width. SET / WHERE right-align with UPDATE.
+        var input = "UPDATE TOP (5) t SET a = 1 WHERE x = 2";
+        var expected =
+            "UPDATE TOP (5) t\n" +
+            "   SET a = 1\n" +
+            " WHERE x = 2\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_UpdateTopPercent_RendersInline()
+    {
+        var input = "UPDATE TOP (5) PERCENT t SET a = 1";
+        var expected =
+            "UPDATE TOP (5) PERCENT t\n" +
+            "   SET a = 1\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_UpdateTopWithFromJoin_RendersInline_PreservesScope()
+    {
+        var input = "UPDATE TOP (5) t SET a = 1 FROM t JOIN s ON t.id = s.id WHERE t.x = 2";
+        var expected =
+            "UPDATE TOP (5) t\n" +
+            "   SET a = 1\n" +
+            "  FROM t\n" +
+            "       INNER JOIN s ON t.id = s.id\n" +
+            " WHERE t.x = 2\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_DeleteTopSimpleForm_RendersInline()
+    {
+        // Simple form: FromClause is null. TOP rides in body before the body `FROM` keyword.
+        var input = "DELETE TOP (5) FROM t WHERE x = 1";
+        var expected =
+            "DELETE TOP (5) FROM t\n" +
+            " WHERE x = 1\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_DeleteTopPercentSimpleForm_RendersInline()
+    {
+        var input = "DELETE TOP (5) PERCENT FROM t WHERE x = 1";
+        var expected =
+            "DELETE TOP (5) PERCENT FROM t\n" +
+            " WHERE x = 1\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_DeleteTopExtendedFormWithJoin_RendersInline_PreservesScope()
+    {
+        // Extended form: explicit FromClause with JOIN. TOP rides in body of DELETE keyword line.
+        // FROM is its own clause keyword line; DELETE / FROM / WHERE all right-align.
+        var input = "DELETE TOP (5) t FROM t JOIN s ON t.id = s.id WHERE t.x = 1";
+        var expected =
+            "DELETE TOP (5) t\n" +
+            "  FROM t\n" +
+            "       INNER JOIN s ON t.id = s.id\n" +
+            " WHERE t.x = 1\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
 }
