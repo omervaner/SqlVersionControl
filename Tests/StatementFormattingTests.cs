@@ -165,4 +165,60 @@ public class StatementFormattingTests
         Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));
     }
+
+    [Fact]
+    public void Format_SetVariable_ScalarRhs_PassesThrough()
+    {
+        // 4f: scalar / non-subquery RHS (literals, expressions, += operator) generator-passes
+        // through unchanged. The override fires only for ScalarSubquery RHS. Top-level
+        // statements end on a fresh line without trailing `;` (project convention).
+        var input = "SET @x = 5;";
+        var output = Fmt(input);
+        Assert.Equal("SET @x = 5\n", output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SetVariable_AddEquals_PassesThrough()
+    {
+        var input = "SET @x += 1;";
+        var output = Fmt(input);
+        Assert.Equal("SET @x += 1\n", output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SetVariable_SubqueryRhs_BreakToBlock()
+    {
+        // 4f: ScalarSubquery RHS reuses the 4b-ii break-to-block pattern — `(` on its own
+        // line, body indented, `)` on its own line. The inner SELECT opens its own clause
+        // scope with right-aligned keywords (FROM / WHERE pad to the SELECT column).
+        var input = "SET @x = (SELECT MAX(id) FROM dbo.t WHERE col = 'a');";
+        var output = Fmt(input);
+        var expected =
+            "SET @x = (\n" +
+            "    SELECT MAX(id)\n" +
+            "      FROM dbo.t\n" +
+            "     WHERE col = 'a'\n" +
+            ")\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SetVariable_SubqueryRhs_WithTop_PreservesAllClauses()
+    {
+        // 4f bundled fix: the bare-QuerySpec generator drops trailing clauses (here: WHERE)
+        // when niche features (TOP / OFFSET / FOR) are present. The QuerySpec niche-feature
+        // fallback now wraps into a synthetic SelectStatement before generator-rendering, so
+        // WHERE survives. Latent in 4b-ii ScalarSubquery; surfaced by this override.
+        var input = "SET @x = (SELECT TOP 1 id FROM dbo.t WHERE col = 'a');";
+        var output = Fmt(input);
+        // Inner uses generator's left-aligned keyword style (`FROM   `, `WHERE  `) because the
+        // niche-feature path doesn't open our own clause scope. WHERE survival is the assert.
+        Assert.Contains("WHERE", output);
+        Assert.Contains("SELECT TOP 1 id", output);
+        Assert.StartsWith("SET @x = (\n", output);
+        Assert.NotNull(ReParse(output));
+    }
 }

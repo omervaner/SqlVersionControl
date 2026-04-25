@@ -149,11 +149,15 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         // 4b-i niche-feature fallback: still needed when QuerySpec is reached as a subquery
         // (not via SelectStatement, which has its own fallback above). For top-level
         // SelectStatements, SelectStatement's fallback fires first and we never get here.
-        // Caveat: subquery-with-JOINs still drops trailing clauses (ScriptDom bare-QuerySpec
-        // quirk) — known limitation, picked up by 4b-iii.
+        // 4f: wrap into a synthetic SelectStatement before generator-rendering. Bare-QuerySpec
+        // generator drops trailing clauses (WHERE / GROUP BY / HAVING / ORDER BY) when niche
+        // features (TOP / OFFSET / FOR) are present — same ScriptDom quirk as the documented
+        // subquery-with-JOINs drop. Surfaced by 4f's SetVariableStatement subquery-RHS override
+        // (latent in 4b-ii's ScalarSubquery path; only visible when the inner QuerySpec has
+        // both a niche feature and a trailing clause).
         if (QuerySpecRequiresFallback(q))
         {
-            EmitFragmentDefault(q);
+            EmitGeneratorRaw(new SelectStatement { QueryExpression = q });
             return;
         }
 
@@ -274,6 +278,8 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (tableRef is QualifiedJoin qj) { ExplicitVisit(qj); return; }
         if (tableRef is UnqualifiedJoin uj) { ExplicitVisit(uj); return; }
         if (tableRef is QueryDerivedTable qdt) { ExplicitVisit(qdt); return; }
+        if (tableRef is PivotedTableReference pvt) { ExplicitVisit(pvt); return; }
+        if (tableRef is UnpivotedTableReference upvt) { ExplicitVisit(upvt); return; }
         _generator.GenerateScript(tableRef, out var t);
         _emitter.Write((t ?? string.Empty).Trim());
     }
@@ -355,6 +361,97 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
             _emitter.Write(" AS " + (aliasText ?? string.Empty).Trim());
         }
     }
+
+    // 4f: <source> PIVOT (agg(val) FOR col IN (v1, v2, ...)) AS alias.
+    // Source recurses through EmitTableReferenceBody so QueryDerivedTable / nested PIVOT etc.
+    // dispatch correctly. PIVOT clause renders inline when its assembled length fits under
+    // MaxLineLength; otherwise the IN-list breaks one value per line at +IndentSize. ForPath
+    // (graph SQL) trips a defensive generator fallback — out of scope this slice.
+    public override void ExplicitVisit(PivotedTableReference pvt)
+    {
+        if (pvt.ForPath) { EmitGeneratorRaw(pvt); return; }
+
+        EmitTableReferenceBody(pvt.TableReference);
+
+        var agg = JoinPart(pvt.AggregateFunctionIdentifier);
+        var valueArgs = JoinScalars(pvt.ValueColumns);
+        var pivotCol = JoinPart(pvt.PivotColumn);
+        var inValues = RenderEach(pvt.InColumns);
+        var alias = pvt.Alias != null ? JoinPart(pvt.Alias) : string.Empty;
+
+        var header = "PIVOT (" + agg + "(" + valueArgs + ") FOR " + pivotCol + " IN (";
+        var inlineInList = string.Join(", ", inValues);
+        var tail = ")) AS " + alias;
+        var inline = header + inlineInList + tail;
+
+        if (inline.Length <= _options.MaxLineLength)
+        {
+            _emitter.Write(" " + inline);
+            return;
+        }
+
+        _emitter.Write(" " + header);
+        _emitter.NewLine();
+        var indent = new string(' ', _options.IndentSize);
+        for (int i = 0; i < inValues.Count; i++)
+        {
+            _emitter.Write(indent + inValues[i] + (i < inValues.Count - 1 ? "," : string.Empty));
+            _emitter.NewLine();
+        }
+        _emitter.Write(tail);
+    }
+
+    // 4f: <source> UNPIVOT (val FOR col IN (c1, c2, ...)) AS alias. ValueColumn is a singular
+    // Identifier (not a list); InColumns are ColumnReferenceExpression (not Identifier as in
+    // PIVOT). Same wrap rule as PIVOT.
+    public override void ExplicitVisit(UnpivotedTableReference upvt)
+    {
+        if (upvt.ForPath) { EmitGeneratorRaw(upvt); return; }
+
+        EmitTableReferenceBody(upvt.TableReference);
+
+        var valueCol = JoinPart(upvt.ValueColumn);
+        var pivotCol = JoinPart(upvt.PivotColumn);
+        var inValues = RenderEach(upvt.InColumns);
+        var alias = upvt.Alias != null ? JoinPart(upvt.Alias) : string.Empty;
+
+        var header = "UNPIVOT (" + valueCol + " FOR " + pivotCol + " IN (";
+        var inlineInList = string.Join(", ", inValues);
+        var tail = ")) AS " + alias;
+        var inline = header + inlineInList + tail;
+
+        if (inline.Length <= _options.MaxLineLength)
+        {
+            _emitter.Write(" " + inline);
+            return;
+        }
+
+        _emitter.Write(" " + header);
+        _emitter.NewLine();
+        var indent = new string(' ', _options.IndentSize);
+        for (int i = 0; i < inValues.Count; i++)
+        {
+            _emitter.Write(indent + inValues[i] + (i < inValues.Count - 1 ? "," : string.Empty));
+            _emitter.NewLine();
+        }
+        _emitter.Write(tail);
+    }
+
+    private string JoinPart(TSqlFragment frag)
+    {
+        _generator.GenerateScript(frag, out var t);
+        return (t ?? string.Empty).Trim();
+    }
+
+    private System.Collections.Generic.List<string> RenderEach<T>(System.Collections.Generic.IList<T> items) where T : TSqlFragment
+    {
+        var list = new System.Collections.Generic.List<string>(items.Count);
+        for (int i = 0; i < items.Count; i++) list.Add(JoinPart(items[i]));
+        return list;
+    }
+
+    private string JoinScalars<T>(System.Collections.Generic.IList<T> items) where T : TSqlFragment
+        => string.Join(", ", RenderEach(items));
 
     public override void ExplicitVisit(CommonTableExpression cte)
     {
@@ -1967,6 +2064,43 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (!_emitter.AtLineStart) _emitter.NewLine();                      // statement convention: end on fresh line
     }
 
+    // 4f: only the ScalarSubquery RHS case gets break-to-block; everything else (literals,
+    // expressions, CURSOR, NEXT VALUE FOR, parens-around-scalar) passes through to the
+    // generator. The break shape mirrors ScalarSubquery (4b-ii) — single pattern across the
+    // formatter for "subquery in scalar position": `(` on its own line, body indented, `)`
+    // on its own line.
+    public override void ExplicitVisit(SetVariableStatement stmt)
+    {
+        if (stmt.Expression is not ScalarSubquery sq)
+        {
+            EmitGeneratorRaw(stmt);
+            return;
+        }
+
+        _emitter.WriteKeyword("SET");
+        _emitter.Write(" ");
+        _emitter.Write(stmt.Variable.Name);
+        _emitter.Write(" ");
+        _emitter.Write(AssignmentOperator(stmt.AssignmentKind));
+        _emitter.Write(" ");
+        ExplicitVisit(sq);
+        if (!_emitter.AtLineStart) _emitter.NewLine();                      // statement convention: end on fresh line
+    }
+
+    private static string AssignmentOperator(AssignmentKind kind) => kind switch
+    {
+        AssignmentKind.Equals => "=",
+        AssignmentKind.AddEquals => "+=",
+        AssignmentKind.SubtractEquals => "-=",
+        AssignmentKind.MultiplyEquals => "*=",
+        AssignmentKind.DivideEquals => "/=",
+        AssignmentKind.ModEquals => "%=",
+        AssignmentKind.BitwiseAndEquals => "&=",
+        AssignmentKind.BitwiseOrEquals => "|=",
+        AssignmentKind.BitwiseXorEquals => "^=",
+        _ => "=",
+    };
+
     private void EmitMergeActionClause(MergeActionClause clause)
     {
         // WHEN [NOT] MATCHED [BY TARGET|SOURCE] [AND <cond>] THEN\n<action at +IndentSize>
@@ -2211,6 +2345,9 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is DeclareVariableStatement dvs) { ExplicitVisit(dvs); return; }
         if (fragment is DeclareTableVariableStatement dtv) { ExplicitVisit(dtv); return; }
         if (fragment is RollbackTransactionStatement rts) { ExplicitVisit(rts); return; }
+        if (fragment is PivotedTableReference pvt) { ExplicitVisit(pvt); return; }
+        if (fragment is UnpivotedTableReference upvt) { ExplicitVisit(upvt); return; }
+        if (fragment is SetVariableStatement svs) { ExplicitVisit(svs); return; }
 
         EmitGeneratorRaw(fragment);
     }
