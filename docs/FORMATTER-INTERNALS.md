@@ -76,6 +76,12 @@ Overridden:
 - `ExplicitVisit(CreateViewStatement)` / `ExplicitVisit(AlterViewStatement)` / `ExplicitVisit(CreateOrAlterViewStatement)` *(4d-ii)* — three thin overrides delegating to `EmitViewBody(ViewStatementBody, keywordPrefix)`. Header: keyword + generator-rendered `SchemaObjectName` + optional inline `(col1, col2)` column list (mirrors `CommonTableExpression.Columns` — per-identifier generator scaffold, no wrap) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS` + `SelectStatement` body via `EmitFragmentDefault` (flat indent — no `Indent()`, matches SSMS) + optional `WITH CHECK OPTION` trailer at col 0. `IsMaterialized` (Synapse materialized views) trips an `EmitGeneratorRaw` fallback — same defensive guard pattern as `BeginEndAtomicBlockStatement`.
 - `ExplicitVisit(CreateFunctionStatement)` / `ExplicitVisit(AlterFunctionStatement)` / `ExplicitVisit(CreateOrAlterFunctionStatement)` *(4d-iii)* — three thin overrides delegating to `EmitFunctionBody(FunctionStatementBody, keywordPrefix)`. `FunctionStatementBody` is a sibling of `ProcedureStatementBody` under `ProcedureStatementBodyBase`, so `Parameters` / `MethodSpecifier` / `StatementList` are inherited; `EmitProcedureParameterBody` is reused as-is. Header: keyword + generator-rendered `Name` (`SchemaObjectName`) + parameter list (always parenthesised — empty `()` inline, non-empty multi-line with paren on its own line and params indented; functions reject the proc-style no-paren form at parse time) + `RETURNS <type>` (`ScalarFunctionReturnType` → DataType; `SelectFunctionReturnType` → literal `TABLE`; `TableValuedFunctionReturnType` → generator-render `DeclareTableVariableBody` for the `@t TABLE (cols)` shape) + optional `OrderHint` (rare) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS`. CLR functions (`MethodSpecifier != null`) emit `AS EXTERNAL NAME <spec>` and return — same shape as procs. Body branches by `ReturnType` shape: `SelectFunctionReturnType` (inline TVF) emits `RETURN (` + NewLine + `Indent()` + `EmitFragmentDefault(SelectStatement)` + `AtLineStart` guard + `)` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF route through `EmitBodyStatements(StatementList)` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END (ScriptDom captures function BEGIN/END as `StatementList[0]`, not implicit). Defensive `EmitGeneratorRaw` for unknown `ReturnType` subclasses.
 - `ExplicitVisit(CreateTriggerStatement)` / `ExplicitVisit(AlterTriggerStatement)` / `ExplicitVisit(CreateOrAlterTriggerStatement)` *(4d-iv)* — three thin overrides delegating to `EmitTriggerBody(TriggerStatementBody, keywordPrefix)`. `TriggerStatementBody` is a `TSqlStatement` subclass; the three concrete types are siblings (no shared base with procs / views / funcs). Header (T-SQL grammar order, source-order observed): keyword + generator-rendered `Name` + `ON ` + generator-rendered `TriggerObject` (handles the `dbo.t` / `DATABASE` / `ALL SERVER` literals via `TriggerScope` internally) + optional `WITH <opts>` (generator-rendered, comma-joined — `TriggerOption` for `ENCRYPTION`, `ExecuteAsTriggerOption` for `EXECUTE AS …`) + timing keyword (from `TriggerType` enum: `AFTER` / `INSTEAD OF` / `FOR`) + comma-joined event list (each `TriggerAction` generator-rendered — handles INSERT/UPDATE/DELETE for DML, `Event` with `EventTypeContainer` / `EventGroupContainer` for DDL, and `LogOn` uniformly) + optional `NOT FOR REPLICATION` (from `IsNotForReplication` flag) + `AS` + body via `EmitBodyStatements(StatementList)`. Body shape mirrors procs (flat list, BEGIN/END captured as `StatementList[0]` when source has it), not functions (which always wrap). No parameter list — triggers don't have parameters. `WITH APPEND` is rejected by the ScriptDom 170 parser; not formattable, no test coverage.
+- `ExplicitVisit(CreateTableStatement)` *(4d-v)* — single override delegating to `EmitCreateTableBody`. Header: `CREATE TABLE` + generator-rendered `SchemaObjectName` + `EmitTableDefinitionBody` for the parenthesised `( cols, table-constraints, indexes )` block, then optional `ON <fg>` / `TEXTIMAGE_ON <fg>` / `FILESTREAM_ON <fg>` each on its own line at column 0, then optional table-level `WITH (<opts>)` (`MemoryOptimizedTableOption`, `SystemVersioningTableOption`, etc. — each generator-rendered, comma-joined). `( cols, constraints, indexes )` body uses no blank-line separator between groups (D2 — matches SSMS canonical and the Sorgu corpus). External / graph / ledger tables fall through to defensive generator fallback (out of scope this slice).
+- `ExplicitVisit(AlterTableAddTableElementStatement)` / `ExplicitVisit(AlterTableDropTableElementStatement)` / `ExplicitVisit(AlterTableAlterColumnStatement)` / `ExplicitVisit(AlterTableSwitchStatement)` / `ExplicitVisit(AlterTableTriggerModificationStatement)` / `ExplicitVisit(AlterTableConstraintModificationStatement)` *(4d-v)* — six per-subtype overrides, each its own helper. ScriptDom carves ALTER TABLE into six concrete statement types (no polymorphic body), so per-type emission is cleaner than a dispatcher. Common shape: `EmitAlterTableHeader` writes `ALTER TABLE <name>` + NewLine; the action keyword (`ADD` / `DROP COLUMN|CONSTRAINT` / `ALTER COLUMN` / `SWITCH` / `ENABLE|DISABLE TRIGGER` / `CHECK|NOCHECK CONSTRAINT`) lands on the next line at column 0. `EmitExistingRowsCheck` emits `WITH CHECK ` / `WITH NOCHECK ` prefix on the action line for ADD and CHECK CONSTRAINT branches when `ExistingRowsCheckEnforcement` is set. ADD with multiple elements routes through `EmitTableDefinitionBody` (same shape as CREATE TABLE); ADD with a single element renders inline.
+- `EmitTableDefinitionBody(TableDefinition)` *(4d-v)* — shared body for the parenthesised block. NewLine + `(` on its own line + `Indent()` block over `ColumnDefinitions` then `TableConstraints` then `Indexes` then optional `SystemTimePeriod` (PERIOD FOR SYSTEM_TIME), comma-trailing per D3, no blank-line separator (D2). Closing `)` on its own line at outer indent. Three call sites: `EmitCreateTableBody`, `EmitAlterTableAdd*` (multi-element branch), `EmitFunctionBody`'s multi-stmt TVF `RETURNS @t TABLE (...)` block (4d-v backfill — replaced the per-column generator-fallback that produced squashed alignment artifacts).
+- `EmitColumnDefinition(ColumnDefinition)` *(4d-v)* — generator-render the column as a single line. Identifier + type + collation + identity + nullable + default + computed-AS + inline constraints + inline INDEX all render correctly via `Sql170ScriptGenerator` when called per-column (the column-alignment padding artifact only manifests when the generator renders a parent `TableDefinition` wholesale).
+- `EmitConstraintDefinition(ConstraintDefinition)` *(4d-v)* — dispatches: `UniqueConstraintDefinition` (PK / UQ — distinguished by `IsPrimaryKey` and `IndexType.IndexTypeKind`) routes to `EmitUniqueConstraintDefinition` for the WITH-options-and-ON-filegroup wrap logic. `ForeignKeyConstraintDefinition` / `CheckConstraintDefinition` / `DefaultConstraintDefinition` have no per-constraint WITH/ON tail — generator-rendered wholesale.
+- `EmitUniqueConstraintDefinition(UniqueConstraintDefinition)` *(4d-v)* — D1 option C wrap rule. Header (`[CONSTRAINT name] PRIMARY KEY|UNIQUE [CLUSTERED|NONCLUSTERED] (cols ASC|DESC,...)`) is built explicitly (not generator-rendered) so we can measure its length. WITH options + ON filegroup render inline (continuing the header line) iff `currentIndent + headerLength + inlineExtra ≤ MaxLineLength`; else WITH-options wrap one-per-line at +2*IndentSize and ON-filegroup trails on its own line at +IndentSize. Real corpus PKs with the full SSMS 6-option WITH block always wrap (~215 chars); short UQs with one or two options stay inline.
 
 Not yet overridden (planned per sub-step):
 - **4b** — split into four slices (see docs/4B-PLAN.md); 4b-iii is itself split into a+b:
@@ -91,7 +97,7 @@ Not yet overridden (planned per sub-step):
   - ~~**4d-ii**~~: Landed 2026-04-25. `CreateViewStatement`, `AlterViewStatement`, `CreateOrAlterViewStatement` via shared `EmitViewBody` helper. Body SELECT routes through `EmitFragmentDefault` so the `SelectStatement` override fires (CTE prelude + clause-keyword right alignment).
   - ~~**4d-iii**~~: Landed 2026-04-25. `CreateFunctionStatement`, `AlterFunctionStatement`, `CreateOrAlterFunctionStatement` via shared `EmitFunctionBody` helper. Three `ReturnType` shapes branch on subclass (scalar / inline TVF / multi-stmt TVF). Inline TVF body SELECT routes through `EmitFragmentDefault` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF body recurses via `EmitBodyStatements` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END.
   - ~~**4d-iv**~~: Landed 2026-04-25. `CreateTriggerStatement`, `AlterTriggerStatement`, `CreateOrAlterTriggerStatement` via shared `EmitTriggerBody` helper. DML and DDL/logon triggers handled uniformly: `TriggerObject` and `TriggerActions[]` are generator-rendered (the generator handles `Normal`/`Database`/`AllServer` scope literals and the `EventTypeContainer`/`EventGroupContainer` event-list variants without needing per-shape branches). Body recursion via `EmitBodyStatements` reuses the existing BEGIN/END override.
-  - **4d-v**: CREATE / ALTER TABLE (column defs, constraints, indexes — different shape from the others)
+  - ~~**4d-v**~~: Landed 2026-04-25. `CreateTableStatement` + six `AlterTable*Statement` subtypes. New shared helpers `EmitTableDefinitionBody` / `EmitColumnDefinition` / `EmitConstraintDefinition` / `EmitUniqueConstraintDefinition`. D1 option C: constraint WITH-options inline if total fits MaxLineLength, else wrap one-per-line at +2*IndentSize with ON-filegroup on its own line at +IndentSize. D2: no blank-line separator between column block and constraint block (matches SSMS canonical). D3 backfill: multi-stmt TVF column DDL re-uses `EmitTableDefinitionBody`, retiring the squashed-column generator artifact at `EmitFunctionBody`'s `TableValuedFunctionReturnType` branch (`Format_CreateFunction_MultiStmtTvf` test expected updated). 4d completes the major DDL-object rectangle (proc / view / func / trigger / table). Out of scope: `CreateExternalTableStatement`, graph (`AsNode`/`AsEdge`), ledger, `CREATE TYPE ... AS TABLE`.
 - **4e**: Body-block and control-flow statements.
   - ~~**4e-i**~~: Landed 2026-04-25. `BeginEndBlockStatement` (with `BeginEndAtomicBlockStatement` fallback guard), `TryCatchStatement`. Bundled with 4d-i.
   - ~~**4e-ii**~~: Landed 2026-04-25. `IfStatement`, `WhileStatement` via shared `EmitConditionalBody` + `EmitConditionalPredicate` helpers. Bundled fix: AtLineStart guard before `)` in `ScalarSubquery` / `InPredicate` / `ExistsPredicate` (latent 4b-ii bug — surfaced when those overrides got called outside a parent clause scope, leaving a blank line before the closing `)`). New Known-limitation entry: ELSE IF stairstep.
@@ -447,6 +453,130 @@ Not formattable; dropped from scope and test coverage.
 `Tests/TriggerFormattingTests.cs`. Exit smoke is paste-into-running-app rather than corpus
 canonical-match.
 
+### CreateTableStatement (4d-v)
+
+Single override delegates to `EmitCreateTableBody`. Header: `CREATE TABLE` + generator-rendered
+`SchemaObjectName` + `EmitTableDefinitionBody` for the parenthesised body, then optional
+`ON <fg>` / `TEXTIMAGE_ON <fg>` / `FILESTREAM_ON <fg>` (each on its own line at column 0), then
+optional table-level `WITH (<opts>)` (table options like `MEMORY_OPTIMIZED = ON` and
+`SYSTEM_VERSIONING = ON (HISTORY_TABLE = ...)` — generator-rendered per option, comma-joined).
+
+**Body shape**: D2 — no blank-line gap between column block and constraint block. Matches
+SSMS canonical and the Sorgu corpus.
+
+```
+CREATE TABLE <name>
+(
+    <col> <type> [IDENTITY(s,i)] [NULL|NOT NULL] [DEFAULT ...] [<col-constraints>],
+    ...,
+    [CONSTRAINT <name>] PRIMARY KEY [CLUSTERED|NONCLUSTERED] (<cols>)
+        [WITH (<index-opts>)]            <-- wrap if oversized; inline if fits
+        [ON <filegroup>],
+    [INDEX <name> ...],
+    [PERIOD FOR SYSTEM_TIME (start, end)]
+)
+[ON <filegroup>]
+[TEXTIMAGE_ON <filegroup>]
+[FILESTREAM_ON <filegroup>]
+[WITH (<table-opts>)]
+```
+
+**Out of scope**: external (`CreateExternalTableStatement` — separate sibling type), graph
+(`AsNode` / `AsEdge` flags), ledger (`IsLedger`), `CREATE TYPE ... AS TABLE`. All defensively
+fall through to `EmitGeneratorRaw`.
+
+### AlterTableAddTableElementStatement, AlterTableDropTableElementStatement, AlterTableAlterColumnStatement, AlterTableSwitchStatement, AlterTableTriggerModificationStatement, AlterTableConstraintModificationStatement (4d-v)
+
+Six per-subtype overrides. ScriptDom carves ALTER TABLE into six concrete statement types
+(no polymorphic body — each is its own ScriptDom statement subclass), so per-type emission is
+cleaner than a dispatcher.
+
+**Common shape**: `EmitAlterTableHeader` writes `ALTER TABLE <name>` + NewLine; the action
+keyword (`ADD` / `DROP COLUMN|CONSTRAINT` / `ALTER COLUMN` / `SWITCH` / `ENABLE|DISABLE
+TRIGGER` / `CHECK|NOCHECK CONSTRAINT`) lands on the next line at column 0 (no indent — the
+header and action keyword are visually peers, not parent/child).
+
+**`EmitExistingRowsCheck`**: emits `WITH CHECK ` / `WITH NOCHECK ` prefix on the action line
+when `ExistingRowsCheckEnforcement` is set. Used by ADD (the SSMS-scripted FK shape) and
+CHECK CONSTRAINT branches.
+
+**ADD multi-element**: `AlterTableAddTableElementStatement.Definition.ColumnDefinitions[] +
+TableConstraints[] + Indexes[]` can have multiple entries — single-element ADDs render inline
+on the action line; multi-element ADDs route through `EmitTableDefinitionBody` for the
+parenthesised, indented block (same shape as CREATE TABLE).
+
+**ADD DEFAULT FOR**: real-corpus shape `ALTER TABLE [t] ADD DEFAULT (expr) FOR [col]` lands as
+a `DefaultConstraintDefinition` inside `Definition.TableConstraints[0]` — generator-renders
+correctly wholesale (no per-constraint WITH/ON tail to wrap).
+
+**DROP**: `AlterTableDropTableElements[]` carries mixed `Column` / `Constraint` items per
+`TableElementType`. First element emits its keyword (`COLUMN` / `CONSTRAINT`); subsequent
+elements omit the keyword. Each item also carries `IsIfExists`. Generator-rendered identifiers
+preserve quoting.
+
+**ALTER COLUMN**: `AlterTableAlterColumnOption` enum drives the trailer (`NULL`, `NOT NULL`,
+`ADD ROWGUIDCOL`, `DROP ROWGUIDCOL`, `ADD PERSISTED`, `DROP PERSISTED`). Optional `Collation`
+fragment after the option.
+
+**SWITCH PARTITION**: `SourcePartitionNumber` / `TargetPartitionNumber` are optional integer
+literals; emit `SWITCH [PARTITION n] TO <target> [PARTITION n]` on a single line.
+
+**TRIGGER MODIFICATION**: `TriggerEnforcement` enum picks `ENABLE TRIGGER` / `DISABLE TRIGGER`;
+`All` flag picks `ALL` vs comma-separated `TriggerNames[]`.
+
+**CONSTRAINT MODIFICATION**: `ConstraintEnforcement` enum picks `CHECK CONSTRAINT` / `NOCHECK
+CONSTRAINT`; `All` flag picks `ALL` vs comma-separated `ConstraintNames[]`. `WITH CHECK|NOCHECK`
+prefix from `ExistingRowsCheckEnforcement` (independent of `ConstraintEnforcement`).
+
+### EmitTableDefinitionBody (4d-v)
+
+Shared parenthesised-block body. Three call sites: `EmitCreateTableBody`,
+`AlterTableAddTableElementStatement` (multi-element ADD), and `EmitFunctionBody`'s
+`TableValuedFunctionReturnType` branch (multi-stmt TVF — `RETURNS @t TABLE (cols)` shape).
+
+Shape: NewLine + `(` on its own line at outer indent + `Indent()` block over
+`ColumnDefinitions[]`, then `TableConstraints[]`, then `Indexes[]`, then optional
+`SystemTimePeriod` (PERIOD FOR SYSTEM_TIME, generator-rendered). Comma-trailing per D3, no
+blank-line separator between groups (D2). Closing `)` on its own line at outer indent.
+
+### ColumnDefinition emission (4d-v)
+
+`EmitColumnDefinition` calls `_generator.GenerateScript` per-column. Per-column generator
+output is clean — identifier + type + collation + identity + nullable + default + computed-AS
++ inline-constraints + inline-INDEX all render correctly as one line. The column-alignment
+padding artifact (`id   INT            NOT NULL,`) only appears when the generator renders a
+parent `TableDefinition` wholesale; per-column calls bypass it.
+
+### ConstraintDefinition emission (4d-v)
+
+`EmitConstraintDefinition` dispatches on subtype:
+
+- `UniqueConstraintDefinition` (PK and UQ — distinguished by `IsPrimaryKey` and
+  `IndexType.IndexTypeKind`): routes to `EmitUniqueConstraintDefinition` for the WITH-options
+  + ON-filegroup wrap logic (D1 option C).
+- `ForeignKeyConstraintDefinition` / `CheckConstraintDefinition` /
+  `DefaultConstraintDefinition`: no per-constraint WITH/ON tail, generator-rendered wholesale
+  as one line. Fits MaxLineLength under realistic naming.
+
+### EmitUniqueConstraintDefinition — D1 option C wrap (4d-v)
+
+The load-bearing wrap helper. Header (`[CONSTRAINT name] PRIMARY KEY|UNIQUE
+[CLUSTERED|NONCLUSTERED] (cols ASC|DESC,...)`) is built explicitly to a `StringBuilder`
+(constraint identifier + key kind + index-type keyword + column list) so we can measure its
+length before deciding inline vs wrap. Why explicit construction rather than generator: the
+generator emits the entire constraint as one string with no separation between header and
+options/filegroup, leaving no clean point to insert the wrap. Building the header ourselves
+keeps that point free.
+
+**Wrap decision**: inline if `currentIndent + headerLength + inlineExtra ≤ MaxLineLength`
+where `inlineExtra` accounts for ` WITH (opt1, opt2, ...)` and ` ON <fg>`. Else WITH-options
+wrap one-per-line at +2*IndentSize and ON-filegroup trails on its own line at +IndentSize.
+
+**Real-world calibration**: real-corpus PK with full SSMS 6-option WITH block
+generator-renders to 215 chars — always wraps. Short UQs with one or two options fit in 116
+chars — stay inline. Both shapes co-exist in `Sorgu/create_table.sql` and both lock as
+exact-equals tests.
+
 ### Known AND/OR byproduct in ON (4b-iii-a, carried into 4b-iv)
 `Sql170ScriptGenerator` renders `BooleanBinaryExpression` (AND / OR) as multi-line by default. Our `EmitBooleanScaffold`-style inline scaffold for ON writes the rendered text as a raw string, so embedded newlines from the generator land in the body without getting the scope's body-column prefix applied to each sub-line — continuation lines sit at column 1 instead of at the WHERE/ON body column. Same root cause as the WHERE-with-AND visual glitch seen in the staffing-report smoke. Fixed when 4b-iv takes over `BooleanBinaryExpression` rendering; the long-ON test avoids it by using a simple single comparison.
 
@@ -671,6 +801,21 @@ canonical-match.
 - **Body shape mirrors procs**: `StatementList` is a flat list — `StatementList[0]` is directly the body's first statement when source has a single-statement form (`AS SELECT 1`), or a captured `BeginEndBlockStatement` when source has `BEGIN ... END`. `EmitBodyStatements` + the existing `BeginEndBlockStatement` override handles both shapes naturally; vertical-spacing rule (4e-ii-b) applies inside BEGIN/END bodies (DECLARE clusters tight, block-level statements separated by blank lines) — exercised in the realistic-body test.
 - **Tests**: 10 new facts in `Tests/TriggerFormattingTests.cs` (capture-and-lock; no `Assert.True(true)` left in committed file). Minimal AFTER INSERT / multi-event / INSTEAD OF / WITH options + NOT FOR REPLICATION / realistic body (DECLARE + IF EXISTS subquery + UPDATE) / DDL ON DATABASE / DDL ON ALL SERVER event group / ALTER / CREATE OR ALTER / logon trigger. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **158 → 168**, all pass. Harness **51 / 0 / 2** unchanged.
 - **Out of scope / deferred**: `WITH APPEND` (parser-rejected — not formattable); 4d-v (TABLE).
+
+### 4d-v — 2026-04-25
+
+- **Slice motivation**: tables had zero coverage in the visitor. `CreateTableStatement` and the six `AlterTable*Statement` subtypes all routed to `EmitGeneratorRaw`. Generator output for a real-corpus PK with the SSMS 6-option WITH block produces a 215-character single line (way past MaxLineLength 120); per-column rendering inside a `TableDefinition` introduces alignment-padding artifacts (`id   INT            NOT NULL,`); ALTER TABLE statements landed at column 0 with no separation between header and action keyword. None of those were acceptable for users working with real DDL.
+- **Probe before planning** (memory `feedback_probe_before_planning`): `Tests/TEMP_TableProbe.cs` walked the AST for 26 inputs spanning every CREATE / ALTER TABLE shape. Pinned: six concrete `AlterTable*Statement` subtypes (no polymorphic body — each its own ScriptDom statement type); `ConstraintDefinition` hierarchy (`Nullable` / `Default` / `Unique` (PK & UQ unified, distinguished by `IsPrimaryKey`) / `ForeignKey` / `Check`); `UniqueConstraintDefinition` carries `IndexOptions[]`, `OnFileGroupOrPartitionScheme`, `IndexType`, `Columns: ColumnWithSortOrder[]`; `CreateTableStatement` carries `OnFileGroupOrPartitionScheme`, `TextImageOn`, `FileStreamOn`, `Options[]` (table-level — `MemoryOptimizedTableOption`, `SystemVersioningTableOption`, etc.). Probe also rendered each fragment via the generator to size up the inline-vs-wrap decision concretely (full PK = 215 chars; corpus PK with 2 options = 116 chars).
+- **Three open decisions, all signed off before coding**:
+  - **D1 — Constraint WITH-options inline vs wrap.** Option C (conditional wrap on overflow) chosen — same philosophy as `EmitWrappedList` already used for SELECT / GROUP BY / ORDER BY. Inline if `currentIndent + headerLength + inlineExtra ≤ MaxLineLength`; else WITH-options wrap one-per-line at +2*IndentSize and ON-filegroup trails on its own line at +IndentSize. Rejected option A (always-inline — blows past 120 on every realistic SSMS-scripted PK) and option B (always-wrap — vertical-spreads single-option cases unnecessarily).
+  - **D2 — No blank-line gap between column block and constraint block.** Matches SSMS canonical and the Sorgu corpus. Tight wrap inside the `( ... )` paren block.
+  - **D3 — Multi-stmt TVF column-list backfill in this slice.** `EmitFunctionBody`'s `TableValuedFunctionReturnType` branch was generator-fallback in 4d-iii (squashed columns and trailing-paren on last column line — `col1 INT         ,\n    col2 VARCHAR (10))`). Now reuses `EmitTableDefinitionBody` for clean per-column wrap matching CREATE TABLE shape. `Tests/FunctionFormattingTests.cs::Format_CreateFunction_MultiStatementTvf` expected updated.
+- **One CreateTable override + six AlterTable overrides** + four shared helpers (`EmitTableDefinitionBody`, `EmitColumnDefinition`, `EmitConstraintDefinition`, `EmitUniqueConstraintDefinition`) + two thin helpers (`EmitAlterTableHeader`, `EmitExistingRowsCheck`). ALTER family enumerated by probe — six concrete subtypes: `AlterTableAddTableElementStatement` (covers ADD column / CONSTRAINT / DEFAULT FOR / WITH CHECK ADD), `AlterTableDropTableElementStatement` (DROP COLUMN / CONSTRAINT, mixable per-element via `TableElementType`), `AlterTableAlterColumnStatement`, `AlterTableSwitchStatement`, `AlterTableTriggerModificationStatement` (ENABLE / DISABLE TRIGGER), `AlterTableConstraintModificationStatement` (CHECK / NOCHECK CONSTRAINT). Per-subtype overrides cleaner than a polymorphic dispatcher because shapes diverge (no shared statement member set).
+- **Wired all seven new statement types into `EmitFragmentDefault`** dispatch. (Bug surfaced in capture pass: missing dispatch entries caused the visitor's overrides to never fire — output came from `EmitGeneratorRaw` fallback. Easy fix once spotted.)
+- **Tests**: 14 new in `Tests/TableFormattingTests.cs` + 9 new in `Tests/AlterTableFormattingTests.cs` (capture-and-lock; all exact-equals + `Assert.NotNull(ReParse(output))`; no `Assert.True(true)` left in committed files). One backfill: `Format_CreateFunction_MultiStatementTvf` expected updated to clean column-list output. Full suite **168 → 191**, all pass. Harness **51 / 0 / 2** unchanged (canonical-match check is AST-equivalence via round-trip, so formatting changes preserve it).
+- **Sorgu visual smoke**: `Sorgu/create_table.sql`, `Sorgu/tablo_yarat.sql`, `Sorgu/[dbo].[t_xml_exp_ivc_detail].sql` all format and re-parse cleanly with `LOOKOUT_USE_NEW_FORMATTER=1`.
+- **Out of scope / deferred**: `CreateExternalTableStatement` (separate sibling type — Polybase / Synapse external tables); graph tables (`AsNode` / `AsEdge`); ledger tables (`IsLedger`); `CREATE TYPE ... AS TABLE` (separate `CreateTypeTableStatement` type). All defensively fall through to `EmitGeneratorRaw`. CTE column-list promotion to `EmitWrappedList` not needed in this slice — corpus surfaced no long CTE column lists.
+- **4d-v completes the major DDL-object rectangle** (proc / view / func / trigger / table). Next: 4e-iii (DECLARE / SET / RETURN / transaction control — taste refinements only); 4f (PIVOT / APPLY / ParenthesisExpression); 4g (comments). Natural release point at 4d-v end for v3.1.0 formatter-rollup.
 
 ### Problem
 

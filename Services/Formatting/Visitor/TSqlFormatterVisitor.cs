@@ -1099,11 +1099,21 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
                 _emitter.WriteKeyword("RETURNS TABLE");
                 break;
             case TableValuedFunctionReturnType trt:
+                // 4d-v: was generator-rendered as a single line (per-column squashed); now
+                // dispatches the variable-name + TABLE header here, then reuses
+                // EmitTableDefinitionBody for the column / constraint block — same shape as
+                // CREATE TABLE so a multi-stmt TVF with a long column list reads identically.
                 _emitter.NewLine();
                 _emitter.WriteKeyword("RETURNS");
                 _emitter.Write(" ");
-                _generator.GenerateScript(trt.DeclareTableVariableBody, out var tvText);
-                _emitter.Write((tvText ?? string.Empty).Trim());
+                _generator.GenerateScript(trt.DeclareTableVariableBody.VariableName, out var vnText);
+                _emitter.Write((vnText ?? string.Empty).Trim());
+                _emitter.Write(" ");
+                _emitter.WriteKeyword("TABLE");
+                if (trt.DeclareTableVariableBody.Definition != null)
+                {
+                    EmitTableDefinitionBody(trt.DeclareTableVariableBody.Definition);
+                }
                 break;
             default:
                 EmitGeneratorRaw(stmt);
@@ -1250,6 +1260,441 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         TriggerType.For => "FOR",
         _ => "FOR",
     };
+
+    public override void ExplicitVisit(CreateTableStatement stmt) => EmitCreateTableBody(stmt);
+
+    public override void ExplicitVisit(AlterTableAddTableElementStatement stmt)
+    {
+        // ALTER TABLE <name> [WITH CHECK|NOCHECK] ADD <column-or-constraint-list>
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        EmitExistingRowsCheck(stmt.ExistingRowsCheckEnforcement);
+        _emitter.WriteKeyword("ADD");
+        // Single column / constraint: render inline on the same line. Multiple: render via
+        // EmitTableDefinition for the parenthesised, indented block — the same shape used for
+        // CREATE TABLE. ScriptDom allows multiple ADDs per statement, comma-separated.
+        var colCount = stmt.Definition?.ColumnDefinitions?.Count ?? 0;
+        var conCount = stmt.Definition?.TableConstraints?.Count ?? 0;
+        var idxCount = stmt.Definition?.Indexes?.Count ?? 0;
+        var totalElems = colCount + conCount + idxCount;
+        if (totalElems == 1)
+        {
+            _emitter.Write(" ");
+            if (colCount == 1) EmitColumnDefinition(stmt.Definition!.ColumnDefinitions[0]);
+            else if (conCount == 1) EmitConstraintDefinition(stmt.Definition!.TableConstraints[0]);
+            else EmitGeneratorRaw(stmt.Definition!.Indexes[0]);
+            _emitter.NewLine();
+        }
+        else
+        {
+            EmitTableDefinitionBody(stmt.Definition!);
+        }
+    }
+
+    public override void ExplicitVisit(AlterTableDropTableElementStatement stmt)
+    {
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        _emitter.WriteKeyword("DROP");
+        _emitter.Write(" ");
+        for (int i = 0; i < stmt.AlterTableDropTableElements.Count; i++)
+        {
+            if (i > 0) _emitter.Write(", ");
+            var elem = stmt.AlterTableDropTableElements[i];
+            // First element: the keyword (COLUMN / CONSTRAINT). Subsequent elements omit the
+            // keyword if the same kind, as DROP COLUMN a, b is the source-canonical form.
+            if (i == 0)
+            {
+                _emitter.WriteKeyword(elem.TableElementType == TableElementType.Column ? "COLUMN" : "CONSTRAINT");
+                _emitter.Write(" ");
+            }
+            if (elem.IsIfExists) { _emitter.WriteKeyword("IF EXISTS"); _emitter.Write(" "); }
+            _generator.GenerateScript(elem.Name, out var nameText);
+            _emitter.Write((nameText ?? string.Empty).Trim());
+        }
+        _emitter.NewLine();
+    }
+
+    public override void ExplicitVisit(AlterTableAlterColumnStatement stmt)
+    {
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        _emitter.WriteKeyword("ALTER COLUMN");
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.ColumnIdentifier, out var idText);
+        _emitter.Write((idText ?? string.Empty).Trim());
+        if (stmt.DataType != null)
+        {
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.DataType, out var dtText);
+            _emitter.Write((dtText ?? string.Empty).Trim());
+        }
+        switch (stmt.AlterTableAlterColumnOption)
+        {
+            case AlterTableAlterColumnOption.Null: _emitter.Write(" "); _emitter.WriteKeyword("NULL"); break;
+            case AlterTableAlterColumnOption.NotNull: _emitter.Write(" "); _emitter.WriteKeyword("NOT NULL"); break;
+            case AlterTableAlterColumnOption.AddRowGuidCol: _emitter.Write(" "); _emitter.WriteKeyword("ADD ROWGUIDCOL"); break;
+            case AlterTableAlterColumnOption.DropRowGuidCol: _emitter.Write(" "); _emitter.WriteKeyword("DROP ROWGUIDCOL"); break;
+            case AlterTableAlterColumnOption.AddPersisted: _emitter.Write(" "); _emitter.WriteKeyword("ADD PERSISTED"); break;
+            case AlterTableAlterColumnOption.DropPersisted: _emitter.Write(" "); _emitter.WriteKeyword("DROP PERSISTED"); break;
+        }
+        if (stmt.Collation != null)
+        {
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.Collation, out var colText);
+            _emitter.Write((colText ?? string.Empty).Trim());
+        }
+        _emitter.NewLine();
+    }
+
+    public override void ExplicitVisit(AlterTableSwitchStatement stmt)
+    {
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        _emitter.WriteKeyword("SWITCH");
+        if (stmt.SourcePartitionNumber != null)
+        {
+            _emitter.Write(" ");
+            _emitter.WriteKeyword("PARTITION");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.SourcePartitionNumber, out var srcText);
+            _emitter.Write((srcText ?? string.Empty).Trim());
+        }
+        _emitter.Write(" ");
+        _emitter.WriteKeyword("TO");
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.TargetTable, out var tgtText);
+        _emitter.Write((tgtText ?? string.Empty).Trim());
+        if (stmt.TargetPartitionNumber != null)
+        {
+            _emitter.Write(" ");
+            _emitter.WriteKeyword("PARTITION");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.TargetPartitionNumber, out var tpText);
+            _emitter.Write((tpText ?? string.Empty).Trim());
+        }
+        _emitter.NewLine();
+    }
+
+    public override void ExplicitVisit(AlterTableTriggerModificationStatement stmt)
+    {
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        _emitter.WriteKeyword(stmt.TriggerEnforcement == TriggerEnforcement.Enable ? "ENABLE TRIGGER" : "DISABLE TRIGGER");
+        _emitter.Write(" ");
+        if (stmt.All)
+        {
+            _emitter.WriteKeyword("ALL");
+        }
+        else
+        {
+            for (int i = 0; i < stmt.TriggerNames.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.TriggerNames[i], out var nText);
+                _emitter.Write((nText ?? string.Empty).Trim());
+            }
+        }
+        _emitter.NewLine();
+    }
+
+    public override void ExplicitVisit(AlterTableConstraintModificationStatement stmt)
+    {
+        EmitAlterTableHeader(stmt.SchemaObjectName);
+        _emitter.NewLine();
+        EmitExistingRowsCheck(stmt.ExistingRowsCheckEnforcement);
+        _emitter.WriteKeyword(stmt.ConstraintEnforcement == ConstraintEnforcement.NoCheck ? "NOCHECK CONSTRAINT" : "CHECK CONSTRAINT");
+        _emitter.Write(" ");
+        if (stmt.All)
+        {
+            _emitter.WriteKeyword("ALL");
+        }
+        else
+        {
+            for (int i = 0; i < stmt.ConstraintNames.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.ConstraintNames[i], out var nText);
+                _emitter.Write((nText ?? string.Empty).Trim());
+            }
+        }
+        _emitter.NewLine();
+    }
+
+    private void EmitAlterTableHeader(SchemaObjectName name)
+    {
+        _emitter.WriteKeyword("ALTER TABLE");
+        _emitter.Write(" ");
+        _generator.GenerateScript(name, out var nameText);
+        _emitter.Write((nameText ?? string.Empty).Trim());
+    }
+
+    private void EmitExistingRowsCheck(ConstraintEnforcement e)
+    {
+        // WITH CHECK / WITH NOCHECK on the same line as the ADD/CHECK CONSTRAINT keyword.
+        if (e == ConstraintEnforcement.Check) { _emitter.WriteKeyword("WITH CHECK"); _emitter.Write(" "); }
+        else if (e == ConstraintEnforcement.NoCheck) { _emitter.WriteKeyword("WITH NOCHECK"); _emitter.Write(" "); }
+    }
+
+    private void EmitCreateTableBody(CreateTableStatement stmt)
+    {
+        // Header: CREATE TABLE <name>
+        _emitter.WriteKeyword("CREATE TABLE");
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.SchemaObjectName, out var nameText);
+        _emitter.Write((nameText ?? string.Empty).Trim());
+
+        // Body: ( cols, table-constraints, indexes ) with no blank-line separator between
+        // groups (D2 — matches SSMS canonical and the Sorgu corpus).
+        if (stmt.Definition != null) EmitTableDefinitionBody(stmt.Definition);
+
+        // ON / TEXTIMAGE_ON / FILESTREAM_ON each on their own line at column 0.
+        if (stmt.OnFileGroupOrPartitionScheme != null)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("ON");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.OnFileGroupOrPartitionScheme, out var fgText);
+            _emitter.Write((fgText ?? string.Empty).Trim());
+        }
+        if (stmt.TextImageOn != null)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("TEXTIMAGE_ON");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.TextImageOn, out var tiText);
+            _emitter.Write((tiText ?? string.Empty).Trim());
+        }
+        if (stmt.FileStreamOn != null)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("FILESTREAM_ON");
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.FileStreamOn, out var fsText);
+            _emitter.Write((fsText ?? string.Empty).Trim());
+        }
+
+        // Table-level WITH (...) options — MEMORY_OPTIMIZED, SYSTEM_VERSIONING, DURABILITY, etc.
+        // Each table option is structured (e.g. SystemVersioningTableOption with HistoryTable);
+        // the generator handles the inner shape correctly.
+        if (stmt.Options != null && stmt.Options.Count > 0)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("WITH");
+            _emitter.Write(" (");
+            for (int i = 0; i < stmt.Options.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.Options[i], out var optText);
+                _emitter.Write((optText ?? string.Empty).Trim());
+            }
+            _emitter.Write(")");
+        }
+
+        _emitter.NewLine();
+    }
+
+    // 4d-v: parenthesised body of TableDefinition. Reused by CreateTable, AlterTable ADD (multi),
+    // and the multi-stmt TVF backfill in EmitFunctionBody.
+    private void EmitTableDefinitionBody(TableDefinition def)
+    {
+        _emitter.NewLine();
+        _emitter.Write("(");
+        _emitter.NewLine();
+        using (_emitter.Indent())
+        {
+            bool first = true;
+            if (def.ColumnDefinitions != null)
+            {
+                foreach (var col in def.ColumnDefinitions)
+                {
+                    if (!first) { _emitter.Write(","); _emitter.NewLine(); }
+                    EmitColumnDefinition(col);
+                    first = false;
+                }
+            }
+            if (def.TableConstraints != null)
+            {
+                foreach (var con in def.TableConstraints)
+                {
+                    if (!first) { _emitter.Write(","); _emitter.NewLine(); }
+                    EmitConstraintDefinition(con);
+                    first = false;
+                }
+            }
+            if (def.Indexes != null)
+            {
+                foreach (var idx in def.Indexes)
+                {
+                    if (!first) { _emitter.Write(","); _emitter.NewLine(); }
+                    _generator.GenerateScript(idx, out var idxText);
+                    _emitter.Write((idxText ?? string.Empty).Trim());
+                    first = false;
+                }
+            }
+            // Temporal PERIOD FOR SYSTEM_TIME — generator-render as one line at column-indent.
+            if (!first && HasSystemTimePeriod(def, out var period))
+            {
+                _emitter.Write(",");
+                _emitter.NewLine();
+                _generator.GenerateScript(period!, out var pText);
+                _emitter.Write((pText ?? string.Empty).Trim());
+            }
+        }
+        _emitter.NewLine();
+        _emitter.Write(")");
+    }
+
+    private static bool HasSystemTimePeriod(TableDefinition def, out TSqlFragment? period)
+    {
+        // Probed: TableDefinition.SystemTimePeriod : SystemTimePeriodDefinition (nullable).
+        var prop = def.GetType().GetProperty("SystemTimePeriod");
+        period = prop?.GetValue(def) as TSqlFragment;
+        return period != null;
+    }
+
+    private void EmitColumnDefinition(ColumnDefinition col)
+    {
+        // Generator-render the full column. Per probe: identifier + type + collation +
+        // identity + nullable + default + computed-AS + inline-constraints + inline-INDEX
+        // all render correctly as a single line via Sql170ScriptGenerator.
+        _generator.GenerateScript(col, out var text);
+        // Generator emits a leading newline + indentation in some contexts; trim to a single line.
+        _emitter.Write((text ?? string.Empty).Trim());
+    }
+
+    private void EmitConstraintDefinition(ConstraintDefinition con)
+    {
+        // UniqueConstraint (PK / UQ) is the only constraint that carries WITH options + ON
+        // filegroup. D1 option C: inline WITH-options + ON if total fits MaxLineLength (with the
+        // header indent factored in); else WITH-options wrap one-per-line at +2*IndentSize and
+        // ON trails on its own line at +IndentSize.
+        if (con is UniqueConstraintDefinition uq)
+        {
+            EmitUniqueConstraintDefinition(uq);
+            return;
+        }
+        // FK / Check / Default — no per-constraint WITH/ON tail. Generator handles wholesale.
+        _generator.GenerateScript(con, out var text);
+        _emitter.Write((text ?? string.Empty).Trim());
+    }
+
+    private void EmitUniqueConstraintDefinition(UniqueConstraintDefinition uq)
+    {
+        // Header: [CONSTRAINT name] PRIMARY KEY|UNIQUE [CLUSTERED|NONCLUSTERED] (cols)
+        var header = new StringBuilder();
+        if (uq.ConstraintIdentifier != null)
+        {
+            _generator.GenerateScript(uq.ConstraintIdentifier, out var idText);
+            header.Append("CONSTRAINT ").Append((idText ?? string.Empty).Trim()).Append(' ');
+        }
+        header.Append(uq.IsPrimaryKey ? "PRIMARY KEY" : "UNIQUE");
+        if (uq.IndexType != null)
+        {
+            header.Append(uq.IndexType.IndexTypeKind == IndexTypeKind.Clustered ? " CLUSTERED" : " NONCLUSTERED");
+        }
+        else if (uq.Clustered == true)
+        {
+            header.Append(" CLUSTERED");
+        }
+        header.Append(" (");
+        for (int i = 0; i < uq.Columns.Count; i++)
+        {
+            if (i > 0) header.Append(", ");
+            _generator.GenerateScript(uq.Columns[i], out var cText);
+            header.Append((cText ?? string.Empty).Trim());
+        }
+        header.Append(')');
+
+        _emitter.Write(header.ToString());
+
+        var hasOpts = uq.IndexOptions != null && uq.IndexOptions.Count > 0;
+        var hasFg = uq.OnFileGroupOrPartitionScheme != null;
+        if (!hasOpts && !hasFg) return;
+
+        // Render WITH options + ON filegroup as inline-or-wrap.
+        string[]? optTexts = null;
+        if (hasOpts)
+        {
+            optTexts = new string[uq.IndexOptions.Count];
+            for (int i = 0; i < uq.IndexOptions.Count; i++)
+            {
+                _generator.GenerateScript(uq.IndexOptions[i], out var t);
+                optTexts[i] = (t ?? string.Empty).Trim();
+            }
+        }
+        string fgText = string.Empty;
+        if (hasFg)
+        {
+            _generator.GenerateScript(uq.OnFileGroupOrPartitionScheme, out var t);
+            fgText = (t ?? string.Empty).Trim();
+        }
+
+        // Compute inline length: header is already on the line at currentIndent.
+        int currentIndent = _emitter.IndentLevel * _options.IndentSize;
+        int inlineExtra = 0;
+        if (hasOpts)
+        {
+            inlineExtra += " WITH (".Length + 1; // " WITH (" + ")"
+            for (int i = 0; i < optTexts!.Length; i++) inlineExtra += optTexts[i].Length;
+            inlineExtra += (optTexts.Length - 1) * 2; // ", " separators
+        }
+        if (hasFg) inlineExtra += " ON ".Length + fgText.Length;
+        bool inlineFits = currentIndent + header.Length + inlineExtra <= _options.MaxLineLength;
+
+        if (inlineFits)
+        {
+            if (hasOpts)
+            {
+                _emitter.Write(" ");
+                _emitter.WriteKeyword("WITH");
+                _emitter.Write(" (");
+                for (int i = 0; i < optTexts!.Length; i++)
+                {
+                    if (i > 0) _emitter.Write(", ");
+                    _emitter.Write(optTexts[i]);
+                }
+                _emitter.Write(")");
+            }
+            if (hasFg)
+            {
+                _emitter.Write(" ");
+                _emitter.WriteKeyword("ON");
+                _emitter.Write(" ");
+                _emitter.Write(fgText);
+            }
+            return;
+        }
+
+        // Wrapped form: WITH at +IndentSize, options at +2*IndentSize one per line, ON at +IndentSize.
+        using (_emitter.Indent())
+        {
+            if (hasOpts)
+            {
+                _emitter.NewLine();
+                _emitter.WriteKeyword("WITH");
+                _emitter.Write(" (");
+                _emitter.NewLine();
+                using (_emitter.Indent())
+                {
+                    for (int i = 0; i < optTexts!.Length; i++)
+                    {
+                        if (i > 0) { _emitter.Write(","); _emitter.NewLine(); }
+                        _emitter.Write(optTexts[i]);
+                    }
+                }
+                _emitter.NewLine();
+                _emitter.Write(")");
+            }
+            if (hasFg)
+            {
+                _emitter.NewLine();
+                _emitter.WriteKeyword("ON");
+                _emitter.Write(" ");
+                _emitter.Write(fgText);
+            }
+        }
+    }
 
     public override void ExplicitVisit(BeginEndBlockStatement stmt)
     {
@@ -1651,6 +2096,13 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is CreateTriggerStatement ct) { ExplicitVisit(ct); return; }
         if (fragment is AlterTriggerStatement at) { ExplicitVisit(at); return; }
         if (fragment is CreateOrAlterTriggerStatement coat) { ExplicitVisit(coat); return; }
+        if (fragment is CreateTableStatement ctab) { ExplicitVisit(ctab); return; }
+        if (fragment is AlterTableAddTableElementStatement atadd) { ExplicitVisit(atadd); return; }
+        if (fragment is AlterTableDropTableElementStatement atdrop) { ExplicitVisit(atdrop); return; }
+        if (fragment is AlterTableAlterColumnStatement atalt) { ExplicitVisit(atalt); return; }
+        if (fragment is AlterTableSwitchStatement atsw) { ExplicitVisit(atsw); return; }
+        if (fragment is AlterTableTriggerModificationStatement attm) { ExplicitVisit(attm); return; }
+        if (fragment is AlterTableConstraintModificationStatement atcm) { ExplicitVisit(atcm); return; }
         if (fragment is BeginEndBlockStatement beb) { ExplicitVisit(beb); return; }
         if (fragment is TryCatchStatement tc) { ExplicitVisit(tc); return; }
         if (fragment is IfStatement ifs) { ExplicitVisit(ifs); return; }

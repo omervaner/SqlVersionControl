@@ -149,16 +149,18 @@ public class FunctionFormattingTests
     [Fact]
     public void Format_CreateFunction_MultiStatementTvf()
     {
-        // Multi-stmt TVF: column DDL is generator-rendered as a single (multi-line) block for
-        // 4d-iii — per-column wrap polish is 4d-v territory. Body BEGIN/END recurses via the
-        // existing BeginEndBlockStatement override; INSERT routes through InsertStatement.
+        // 4d-v: column DDL now reuses EmitTableDefinitionBody (same shape as CREATE TABLE) —
+        // per-column wrap, paren-on-own-line, comma-trailing. Was generator-fallback in 4d-iii
+        // (squashed columns and trailing-paren on the last column line).
         var input = "CREATE FUNCTION dbo.fn_mtvf() RETURNS @t TABLE (col1 INT, col2 VARCHAR(10)) AS BEGIN INSERT INTO @t VALUES (1, 'a'); RETURN END";
         var output = Fmt(input);
         var expected =
             "CREATE FUNCTION dbo.fn_mtvf()\n" +
-            "RETURNS @t TABLE (\n" +
-            "    col1 INT         ,\n" +
-            "    col2 VARCHAR (10))\n" +
+            "RETURNS @t TABLE\n" +
+            "(\n" +
+            "    col1 INT,\n" +
+            "    col2 VARCHAR (10)\n" +
+            ")\n" +
             "AS\n" +
             "BEGIN\n" +
             "    INSERT INTO @t\n" +
