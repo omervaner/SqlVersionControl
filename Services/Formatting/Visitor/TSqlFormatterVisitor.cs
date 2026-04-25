@@ -1176,6 +1176,81 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         EmitBodyStatements(stmt.StatementList);
     }
 
+    public override void ExplicitVisit(CreateTriggerStatement stmt) => EmitTriggerBody(stmt, "CREATE TRIGGER");
+
+    public override void ExplicitVisit(AlterTriggerStatement stmt) => EmitTriggerBody(stmt, "ALTER TRIGGER");
+
+    public override void ExplicitVisit(CreateOrAlterTriggerStatement stmt) => EmitTriggerBody(stmt, "CREATE OR ALTER TRIGGER");
+
+    private void EmitTriggerBody(TriggerStatementBody stmt, string keywordPrefix)
+    {
+        // Header: CREATE [OR ALTER] / ALTER TRIGGER <name>
+        _emitter.WriteKeyword(keywordPrefix);
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.Name, out var nameText);
+        _emitter.Write((nameText ?? string.Empty).Trim());
+
+        // ON <target> — TriggerObject renders the literal for Normal (dbo.t),
+        // Database (DATABASE), and AllServer (ALL SERVER) scopes uniformly via the generator.
+        _emitter.NewLine();
+        _emitter.WriteKeyword("ON");
+        _emitter.Write(" ");
+        _generator.GenerateScript(stmt.TriggerObject, out var targetText);
+        _emitter.Write((targetText ?? string.Empty).Trim());
+
+        // WITH <opts> — TriggerOption (ENCRYPTION) and ExecuteAsTriggerOption rendered
+        // via generator and comma-joined. Same pattern as procs / views / funcs.
+        if (stmt.Options != null && stmt.Options.Count > 0)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("WITH");
+            _emitter.Write(" ");
+            for (int i = 0; i < stmt.Options.Count; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _generator.GenerateScript(stmt.Options[i], out var optText);
+                _emitter.Write((optText ?? string.Empty).Trim());
+            }
+        }
+
+        // Timing + event list. TriggerType: After / InsteadOf / For. TriggerActions are
+        // rendered via the generator — handles INSERT/UPDATE/DELETE (DML), Event with
+        // EventTypeContainer/EventGroupContainer (DDL), and LogOn uniformly.
+        _emitter.NewLine();
+        _emitter.WriteKeyword(TriggerTypeKeyword(stmt.TriggerType));
+        _emitter.Write(" ");
+        for (int i = 0; i < stmt.TriggerActions.Count; i++)
+        {
+            if (i > 0) _emitter.Write(", ");
+            _generator.GenerateScript(stmt.TriggerActions[i], out var actText);
+            _emitter.Write((actText ?? string.Empty).Trim());
+        }
+
+        if (stmt.IsNotForReplication)
+        {
+            _emitter.NewLine();
+            _emitter.WriteKeyword("NOT FOR REPLICATION");
+        }
+
+        _emitter.NewLine();
+        _emitter.WriteKeyword("AS");
+        _emitter.NewLine();
+
+        // Body recurses through the visitor — when StatementList[0] is a captured
+        // BeginEndBlockStatement (the common case), the override emits BEGIN/END.
+        // Otherwise emits the single statement flat. Mirrors procs (not functions,
+        // where ScriptDom always wraps in BEGIN/END at parse time).
+        EmitBodyStatements(stmt.StatementList);
+    }
+
+    private static string TriggerTypeKeyword(TriggerType t) => t switch
+    {
+        TriggerType.After => "AFTER",
+        TriggerType.InsteadOf => "INSTEAD OF",
+        TriggerType.For => "FOR",
+        _ => "FOR",
+    };
+
     public override void ExplicitVisit(BeginEndBlockStatement stmt)
     {
         // BEGIN ATOMIC blocks have Options we don't render — fall back to keep content correct.
@@ -1573,6 +1648,9 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is CreateFunctionStatement cf) { ExplicitVisit(cf); return; }
         if (fragment is AlterFunctionStatement af) { ExplicitVisit(af); return; }
         if (fragment is CreateOrAlterFunctionStatement coaf) { ExplicitVisit(coaf); return; }
+        if (fragment is CreateTriggerStatement ct) { ExplicitVisit(ct); return; }
+        if (fragment is AlterTriggerStatement at) { ExplicitVisit(at); return; }
+        if (fragment is CreateOrAlterTriggerStatement coat) { ExplicitVisit(coat); return; }
         if (fragment is BeginEndBlockStatement beb) { ExplicitVisit(beb); return; }
         if (fragment is TryCatchStatement tc) { ExplicitVisit(tc); return; }
         if (fragment is IfStatement ifs) { ExplicitVisit(ifs); return; }

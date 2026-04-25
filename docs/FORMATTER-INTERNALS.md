@@ -75,6 +75,7 @@ Overridden:
 - `ExplicitVisit(WhileStatement)` *(4e-ii)* — same shape as IfStatement minus the ELSE branch.
 - `ExplicitVisit(CreateViewStatement)` / `ExplicitVisit(AlterViewStatement)` / `ExplicitVisit(CreateOrAlterViewStatement)` *(4d-ii)* — three thin overrides delegating to `EmitViewBody(ViewStatementBody, keywordPrefix)`. Header: keyword + generator-rendered `SchemaObjectName` + optional inline `(col1, col2)` column list (mirrors `CommonTableExpression.Columns` — per-identifier generator scaffold, no wrap) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS` + `SelectStatement` body via `EmitFragmentDefault` (flat indent — no `Indent()`, matches SSMS) + optional `WITH CHECK OPTION` trailer at col 0. `IsMaterialized` (Synapse materialized views) trips an `EmitGeneratorRaw` fallback — same defensive guard pattern as `BeginEndAtomicBlockStatement`.
 - `ExplicitVisit(CreateFunctionStatement)` / `ExplicitVisit(AlterFunctionStatement)` / `ExplicitVisit(CreateOrAlterFunctionStatement)` *(4d-iii)* — three thin overrides delegating to `EmitFunctionBody(FunctionStatementBody, keywordPrefix)`. `FunctionStatementBody` is a sibling of `ProcedureStatementBody` under `ProcedureStatementBodyBase`, so `Parameters` / `MethodSpecifier` / `StatementList` are inherited; `EmitProcedureParameterBody` is reused as-is. Header: keyword + generator-rendered `Name` (`SchemaObjectName`) + parameter list (always parenthesised — empty `()` inline, non-empty multi-line with paren on its own line and params indented; functions reject the proc-style no-paren form at parse time) + `RETURNS <type>` (`ScalarFunctionReturnType` → DataType; `SelectFunctionReturnType` → literal `TABLE`; `TableValuedFunctionReturnType` → generator-render `DeclareTableVariableBody` for the `@t TABLE (cols)` shape) + optional `OrderHint` (rare) + optional `WITH <opts>` (generator-rendered, comma-joined) + `AS`. CLR functions (`MethodSpecifier != null`) emit `AS EXTERNAL NAME <spec>` and return — same shape as procs. Body branches by `ReturnType` shape: `SelectFunctionReturnType` (inline TVF) emits `RETURN (` + NewLine + `Indent()` + `EmitFragmentDefault(SelectStatement)` + `AtLineStart` guard + `)` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF route through `EmitBodyStatements(StatementList)` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END (ScriptDom captures function BEGIN/END as `StatementList[0]`, not implicit). Defensive `EmitGeneratorRaw` for unknown `ReturnType` subclasses.
+- `ExplicitVisit(CreateTriggerStatement)` / `ExplicitVisit(AlterTriggerStatement)` / `ExplicitVisit(CreateOrAlterTriggerStatement)` *(4d-iv)* — three thin overrides delegating to `EmitTriggerBody(TriggerStatementBody, keywordPrefix)`. `TriggerStatementBody` is a `TSqlStatement` subclass; the three concrete types are siblings (no shared base with procs / views / funcs). Header (T-SQL grammar order, source-order observed): keyword + generator-rendered `Name` + `ON ` + generator-rendered `TriggerObject` (handles the `dbo.t` / `DATABASE` / `ALL SERVER` literals via `TriggerScope` internally) + optional `WITH <opts>` (generator-rendered, comma-joined — `TriggerOption` for `ENCRYPTION`, `ExecuteAsTriggerOption` for `EXECUTE AS …`) + timing keyword (from `TriggerType` enum: `AFTER` / `INSTEAD OF` / `FOR`) + comma-joined event list (each `TriggerAction` generator-rendered — handles INSERT/UPDATE/DELETE for DML, `Event` with `EventTypeContainer` / `EventGroupContainer` for DDL, and `LogOn` uniformly) + optional `NOT FOR REPLICATION` (from `IsNotForReplication` flag) + `AS` + body via `EmitBodyStatements(StatementList)`. Body shape mirrors procs (flat list, BEGIN/END captured as `StatementList[0]` when source has it), not functions (which always wrap). No parameter list — triggers don't have parameters. `WITH APPEND` is rejected by the ScriptDom 170 parser; not formattable, no test coverage.
 
 Not yet overridden (planned per sub-step):
 - **4b** — split into four slices (see docs/4B-PLAN.md); 4b-iii is itself split into a+b:
@@ -89,7 +90,7 @@ Not yet overridden (planned per sub-step):
   - ~~**4d-i**~~: Landed 2026-04-25. `CreateProcedureStatement`, `AlterProcedureStatement`, `CreateOrAlterProcedureStatement` via shared `EmitProcedureBody` helper. Bundled with 4e-i (procedure body needs BEGIN/END recursion to be useful). Bundled fixes: `WithCtesAndXmlNamespaces` handling on the four DML overrides; `SqlEmitter.EnsureTrailingSemicolon` on body recursion (control-flow statement terminators).
   - ~~**4d-ii**~~: Landed 2026-04-25. `CreateViewStatement`, `AlterViewStatement`, `CreateOrAlterViewStatement` via shared `EmitViewBody` helper. Body SELECT routes through `EmitFragmentDefault` so the `SelectStatement` override fires (CTE prelude + clause-keyword right alignment).
   - ~~**4d-iii**~~: Landed 2026-04-25. `CreateFunctionStatement`, `AlterFunctionStatement`, `CreateOrAlterFunctionStatement` via shared `EmitFunctionBody` helper. Three `ReturnType` shapes branch on subclass (scalar / inline TVF / multi-stmt TVF). Inline TVF body SELECT routes through `EmitFragmentDefault` (mirrors ScalarSubquery break-to-block); scalar / multi-stmt TVF body recurses via `EmitBodyStatements` and the existing `BeginEndBlockStatement` override emits the wrapping BEGIN/END.
-  - **4d-iv**: CREATE / ALTER TRIGGER
+  - ~~**4d-iv**~~: Landed 2026-04-25. `CreateTriggerStatement`, `AlterTriggerStatement`, `CreateOrAlterTriggerStatement` via shared `EmitTriggerBody` helper. DML and DDL/logon triggers handled uniformly: `TriggerObject` and `TriggerActions[]` are generator-rendered (the generator handles `Normal`/`Database`/`AllServer` scope literals and the `EventTypeContainer`/`EventGroupContainer` event-list variants without needing per-shape branches). Body recursion via `EmitBodyStatements` reuses the existing BEGIN/END override.
   - **4d-v**: CREATE / ALTER TABLE (column defs, constraints, indexes — different shape from the others)
 - **4e**: Body-block and control-flow statements.
   - ~~**4e-i**~~: Landed 2026-04-25. `BeginEndBlockStatement` (with `BeginEndAtomicBlockStatement` fallback guard), `TryCatchStatement`. Bundled with 4d-i.
@@ -380,6 +381,72 @@ override emits the wrapping naturally. Body content recurses through the visitor
 (DECLARE / IF / SELECT / nested control-flow all flow through their respective overrides
 with the 4e-ii-b vertical-spacing rule applied).
 
+### CreateTriggerStatement / AlterTriggerStatement / CreateOrAlterTriggerStatement (4d-iv)
+
+Three thin overrides delegate to `EmitTriggerBody(TriggerStatementBody, keywordPrefix)`.
+`TriggerStatementBody` is a `TSqlStatement` subclass with no shared base with procs / views /
+funcs — the three concrete trigger types are siblings under it. No parameter list (triggers
+don't take parameters), so the parameter-rendering machinery from `EmitProcedureBody` /
+`EmitFunctionBody` is not reused.
+
+**Header shape** (T-SQL grammar order, source-order observed via probe):
+
+```
+CREATE [OR ALTER]/ALTER TRIGGER <name>
+    ON <target>
+    [WITH <opts>]
+    {AFTER | FOR | INSTEAD OF} <event-list>
+    [NOT FOR REPLICATION]
+AS
+<body>
+```
+
+Each header section emits at column 0; only the body, when wrapped in BEGIN/END, indents.
+
+**Target rendering** (`TriggerObject`): generator-rendered as a single fragment.
+`TriggerObject.TriggerScope` enum (`Normal` / `Database` / `AllServer`) drives the literal
+inside the generator — `dbo.t` for Normal (uses the `Name` SchemaObjectName), `DATABASE` for
+Database, `ALL SERVER` for AllServer. No per-scope switch in the visitor; the generator
+handles the variant correctly. Same shortcut philosophy as `DeclareTableVariableBody` in
+`EmitFunctionBody`.
+
+**Event-list rendering** (`TriggerActions[]`): each `TriggerAction` is generator-rendered
+individually and comma-joined. Handles all variants uniformly:
+- DML actions (`TriggerActionType` = `Insert` / `Update` / `Delete`) render as the action
+  keyword.
+- DDL actions (`TriggerActionType` = `Event`) carry an `EventTypeGroup` payload — either an
+  `EventTypeContainer` (single event like `CREATE_TABLE`) or `EventGroupContainer` (event
+  group like `DDL_DATABASE_LEVEL_EVENTS`). Generator handles both.
+- Logon trigger (`TriggerActionType` = `LogOn`) renders as `LOGON`.
+
+ScriptDom preserves source order in `TriggerActions[]`, so format mirrors source — no
+canonicalization concern with multi-event triggers (`AFTER INSERT, UPDATE, DELETE` stays in
+that order).
+
+**Timing keyword** (`TriggerType` enum): mapped via `TriggerTypeKeyword` switch — `After` →
+`AFTER`, `InsteadOf` → `INSTEAD OF`, `For` → `FOR`. Default falls to `FOR` defensively.
+
+**WITH options**: same pattern as procs / views / funcs — comma-joined per-option via
+generator. `TriggerOption` for `ENCRYPTION`, `ExecuteAsTriggerOption` (subclass) wrapping an
+`ExecuteAsClause` for `EXECUTE AS …`.
+
+**NOT FOR REPLICATION**: `IsNotForReplication` bool flag — emit on its own line between
+events and `AS` if set.
+
+**Body shape**: mirrors procs (flat list — `StatementList[0]` is the body's first statement
+directly), not functions (which always wrap in `BeginEndBlockStatement[0]`). When source has
+`AS BEGIN … END`, ScriptDom captures the BEGIN/END as a `BeginEndBlockStatement` and
+`EmitBodyStatements` + the existing override emits the wrapping. When source has a single
+statement (`AS SELECT 1`), the statement renders flat at column 0.
+
+**WITH APPEND**: parser-rejected by `TSql170Parser` even with `initialQuotedIdentifiers: true`
+— the legacy `FOR INSERT WITH APPEND` form fails parse with `Incorrect syntax near 'WITH'`.
+Not formattable; dropped from scope and test coverage.
+
+**No corpus**: `Sorgu/` contains zero triggers, so all coverage is synthesized in
+`Tests/TriggerFormattingTests.cs`. Exit smoke is paste-into-running-app rather than corpus
+canonical-match.
+
 ### Known AND/OR byproduct in ON (4b-iii-a, carried into 4b-iv)
 `Sql170ScriptGenerator` renders `BooleanBinaryExpression` (AND / OR) as multi-line by default. Our `EmitBooleanScaffold`-style inline scaffold for ON writes the rendered text as a raw string, so embedded newlines from the generator land in the body without getting the scope's body-column prefix applied to each sub-line — continuation lines sit at column 1 instead of at the WHERE/ON body column. Same root cause as the WHERE-with-AND visual glitch seen in the staffing-report smoke. Fixed when 4b-iv takes over `BooleanBinaryExpression` rendering; the long-ON test avoids it by using a simple single comparison.
 
@@ -590,6 +657,20 @@ with the 4e-ii-b vertical-spacing rule applied).
 - **Tests**: 10 new facts in `Tests/FunctionFormattingTests.cs` (capture-and-lock; no `Assert.True(true)` left in committed file). Minimal scalar / short params / long params / realistic body (DECLARE + IF + SELECT + RETURN, exercises body recursion + 4e-ii-b vertical spacing) / inline TVF minimal / inline TVF with JOIN+WHERE / multi-stmt TVF / ALTER / CREATE OR ALTER / WITH SCHEMABINDING. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **148 → 158**, all pass. Harness **51 / 0 / 2** unchanged.
 - **Real-function smoke**: `Sorgu/function store freq.sql` formats and re-parses cleanly (errors: 0). The function header lands as expected; body SELECTs right-align clause keywords; JOINs stack; DECLARE clusters stay tight while block-level statements get blank-line separation. Two pre-existing Known Limitations show but are not 4d-iii regressions: (1) the inner subquery with `TOP 2` falls back to generator and drops trailing `WHERE` / `GROUP BY` clauses (4b-iii bare-QuerySpec quirk); (2) the chained `IF / ELSE IF / ELSE IF` stairsteps progressively (4e-ii Known Limitation).
 - **Out of scope / deferred**: per-column DDL wrap for multi-stmt TVF (joint with `CreateTableStatement` in 4d-v); subquery-with-TOP trailing-clause drop fix (separate 4b-iii revisit); ELSE IF flatten (4e-ii Known Limitation has a sketch); CLR function smoke (no corpus example).
+
+### 4d-iv — 2026-04-25
+
+- **Slice motivation**: triggers had zero coverage in the visitor — `CreateTriggerStatement` / `AlterTriggerStatement` / `CreateOrAlterTriggerStatement` all routed to `EmitGeneratorRaw`. Bodies (commonly BEGIN/END blocks with DECLARE / IF / UPDATE) rendered through `Sql170ScriptGenerator` so clause-keyword right alignment, JOIN stacking, and 4e-ii-b vertical spacing didn't fire inside them. Same visual inconsistency that motivated 4d-iii (functions).
+- **No real corpus**: `Sorgu/` contains zero triggers. Whole slice driven from synthesized inputs — 11 probe shapes (DML AFTER / multi-event / INSTEAD OF / WITH options + NOT FOR REPLICATION / realistic body / DDL ON DATABASE / DDL ON ALL SERVER / ALTER / CREATE OR ALTER / WITH APPEND / logon). 10 of 11 parse cleanly under `TSql170Parser`; `WITH APPEND` is parser-rejected and dropped from scope.
+- **ScriptDom probe (run before planning)** pinned the structural facts:
+  - `Create/Alter/CreateOrAlterTriggerStatement : TriggerStatementBody` — three siblings under a shared base (mirrors proc / view / func pattern). Single `EmitTriggerBody` helper applies.
+  - `TriggerStatementBody` carries: `Name` (SchemaObjectName), `TriggerType` (After / InsteadOf / For), `TriggerObject` (with `TriggerScope` enum: Normal / Database / AllServer; `Name` only present for Normal), `Options[]` (`TriggerOption` for `ENCRYPTION`, `ExecuteAsTriggerOption` for `EXECUTE AS …`), `TriggerActions[]` (each carries `TriggerActionType`: Insert / Update / Delete / Event / LogOn — Event variant has `EventTypeGroup` = `EventTypeContainer` for single events or `EventGroupContainer` for groups), `IsNotForReplication` (bool), `StatementList` (flat — like procs, NOT wrapped in implicit BeginEndBlockStatement like functions).
+  - No parameter list — triggers don't have parameters.
+- **Three trigger overrides** + shared `EmitTriggerBody(TriggerStatementBody, keywordPrefix)` helper. Three new branches in `EmitFragmentDefault` (Create / Alter / CreateOrAlter Trigger). Header emission order (T-SQL grammar, source-order observed): keyword + Name + `ON ` + TriggerObject + optional `WITH <opts>` + timing keyword + comma-joined event list + optional `NOT FOR REPLICATION` + `AS` + body.
+- **Generator-render shortcut for TriggerObject and TriggerActions[]**: rather than switch on `TriggerScope` to emit `dbo.t` / `DATABASE` / `ALL SERVER` literals manually, and rather than switch on `TriggerActionType` × `EventTypeGroup` shape to emit DML keywords vs event names vs event groups, both go through `_generator.GenerateScript` per fragment. ScriptDom's generator handles every variant correctly with no per-shape branching needed. Capture-and-lock confirmed clean output across DML, DDL-database, DDL-all-server, and logon shapes. If a future corpus surfaces an off-aesthetic generator output, the fallback is per-variant rendering — but the capture pass produced no such case.
+- **Body shape mirrors procs**: `StatementList` is a flat list — `StatementList[0]` is directly the body's first statement when source has a single-statement form (`AS SELECT 1`), or a captured `BeginEndBlockStatement` when source has `BEGIN ... END`. `EmitBodyStatements` + the existing `BeginEndBlockStatement` override handles both shapes naturally; vertical-spacing rule (4e-ii-b) applies inside BEGIN/END bodies (DECLARE clusters tight, block-level statements separated by blank lines) — exercised in the realistic-body test.
+- **Tests**: 10 new facts in `Tests/TriggerFormattingTests.cs` (capture-and-lock; no `Assert.True(true)` left in committed file). Minimal AFTER INSERT / multi-event / INSTEAD OF / WITH options + NOT FOR REPLICATION / realistic body (DECLARE + IF EXISTS subquery + UPDATE) / DDL ON DATABASE / DDL ON ALL SERVER event group / ALTER / CREATE OR ALTER / logon trigger. All exact-equals + `Assert.NotNull(ReParse(output))`. Full suite **158 → 168**, all pass. Harness **51 / 0 / 2** unchanged.
+- **Out of scope / deferred**: `WITH APPEND` (parser-rejected — not formattable); 4d-v (TABLE).
 
 ### Problem
 
