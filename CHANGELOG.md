@@ -6,7 +6,7 @@ All version history in reverse chronological order.
 
 ## v3.0.0 (April 2026)
 
-Major architectural overhaul of the SQL formatter. Opt-in toggle; legacy engine retained as fallback.
+Major architectural overhaul of the SQL formatter. Default-on; legacy Hogimn engine retained as opt-out for one observation week, then deleted.
 
 ### Path B SQL Formatter — `TSqlFragmentVisitor` engine
 
@@ -14,7 +14,7 @@ Reasoning behind the rewrite is in [docs/FORMATTER-OVERHAUL.md](docs/FORMATTER-O
 
 **New engine.** Parses with `TSql170Parser`, walks the AST with a `TSqlFragmentVisitor` subclass (`TSqlFormatterVisitor`), and emits via a clause-aware `SqlEmitter` that right-aligns clause keywords (`SELECT` / `FROM` / `WHERE` / `AND` / …) within a stack of clause buffers. Subqueries open nested clause scopes; nested-pop injects rendered lines into the parent buffer's body so inner blocks visually nest under the outer's body column. Public surface is one method: `SqlFormatterService.Format(string)`. All visitor/emitter types are `internal`; tests reach them via `InternalsVisibleTo`.
 
-**Opt-in toggle.** Off by default. Enable via Settings → Preview Features → "Use new SQL formatter (ScriptDom-based, experimental)", or set `LOOKOUT_USE_NEW_FORMATTER=1`. Env var wins. On parse error or visitor exception the formatter falls back to the legacy Hogimn engine and surfaces the fallback to the active tab's message area.
+**Default-on; legacy still selectable.** New formatter is the default. Existing users with `UseNewFormatter: false` in `settings.json` keep legacy. Toggle via Settings → Preview Features → "Use new SQL formatter" (uncheck for legacy). `LOOKOUT_USE_NEW_FORMATTER=1` env var still honored at startup (wins over the setting). On parse error or visitor exception the formatter falls back to the legacy Hogimn engine and surfaces the fallback to the active tab's message area. The legacy engine ships for one observation-week window — if no regressions surface, it's deleted in the next release.
 
 **Pre-parse repair.** ScriptDom is stricter than the SQL Server engine — production sprocs scripted from `sys.sql_modules` often have `WITH cte AS (…)` without a leading `;`, which the engine accepts but `TSql170Parser` rejects. `SqlPreRepair.Normalize` runs before the parse staircase and adds the missing `;` on a strict whitelist of patterns. Corpus-driven (264 .sql files), narrow regex, no general normalization.
 
@@ -34,18 +34,25 @@ Reasoning behind the rewrite is in [docs/FORMATTER-OVERHAUL.md](docs/FORMATTER-O
 - **4d-i + 4e-i (bundled)** — `CreateProcedureStatement` / `AlterProcedureStatement` / `CreateOrAlterProcedureStatement` via shared `EmitProcedureBody`; `BeginEndBlockStatement` (with `BeginEndAtomicBlockStatement` fallback guard); `TryCatchStatement` via shared `EmitTryCatchHalf`. `WithCtesAndXmlNamespaces` handling added to the four DML overrides (pre-existing 4c bug). New `SqlEmitter.EnsureTrailingSemicolon` — every body-recursion child gets a guaranteed `;` so control-flow statements don't collide on re-parse.
 - **4e-ii** — `IfStatement` / `WhileStatement` via shared `EmitConditionalBody` + `EmitConditionalPredicate`. Subquery-in-predicate (`IF [NOT] EXISTS (subq)`) routes through `ExistsPredicate` and breaks to indented block. Bundled fix: `AtLineStart` guard in `ScalarSubquery` / `InPredicate` / `ExistsPredicate` overrides — eliminates a blank line before `)` when those overrides are called outside a parent clause scope.
 - **4e-ii-b** — Vertical spacing rule for body recursion. Shared `EmitBodyStatements` + `IsBlockLevelStatement` helpers replace three for-loops.
+- **4e-iii** — Per-statement overrides for the small fry: `DeclareVariableStatement` (drops generator-injected `AS`, multi-var wrap), `DeclareTableVariableStatement` (reuses `EmitTableDefinitionBody` for column DDL), `RollbackTransactionStatement` (re-emit `TRANSACTION` keyword the generator drops). 8 other statement types render correctly through generator fallback and got no override.
+- **4f** — `PivotedTableReference` / `UnpivotedTableReference` (PIVOT / UNPIVOT with full-`MaxLineLength` IN-list wrap), `SetVariableStatement` with subquery RHS (break-to-block mirroring 4b-ii's `ScalarSubquery`). Bundled fix: bare-`QuerySpec` trailing-clause drop on TOP/OFFSET/FOR niche features (synthetic-wrap into `SelectStatement`).
+- **4f-ii** — `QuerySpecification` niche-feature trip-flag retired entirely. `TopRowFilter` renders inline within SELECT body (`TOP <expr> [PERCENT] [WITH TIES]`); `OffsetClause` becomes its own clause keyword after ORDER BY; `ForClause` becomes its own clause keyword after OFFSET (body via prefix-strip of generator output). `EmitGeneratorRaw` no longer used for niche-feature subqueries — eliminates the Style-2 left-aligned-keyword leak in `LEFT JOIN (SELECT TOP N …)`, `SET @x = (SELECT TOP 1 …)`, `SELECT (SELECT TOP 1 …) FROM t` shapes.
+- **4f-iii** — INSERT / UPDATE / DELETE `TopRowFilter` trip-fallbacks retired. `EmitTopRowFilter` (4f-ii) reused unchanged across all three. INSERT places TOP between INSERT and INTO/OVER (no clause scope); UPDATE / DELETE place TOP in the body of the lead keyword line so scope `maxKw` stays at lead-keyword width — SET / FROM / WHERE right-align unchanged.
+- **4f-iv** — JOIN ON multi-AND/OR col-0 leak retired. `ExplicitVisit(QualifiedJoin)` now detects `qj.SearchCondition is BooleanBinaryExpression` and breaks ON to its own line in a synthetic clause scope; AND/OR right-aligns with ON. Single-comparison ON keeps the inline-or-long-break heuristic from 4b-iii-a — gate is BBE-specific, no behavior change for non-BBE shapes. Visible across the corpus (e.g. multi-AND ON inside `UPDATE … FROM … JOIN`).
+- **4h — default-on flip** — `UseNewFormatter` default flipped from `false` to `true`. New installs and users without an explicit setting now get the visitor formatter; existing users with explicit `false` keep legacy. Legacy Hogimn engine still selectable via Settings UI for one observation week, then deleted. `LOOKOUT_USE_NEW_FORMATTER` env var still honored. Parse-error fallback unchanged (safety net).
 
 ### Tooling
 
 - **Regression harness** at `Tools/FormatterRegression/` — runs the new formatter on every `.sql` in `scripts/formatter-test-corpus/`, parses both original and formatted with `TSql170Parser`, generates a canonical form via `Sql170ScriptGenerator`, string-compares the two canonicals. Result classes: canonical match / canonical mismatch / parse failure. Current state: **51 canonical match / 0 mismatch / 2 parse failures** (both 2 are pre-captured Hogimn outputs that don't parse — irrelevant to the new engine).
-- **Test suite** at `Tests/SqlVersionControl.Tests.csproj` — 137 facts covering visitor overrides, emitter behavior, subqueries, joins, CTEs, CASE/UNION, DML, MERGE, procedures, BEGIN/END, TRY/CATCH, IF/WHILE, body spacing, and pre-parse repair.
+- **Test suite** at `Tests/SqlVersionControl.Tests.csproj` — **239 facts** covering visitor overrides, emitter behavior, subqueries, joins, CTEs, CASE/UNION, DML (incl. INSERT/UPDATE/DELETE TopRowFilter), MERGE, procedures, BEGIN/END, TRY/CATCH, IF/WHILE, body spacing, PIVOT/UNPIVOT, SetVariable subquery, QuerySpec niche features (TOP/OFFSET/FOR), JOIN ON multi-AND/OR, and pre-parse repair.
 
 ### Known limitations
 
-- **AND/OR inside a non-clause-scope context** (`JOIN … ON a AND b AND c`, `CASE WHEN … AND …`, scalar position) — `BooleanBinaryExpression` falls back to the generator's embedded-newline-at-col-1 quirk. WHERE / HAVING (always inside a clause scope) are clean.
+- **CASE WHEN / IF / WHILE multi-AND single-line overflow** — long predicates render as one line via `EmitInlineBooleanScaffold`'s squash-and-join. Not the col-0 leak that 4f-iv retired (JOIN ON case); a distinct cosmetic concern. Corpus-driven; fixed in a future slice if it surfaces as a real bug.
 - **`ELSE IF` chains render as an indent stairstep** — natural recursion places each nested `IF` one indent level deeper. ~10-line fix is sketched in `docs/FORMATTER-INTERNALS.md`; corpus-driven.
 - **`BEGIN ATOMIC` blocks** fall back to generator emission (preserves the unrendered `Options` element).
-- **Comments** are dropped on round-trip (Path B's known cost; comment-attachment work is slice 4g, deferred).
+- **Function-arg `ScalarSubquery`** (e.g. `STUFF((SELECT … FOR XML PATH('')), …)`) — function call is generator-rendered as one expression; inner subquery never reaches visitor dispatch, so it keeps generator's left-aligned-keyword shape. Captured as a regression test; separate slice.
+- **Comments** are dropped on round-trip (Path B's known cost; comment-attachment work is slice 4g, in flight).
 
 ### Behind the scenes
 
@@ -53,7 +60,7 @@ Reasoning behind the rewrite is in [docs/FORMATTER-OVERHAUL.md](docs/FORMATTER-O
 - Solution file added (`SqlVersionControl.slnx`) — multi-project layout (main app + tests + tools).
 - `Tests/` and `Tools/` excluded from main project compilation (csproj `Compile Remove`).
 - New package: `Microsoft.SqlServer.TransactSql.ScriptDom 170.157.0`.
-- Legacy `Hogimn.Sql.Formatter 2.0.2` retained — backs the fallback path. Will be removed when the new engine is validated as the default.
+- Legacy `Hogimn.Sql.Formatter 2.0.2` retained one observation week; `LegacyHogimnFormatter` slated for removal in the next release.
 
 ---
 
