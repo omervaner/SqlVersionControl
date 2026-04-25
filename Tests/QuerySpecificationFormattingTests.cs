@@ -120,4 +120,152 @@ public class QuerySpecificationFormattingTests
         Assert.Contains("HAVING COUNT", output);
         Assert.NotNull(ReParse(output));
     }
+
+    // 4f-ii: TOP renders inline within the SELECT body — `TOP <expr> [PERCENT] [WITH TIES] ` —
+    // before SelectElements. Niche-feature trip-flag retired; QuerySpec opens its own clause
+    // scope and right-aligns all keywords (including OFFSET / FOR) staircase-consistently.
+
+    [Fact]
+    public void Format_SelectTop_IntegerLiteral()
+    {
+        var input = "SELECT TOP 5 a, b FROM t WHERE x = 1;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT TOP 5 a, b\n" +
+            "  FROM t\n" +
+            " WHERE x = 1\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SelectTop_Parenthesized()
+    {
+        var input = "SELECT TOP (10) * FROM t;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT TOP (10) *\n" +
+            "  FROM t\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SelectTop_PercentWithTies()
+    {
+        var input = "SELECT TOP (10) PERCENT WITH TIES * FROM t ORDER BY y;";
+        var output = Fmt(input);
+        var expected =
+            "  SELECT TOP (10) PERCENT WITH TIES *\n" +
+            "    FROM t\n" +
+            "ORDER BY y\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_SelectTop_VariableExpression()
+    {
+        var input = "SELECT TOP (@n) * FROM t;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT TOP (@n) *\n" +
+            "  FROM t\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_Offset_OnlyOffset()
+    {
+        var input = "SELECT * FROM t ORDER BY y OFFSET 10 ROWS;";
+        var output = Fmt(input);
+        // maxKw = 8 (ORDER BY). OFFSET pads by 2.
+        var expected =
+            "  SELECT *\n" +
+            "    FROM t\n" +
+            "ORDER BY y\n" +
+            "  OFFSET 10 ROWS\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_Offset_OffsetFetch()
+    {
+        var input = "SELECT * FROM t ORDER BY y OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY;";
+        var output = Fmt(input);
+        // FETCH NEXT inline after OFFSET on the same body line.
+        var expected =
+            "  SELECT *\n" +
+            "    FROM t\n" +
+            "ORDER BY y\n" +
+            "  OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_ForXml_PathEmpty()
+    {
+        var input = "SELECT col FROM t WHERE x = 1 FOR XML PATH('');";
+        var output = Fmt(input);
+        // Generator-rendered ForClause body keeps the `PATH ('')` space (generator-ism — see
+        // FORMATTER-INTERNALS § Known limitations).
+        var expected =
+            "SELECT col\n" +
+            "  FROM t\n" +
+            " WHERE x = 1\n" +
+            "   FOR XML PATH ('')\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_ForJson_PathRootInclude()
+    {
+        var input = "SELECT * FROM t FOR JSON PATH, ROOT('data'), INCLUDE_NULL_VALUES;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT *\n" +
+            "  FROM t\n" +
+            "   FOR JSON PATH, ROOT ('data'), INCLUDE_NULL_VALUES\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_ForBrowse()
+    {
+        var input = "SELECT * FROM t FOR BROWSE;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT *\n" +
+            "  FROM t\n" +
+            "   FOR BROWSE\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_StuffForXmlPath_Corpus_KnownGeneratorPassthrough()
+    {
+        // Captures-known-limitation (memory feedback_capture_test_labels): when a ScalarSubquery
+        // sits inside a function-call argument (here STUFF), the function call is generator-
+        // rendered as one expression — the inner subquery never reaches the visitor's
+        // ScalarSubquery dispatch. Result: inner FROM / WHERE / FOR keep the generator's
+        // left-aligned-keyword style ("FROM   ", "WHERE  ", "FOR    "), regardless of 4f-ii.
+        // 4f-ii fixed Style 2 leaks for visitor-dispatched ScalarSubqueries; function-arg
+        // subqueries are a separate slice. Test locks current shape to flag any silent change.
+        var input = "SELECT STUFF((SELECT ',' + isnull(tu.upc, itm.upc) FROM t_item_upc tu (NOLOCK) WHERE sto.wh_id = tu.wh_id FOR XML PATH('')), 1, 1, '') upc FROM sto;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT STUFF((SELECT ',' + isnull(tu.upc, itm.upc)\n" +
+            "       FROM   t_item_upc AS tu WITH (NOLOCK)\n" +
+            "       WHERE  sto.wh_id = tu.wh_id\n" +
+            "       FOR    XML PATH ('')), 1, 1, '') AS upc\n" +
+            "  FROM sto\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
 }

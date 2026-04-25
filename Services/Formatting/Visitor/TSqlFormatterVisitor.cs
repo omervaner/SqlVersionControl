@@ -77,12 +77,10 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
     public override void ExplicitVisit(SelectStatement statement)
     {
         // 4d-ii: peel QueryParenthesisExpression wrappers (e.g. `AS (SELECT ...)` view bodies)
-        // so the niche-feature trip-flag check and QuerySpec/BQE dispatcher operate on the
-        // underlying expression. Without this, `EmitGeneratorRaw` on a bare-QPE drops trailing
-        // clauses (same root cause as the documented bare-QuerySpec quirk — SSMS strips these
-        // parens too, so dropping them is ScriptDom-canonical). Guard: only unwrap if the
-        // parens carry no clauses of their own (OrderBy / Offset / For at the parens level
-        // would be silently dropped otherwise — fall through to generator in that case).
+        // so the QuerySpec/BQE dispatcher operates on the underlying expression. Guard: only
+        // unwrap if the parens carry no clauses of their own (OrderBy / Offset / For at the
+        // parens level would be silently dropped otherwise — fall through to generator in that
+        // case via EmitFragmentDefault below).
         var qe = statement.QueryExpression;
         while (qe is QueryParenthesisExpression qpe
                && qpe.OrderByClause == null
@@ -90,17 +88,6 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
                && qpe.ForClause == null)
         {
             qe = qpe.QueryExpression;
-        }
-
-        // SelectStatement-level fallback (4b-ii): if the inner QuerySpec has trip-flags we
-        // can't handle yet, emit the whole SelectStatement via the generator. Reason —
-        // Sql170ScriptGenerator on a *bare* QuerySpec drops trailing clauses (WHERE / GROUP BY
-        // / HAVING / ORDER BY) when JOINs are present; calling it on the surrounding
-        // SelectStatement produces full output. Picked up by 4b-iii.
-        if (qe is QuerySpecification qsBail && QuerySpecRequiresFallback(qsBail))
-        {
-            EmitGeneratorRaw(statement);                                   // bypass EmitFragmentDefault routing (would re-enter and stack-overflow)
-            return;
         }
 
         // Niche SelectStatement features not modelled in the visitor (`Into` for SELECT INTO,
@@ -134,39 +121,15 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         }
     }
 
-    private static bool QuerySpecRequiresFallback(QuerySpecification q)
-    {
-        // 4b-iii-a: hasJoins and hasMultiTableFromClause guards removed. JOIN subtypes route
-        // via EmitTableReferenceBody; old-style implicit joins (FROM a, b) are emitted as a
-        // comma-joined list of TableReferences in the FROM body. Remaining trip-flags
-        // (TopRowFilter / OffsetClause / ForClause) stay until their own slices — they can't
-        // be expressed correctly by the current visitor coverage.
-        return q.TopRowFilter != null || q.OffsetClause != null || q.ForClause != null;
-    }
-
     public override void ExplicitVisit(QuerySpecification q)
     {
-        // 4b-i niche-feature fallback: still needed when QuerySpec is reached as a subquery
-        // (not via SelectStatement, which has its own fallback above). For top-level
-        // SelectStatements, SelectStatement's fallback fires first and we never get here.
-        // 4f: wrap into a synthetic SelectStatement before generator-rendering. Bare-QuerySpec
-        // generator drops trailing clauses (WHERE / GROUP BY / HAVING / ORDER BY) when niche
-        // features (TOP / OFFSET / FOR) are present — same ScriptDom quirk as the documented
-        // subquery-with-JOINs drop. Surfaced by 4f's SetVariableStatement subquery-RHS override
-        // (latent in 4b-ii's ScalarSubquery path; only visible when the inner QuerySpec has
-        // both a niche feature and a trailing clause).
-        if (QuerySpecRequiresFallback(q))
-        {
-            EmitGeneratorRaw(new SelectStatement { QueryExpression = q });
-            return;
-        }
-
         using (_emitter.BeginClauseScope())
         {
-            // SELECT
+            // SELECT [ALL|DISTINCT] [TOP n [PERCENT] [WITH TIES]] <select-list>
             _emitter.WriteClauseKeyword("SELECT");
             if (q.UniqueRowFilter == UniqueRowFilter.Distinct) _emitter.Write("DISTINCT ");
             else if (q.UniqueRowFilter == UniqueRowFilter.All) _emitter.Write("ALL ");
+            if (q.TopRowFilter != null) EmitTopRowFilter(q.TopRowFilter);
             EmitWrappedList(q.SelectElements, RenderSelectElementForMeasure, EmitSelectElementBody);
             _emitter.NewLine();
 
@@ -207,7 +170,56 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
                 EmitWrappedList(q.OrderByClause.OrderByElements, RenderOrderByElementForMeasure, EmitOrderByElementBody);
                 _emitter.NewLine();
             }
+
+            if (q.OffsetClause != null)
+            {
+                _emitter.WriteClauseKeyword("OFFSET");
+                EmitOffsetClauseBody(q.OffsetClause);
+                _emitter.NewLine();
+            }
+
+            if (q.ForClause != null)
+            {
+                _emitter.WriteClauseKeyword("FOR");
+                EmitForClauseBody(q.ForClause);
+                _emitter.NewLine();
+            }
         }
+    }
+
+    // 4f-ii: TOP renders inline within the SELECT clause body — `TOP <expr> [PERCENT] [WITH TIES] `.
+    private void EmitTopRowFilter(TopRowFilter top)
+    {
+        _emitter.Write("TOP ");
+        _generator.GenerateScript(top.Expression, out var exprText);
+        _emitter.Write((exprText ?? string.Empty).Trim());
+        if (top.Percent) _emitter.Write(" PERCENT");
+        if (top.WithTies) _emitter.Write(" WITH TIES");
+        _emitter.Write(" ");
+    }
+
+    // 4f-ii: OFFSET as its own clause keyword, body holds OFFSET <expr> ROWS plus optional
+    // FETCH NEXT <expr> ROWS ONLY inline. Splitting earns nothing for the corpus.
+    private void EmitOffsetClauseBody(OffsetClause off)
+    {
+        _generator.GenerateScript(off.OffsetExpression, out var offText);
+        _emitter.Write((offText ?? string.Empty).Trim() + " ROWS");
+        if (off.FetchExpression != null)
+        {
+            _generator.GenerateScript(off.FetchExpression, out var fetchText);
+            _emitter.Write(" FETCH NEXT " + (fetchText ?? string.Empty).Trim() + " ROWS ONLY");
+        }
+    }
+
+    // 4f-ii: FOR body via prefix-strip — `FOR XML PATH ('')` → strip "FOR " → `XML PATH ('')`.
+    // XmlForClause / JsonForClause options have non-trivial textual rendering (AUTO / PATH /
+    // ELEMENTS / ROOT('r') / BINARY BASE64 / INCLUDE_NULL_VALUES); the generator gets them right.
+    private void EmitForClauseBody(ForClause fc)
+    {
+        _generator.GenerateScript(fc, out var fcText);
+        var body = (fcText ?? string.Empty).Trim();
+        if (body.StartsWith("FOR ", StringComparison.OrdinalIgnoreCase)) body = body.Substring(4);
+        _emitter.Write(body);
     }
 
     public override void ExplicitVisit(ScalarSubquery sub)

@@ -279,4 +279,25 @@ public class JoinAndCteFormattingTests
         Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));
     }
+
+    [Fact]
+    public void Format_QdtInJoin_WithInnerTop_Staircase()
+    {
+        // 4f-ii regression: LEFT JOIN (SELECT TOP N ...) alias ON ... — the inner QuerySpec
+        // with TOP routes through the visitor's clause scope, producing staircase keywords
+        // consistent with the surrounding query. Pre-4f-ii this rendered in generator-style
+        // left-aligned (Style 2) with all inner keywords flush at one column.
+        var input = "SELECT a.id FROM a LEFT JOIN (SELECT TOP 5 id, name FROM b WHERE active = 1) alias ON a.id = alias.id;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT a.id\n" +
+            "  FROM a\n" +
+            "       LEFT OUTER JOIN (\n" +
+            "           SELECT TOP 5 id, name\n" +
+            "             FROM b\n" +
+            "            WHERE active = 1\n" +
+            "       ) AS alias ON a.id = alias.id\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
 }

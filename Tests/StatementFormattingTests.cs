@@ -206,19 +206,39 @@ public class StatementFormattingTests
     }
 
     [Fact]
-    public void Format_SetVariable_SubqueryRhs_WithTop_PreservesAllClauses()
+    public void Format_SetVariable_SubqueryRhsTop_Staircase()
     {
-        // 4f bundled fix: the bare-QuerySpec generator drops trailing clauses (here: WHERE)
-        // when niche features (TOP / OFFSET / FOR) are present. The QuerySpec niche-feature
-        // fallback now wraps into a synthetic SelectStatement before generator-rendering, so
-        // WHERE survives. Latent in 4b-ii ScalarSubquery; surfaced by this override.
+        // 4f-ii: niche-feature trip-flag retired. Inner QuerySpec with TOP routes through the
+        // visitor's clause scope (not the generator), so SELECT/FROM/WHERE right-align in
+        // staircase shape — consistent with every other subquery in the formatter. Replaces
+        // the 4f-era shape-light test that locked the generator's left-aligned style.
         var input = "SET @x = (SELECT TOP 1 id FROM dbo.t WHERE col = 'a');";
         var output = Fmt(input);
-        // Inner uses generator's left-aligned keyword style (`FROM   `, `WHERE  `) because the
-        // niche-feature path doesn't open our own clause scope. WHERE survival is the assert.
-        Assert.Contains("WHERE", output);
-        Assert.Contains("SELECT TOP 1 id", output);
-        Assert.StartsWith("SET @x = (\n", output);
+        var expected =
+            "SET @x = (\n" +
+            "    SELECT TOP 1 id\n" +
+            "      FROM dbo.t\n" +
+            "     WHERE col = 'a'\n" +
+            ")\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_ScalarSubquery_WithInnerTop_Staircase()
+    {
+        // 4f-ii regression: a scalar-subquery-in-SELECT-list whose inner QuerySpec carries TOP
+        // now renders staircase. Was generator-style left-aligned before (Style 2 leak).
+        var input = "SELECT (SELECT TOP 1 v FROM s WHERE k = t.k) AS v FROM t;";
+        var output = Fmt(input);
+        var expected =
+            "SELECT (\n" +
+            "           SELECT TOP 1 v\n" +
+            "             FROM s\n" +
+            "            WHERE k = t.k\n" +
+            "       ) AS v\n" +
+            "  FROM t\n";
+        Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));
     }
 }
