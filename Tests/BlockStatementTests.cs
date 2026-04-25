@@ -32,16 +32,16 @@ public class BlockStatementTests
     [Fact]
     public void Format_BeginEnd_MixedOverriddenAndGeneratorFallback()
     {
-        // DECLARE / SET fall through to generator (rest of 4e proper). SELECT routes to visitor.
-        // Each child gets `;` via EnsureTrailingSemicolon — control-flow statements (DECLARE,
-        // SET) need the terminator since the generator omits it for non-DML kinds. 4e-ii-b
-        // spacing rule: DECLARE+SET stay tight (both single-liners); SET→SELECT gets a blank
-        // line because SELECT is block-level.
+        // DECLARE handled by 4e-iii visitor override (drops generator-injected AS); SET falls
+        // through to generator. SELECT routes to its own visitor. Each child gets `;` via
+        // EnsureTrailingSemicolon — control-flow statements (DECLARE, SET) need the terminator
+        // since the generator omits it for non-DML kinds. 4e-ii-b spacing rule: DECLARE+SET stay
+        // tight (both single-liners); SET→SELECT gets a blank line because SELECT is block-level.
         var input = "BEGIN DECLARE @x INT = 0 SET @x = 1 SELECT @x END";
         var output = Fmt(input);
         var expected =
             "BEGIN\n" +
-            "    DECLARE @x AS INT = 0;\n" +
+            "    DECLARE @x INT = 0;\n" +
             "    SET @x = 1;\n" +
             "\n" +
             "    SELECT @x;\n" +
@@ -118,8 +118,8 @@ public class BlockStatementTests
         var output = Fmt(input);
         var expected =
             "BEGIN\n" +
-            "    DECLARE @a AS INT = 0;\n" +
-            "    DECLARE @b AS INT = 1;\n" +
+            "    DECLARE @a INT = 0;\n" +
+            "    DECLARE @b INT = 1;\n" +
             "END\n";
         Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));
@@ -133,7 +133,7 @@ public class BlockStatementTests
         var output = Fmt(input);
         var expected =
             "BEGIN\n" +
-            "    DECLARE @a AS INT = 0;\n" +
+            "    DECLARE @a INT = 0;\n" +
             "\n" +
             "    INSERT INTO t\n" +
             "        (x)\n" +
@@ -193,7 +193,7 @@ public class BlockStatementTests
         var expected =
             "BEGIN\n" +
             "    IF @@TRANCOUNT > 0\n" +
-            "        ROLLBACK;\n" +
+            "        ROLLBACK TRANSACTION;\n" +
             "\n" +
             "    RETURN -1;\n" +
             "END\n";
@@ -219,10 +219,10 @@ public class BlockStatementTests
         var expected =
             "BEGIN\n" +
             "    IF @@TRANCOUNT > 0\n" +
-            "        ROLLBACK;\n" +
+            "        ROLLBACK TRANSACTION;\n" +
             "\n" +
-            "    DECLARE @e1 AS NVARCHAR (2000) = 'x';\n" +
-            "    DECLARE @e2 AS INT = 1;\n" +
+            "    DECLARE @e1 NVARCHAR (2000) = 'x';\n" +
+            "    DECLARE @e2 INT = 1;\n" +
             "\n" +
             "    INSERT INTO t\n" +
             "        (a)\n" +

@@ -103,7 +103,7 @@ public class TriggerFormattingTests
             "AFTER UPDATE\n" +
             "AS\n" +
             "BEGIN\n" +
-            "    DECLARE @id AS INT;\n" +
+            "    DECLARE @id INT;\n" +
             "\n" +
             "    IF EXISTS (\n" +
             "        SELECT 1\n" +
@@ -198,7 +198,7 @@ public class TriggerFormattingTests
             "FOR LOGON\n" +
             "AS\n" +
             "BEGIN\n" +
-            "    ROLLBACK;\n" +
+            "    ROLLBACK TRANSACTION;\n" +
             "END;\n";
         Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));

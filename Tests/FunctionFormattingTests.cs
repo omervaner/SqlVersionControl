@@ -91,7 +91,7 @@ public class FunctionFormattingTests
             "RETURNS INT\n" +
             "AS\n" +
             "BEGIN\n" +
-            "    DECLARE @x AS INT = @a + 1;\n" +
+            "    DECLARE @x INT = @a + 1;\n" +
             "\n" +
             "    IF @x > 10\n" +
             "        SET @x = 10;\n" +

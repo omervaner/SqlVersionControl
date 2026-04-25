@@ -103,6 +103,21 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
             return;
         }
 
+        // Niche SelectStatement features not modelled in the visitor (`Into` for SELECT INTO,
+        // `On` for legacy SELECT…ON syntax, `ComputeClauses`, `OptimizerHints`) — bail to the
+        // generator on the whole statement BEFORE any visitor emission, otherwise we'd
+        // double-emit (run the QuerySpec override, then emit a generator-rendered copy on top).
+        // Use EmitGeneratorRaw to bypass dispatch — EmitFragmentDefault would re-enter this
+        // override and stack-overflow (the original 4e-iii smoke crash on Sorgu/2161.sql's
+        // `SELECT * INTO #weight FROM (...)`).
+        if (statement.Into != null || statement.On != null
+            || (statement.ComputeClauses != null && statement.ComputeClauses.Count > 0)
+            || (statement.OptimizerHints != null && statement.OptimizerHints.Count > 0))
+        {
+            EmitGeneratorRaw(statement);
+            return;
+        }
+
         if (statement.WithCtesAndXmlNamespaces != null)
         {
             statement.WithCtesAndXmlNamespaces.Accept(this);
@@ -116,15 +131,6 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         else if (qe != null)
         {
             EmitFragmentDefault(qe);
-        }
-
-        if (statement.Into != null || statement.On != null
-            || (statement.ComputeClauses != null && statement.ComputeClauses.Count > 0)
-            || (statement.OptimizerHints != null && statement.OptimizerHints.Count > 0))
-        {
-            // Niche SELECT features not covered in 4b-i; fall through to generator for the whole statement.
-            _emitter.NewLine();
-            EmitFragmentDefault(statement);
         }
     }
 
@@ -1866,6 +1872,101 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         }
     }
 
+    // 4e-iii: DECLARE @var <type> [= <init>][, ...]. Drops the generator-injected `AS` keyword
+    // (source-faithful + corpus-matching). Multi-var wrap shape: when the inline form would
+    // exceed MaxLineLength * 2/3 (same threshold as procedure parameters / SELECT lists),
+    // DECLARE sits alone on its line and each declaration lands at +IndentSize, comma-trailing.
+    public override void ExplicitVisit(DeclareVariableStatement stmt)
+    {
+        _emitter.WriteKeyword("DECLARE");
+
+        if (stmt.Declarations == null || stmt.Declarations.Count == 0) return;
+
+        // Pre-render each declaration once. RenderDeclarationText is the same source used for
+        // both wrap measurement and emission — single source of truth, single generator round-trip.
+        var rendered = new string[stmt.Declarations.Count];
+        int totalLen = 0;
+        for (int i = 0; i < stmt.Declarations.Count; i++)
+        {
+            rendered[i] = RenderDeclarationText(stmt.Declarations[i]);
+            totalLen += rendered[i].Length;
+        }
+        totalLen += (stmt.Declarations.Count - 1) * 2;                      // ", " separators
+
+        bool wrap = totalLen > _options.MaxLineLength * 2 / 3;
+
+        if (wrap)
+        {
+            _emitter.NewLine();
+            using (_emitter.Indent())
+            {
+                for (int i = 0; i < rendered.Length; i++)
+                {
+                    if (i > 0) { _emitter.Write(","); _emitter.NewLine(); }
+                    _emitter.Write(rendered[i]);
+                }
+            }
+        }
+        else
+        {
+            _emitter.Write(" ");
+            for (int i = 0; i < rendered.Length; i++)
+            {
+                if (i > 0) _emitter.Write(", ");
+                _emitter.Write(rendered[i]);
+            }
+        }
+        if (!_emitter.AtLineStart) _emitter.NewLine();                      // statement convention: end on fresh line
+    }
+
+    private string RenderDeclarationText(DeclareVariableElement d)
+    {
+        var sb = new StringBuilder();
+        sb.Append(d.VariableName.Value);
+        sb.Append(' ');
+        _generator.GenerateScript(d.DataType, out var typeText);
+        sb.Append((typeText ?? string.Empty).Trim());
+        if (d.Value != null)
+        {
+            sb.Append(" = ");
+            _generator.GenerateScript(d.Value, out var valText);
+            sb.Append((valText ?? string.Empty).Trim());
+        }
+        return sb.ToString();
+    }
+
+    // 4e-iii: DECLARE @t TABLE (...). Reuses EmitTableDefinitionBody so the column DDL renders
+    // with the same per-column wrap rules as CREATE TABLE / multi-stmt TVF (4d-v) — fixes the
+    // generator's column-alignment padding artifact (`id   INT           ,`).
+    public override void ExplicitVisit(DeclareTableVariableStatement stmt)
+    {
+        var body = stmt.Body;
+        _emitter.WriteKeyword("DECLARE");
+        _emitter.Write(" ");
+        _emitter.Write(body.VariableName.Value);
+        _emitter.Write(" ");
+        _emitter.WriteKeyword("TABLE");
+        if (body.Definition != null) EmitTableDefinitionBody(body.Definition);
+        if (!_emitter.AtLineStart) _emitter.NewLine();                      // statement convention: end on fresh line
+    }
+
+    // 4e-iii: ROLLBACK [TRANSACTION [name]]. The generator drops the keyword entirely
+    // (`ROLLBACK TRAN;` → `ROLLBACK`) — silent loss of intent. Re-emit explicitly so the keyword
+    // survives and the form is symmetric with BEGIN / COMMIT / SAVE TRANSACTION (which the
+    // generator handles cleanly and we leave as-is). The AST does not preserve the source
+    // distinction between TRAN and TRANSACTION, so always emit the long form.
+    public override void ExplicitVisit(RollbackTransactionStatement stmt)
+    {
+        _emitter.WriteKeyword("ROLLBACK TRANSACTION");
+        if (stmt.Name != null)
+        {
+            _emitter.Write(" ");
+            _generator.GenerateScript(stmt.Name, out var nameText);
+            _emitter.Write((nameText ?? string.Empty).Trim());
+        }
+        if (!_emitter.AtLineStart) _emitter.NewLine();                      // statement convention: end on fresh line
+    }
+
     private void EmitMergeActionClause(MergeActionClause clause)
     {
         // WHEN [NOT] MATCHED [BY TARGET|SOURCE] [AND <cond>] THEN\n<action at +IndentSize>
@@ -2107,6 +2208,9 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         if (fragment is TryCatchStatement tc) { ExplicitVisit(tc); return; }
         if (fragment is IfStatement ifs) { ExplicitVisit(ifs); return; }
         if (fragment is WhileStatement ws) { ExplicitVisit(ws); return; }
+        if (fragment is DeclareVariableStatement dvs) { ExplicitVisit(dvs); return; }
+        if (fragment is DeclareTableVariableStatement dtv) { ExplicitVisit(dtv); return; }
+        if (fragment is RollbackTransactionStatement rts) { ExplicitVisit(rts); return; }
 
         EmitGeneratorRaw(fragment);
     }
