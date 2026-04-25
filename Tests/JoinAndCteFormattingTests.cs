@@ -300,4 +300,117 @@ public class JoinAndCteFormattingTests
         Assert.Equal(expected, output);
         Assert.NotNull(ReParse(output));
     }
+
+    // ===== Branch C — BBE-quirk fix =====
+    // Multi-AND/OR ON conditions used to render via the EmitGeneratorRaw(bbe) bail (BBE outside a
+    // clause scope), dropping subsequent AND/OR lines at column 1 — visible across the corpus
+    // (e.g. Sorgu/Buyuk Kucuk Kasa Yeni.sql:34). Fix: when the search condition is a
+    // BooleanBinaryExpression, break ON to its own line and open a synthetic clause scope so
+    // AND/OR right-aligns with ON. Single-comparison ON keeps inline-or-long-break heuristic.
+
+    [Fact]
+    public void Format_InnerJoin_OnSingleAnd_BreaksToScope()
+    {
+        // Two-cond AND ON breaks to own line; ON / AND right-align in synthetic scope under
+        // the JOIN body column. Pre-fix this rendered the second AND at col 1.
+        var input = "SELECT * FROM a INNER JOIN b ON a.x = b.x AND a.y = b.y";
+        var expected =
+            "SELECT *\n" +
+            "  FROM a\n" +
+            "       INNER JOIN b\n" +
+            "        ON a.x = b.x\n" +
+            "       AND a.y = b.y\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_InnerJoin_OnTripleAnd_AllAndsAlign()
+    {
+        var input = "SELECT * FROM a INNER JOIN b ON a.x = b.x AND a.y = b.y AND a.z = b.z";
+        var expected =
+            "SELECT *\n" +
+            "  FROM a\n" +
+            "       INNER JOIN b\n" +
+            "        ON a.x = b.x\n" +
+            "       AND a.y = b.y\n" +
+            "       AND a.z = b.z\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_LeftJoin_OnMultiAnd_BreaksToScope()
+    {
+        // LEFT OUTER JOIN keyword is wider — confirms the JOIN body column is invariant under
+        // join-keyword-width changes (the synthetic scope captures _indentLevel, not flush-column).
+        var input = "SELECT * FROM a LEFT JOIN b ON a.x = b.x AND a.y = b.y AND a.z = b.z";
+        var expected =
+            "SELECT *\n" +
+            "  FROM a\n" +
+            "       LEFT OUTER JOIN b\n" +
+            "        ON a.x = b.x\n" +
+            "       AND a.y = b.y\n" +
+            "       AND a.z = b.z\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
+
+    [Fact]
+    public void Format_InnerJoin_OnMixedAndOr_AllOperatorsAlign()
+    {
+        var input = "SELECT * FROM a INNER JOIN b ON a.x = b.x AND a.y = b.y OR a.z = b.z";
+        var output = Fmt(input);
+        // ScriptDom right-associative parse: AND binds tighter than OR, so the BBE tree is
+        // OR(AND(x, y), z=z). Top-level operator emitted at the synthetic scope is OR.
+        var expected =
+            "SELECT *\n" +
+            "  FROM a\n" +
+            "       INNER JOIN b\n" +
+            "        ON a.x = b.x\n" +
+            "       AND a.y = b.y\n" +
+            "        OR a.z = b.z\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_UpdateFromJoin_MultiAndOn_RendersStaircase()
+    {
+        // Corpus shape from Sorgu/Buyuk Kucuk Kasa Yeni.sql:31-41. Multi-AND ON inside an
+        // UPDATE FROM JOIN. Outer UPDATE/SET/FROM/WHERE scope, plus inner subquery scope,
+        // plus synthetic ON scope — three nested scopes, all should staircase consistently.
+        var input = "UPDATE t SET t.k = j.k FROM #temp t JOIN (SELECT a, b, COUNT(*) AS k FROM x WHERE q = '1' AND w = '2' GROUP BY a, b) j ON j.a = t.OrderNumber AND j.b = t.ShipDate";
+        var output = Fmt(input);
+        var expected =
+            "UPDATE t\n" +
+            "   SET t.k = j.k\n" +
+            "  FROM #temp AS t\n" +
+            "       INNER JOIN (\n" +
+            "             SELECT a, b, COUNT(*) AS k\n" +
+            "               FROM x\n" +
+            "              WHERE q = '1'\n" +
+            "                AND w = '2'\n" +
+            "           GROUP BY a, b\n" +
+            "       ) AS j\n" +
+            "        ON j.a = t.OrderNumber\n" +
+            "       AND j.b = t.ShipDate\n";
+        Assert.Equal(expected, output);
+        Assert.NotNull(ReParse(output));
+    }
+
+    [Fact]
+    public void Format_InnerJoin_OnSingleComparison_StaysInline()
+    {
+        // Regression guard: single-comparison ON is NOT a BooleanBinaryExpression, so the fix
+        // doesn't fire — it keeps the inline-or-long-break heuristic. This locks the existing
+        // 4b-iii-a behavior (cf. Format_InnerJoin_WithWhere_NoTrailingClauseDrop).
+        var input = "SELECT * FROM a INNER JOIN b ON a.x = b.x";
+        var expected =
+            "SELECT *\n" +
+            "  FROM a\n" +
+            "       INNER JOIN b ON a.x = b.x\n";
+        Assert.Equal(expected, Fmt(input));
+        Assert.NotNull(ReParse(Fmt(input)));
+    }
 }

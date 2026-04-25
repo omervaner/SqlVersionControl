@@ -307,22 +307,42 @@ internal sealed class TSqlFormatterVisitor : TSqlFragmentVisitor
         EmitTableReferenceBody(qj.SecondTableReference);
         if (qj.SearchCondition != null)
         {
-            _generator.GenerateScript(qj.SearchCondition, out var condText);
-            var cond = (condText ?? string.Empty).Trim();
-            // Inline ON by default; break to own line only if the rendered condition is long
-            // enough that inline would exceed MaxLineLength. Heuristic uses condition length vs
-            // roughly 2/3 of MaxLineLength — a precise check would need to know the flush-time
-            // outer body column, which depends on the not-yet-finalised maxKw. Good enough for
-            // realistic sprocs; if the corpus shows false-negatives, tighten later.
-            if (cond.Length > _options.MaxLineLength * 2 / 3)
+            // Branch C — BBE-quirk fix. Multi-AND/OR ON conditions used to render via the
+            // `EmitGeneratorRaw(bbe)` bail (BBE outside a clause scope), which dropped subsequent
+            // AND/OR lines at column 1 — the documented col-0 leak from Sorgu/Buyuk Kucuk Kasa
+            // Yeni.sql:34 and similar shapes. Fix: when the search condition is a
+            // BooleanBinaryExpression, break ON to its own line and open a synthetic clause scope
+            // so AND/OR right-aligns with ON via the existing scope machinery. Single-comparison
+            // ON keeps the inline-or-long-break heuristic (matches all existing test shapes).
+            if (qj.SearchCondition is BooleanBinaryExpression)
             {
                 _emitter.NewLine();
-                var padUnderJoin = new string(' ', _options.IndentSize);
-                _emitter.Write(padUnderJoin + "ON " + cond);
+                using (_emitter.BeginClauseScope())
+                {
+                    _emitter.WriteClauseKeyword("ON");
+                    EmitSearchConditionBody(qj.SearchCondition);
+                    _emitter.NewLine();
+                }
             }
             else
             {
-                _emitter.Write(" ON " + cond);
+                _generator.GenerateScript(qj.SearchCondition, out var condText);
+                var cond = (condText ?? string.Empty).Trim();
+                // Inline ON by default; break to own line only if the rendered condition is long
+                // enough that inline would exceed MaxLineLength. Heuristic uses condition length vs
+                // roughly 2/3 of MaxLineLength — a precise check would need to know the flush-time
+                // outer body column, which depends on the not-yet-finalised maxKw. Good enough for
+                // realistic sprocs; if the corpus shows false-negatives, tighten later.
+                if (cond.Length > _options.MaxLineLength * 2 / 3)
+                {
+                    _emitter.NewLine();
+                    var padUnderJoin = new string(' ', _options.IndentSize);
+                    _emitter.Write(padUnderJoin + "ON " + cond);
+                }
+                else
+                {
+                    _emitter.Write(" ON " + cond);
+                }
             }
         }
     }
