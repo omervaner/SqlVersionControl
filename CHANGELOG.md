@@ -4,6 +4,18 @@ All version history in reverse chronological order.
 
 ---
 
+## v3.0.1 (May 2026)
+
+Release-pipeline repair. v3.0.0's CI run failed and only macOS artifacts shipped (uploaded by hand from the dev Mac). This release restores the Windows build and prevents a recurrence.
+
+- **`PlanViewer.Core` multi-targeting via parent-repo override.** The submodule at `lib/PerformanceStudio/` targets only `net8.0` upstream, so the release publish (`-f net9.0`) failed restore with `NETSDK1005` the moment v3.0.0 added the `ProjectReference`. New `lib/Directory.Build.props` overrides the dependency's framework set to `net8.0;net9.0;net10.0` for that project only. Submodule files are not modified.
+- **Matrix `fail-fast: false`.** The macOS failure killed the Windows job before it started compiling, so v3.0.0 had no Windows artifacts at all. Both jobs now run independently.
+- **Windows artifacts restored.** Setup.exe, Portable.zip, and the Velopack `releases.win.json` feed are back, so Windows users on v2.15.1 can auto-update.
+
+No app behavior changes. Formatter, UI, features identical to v3.0.0.
+
+---
+
 ## v3.0.0 (April 2026)
 
 Major architectural overhaul of the SQL formatter. Default-on; legacy Hogimn engine retained as opt-out for one observation week, then deleted.
