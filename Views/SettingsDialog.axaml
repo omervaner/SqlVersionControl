@@ -129,15 +129,15 @@
                            TextWrapping="Wrap"/>
             </StackPanel>
 
-            <!-- === Preview Features === -->
+            <!-- === SQL Formatting === -->
             <Border Height="1" Background="{DynamicResource BorderDefault}" Margin="0,4"/>
 
-            <TextBlock Text="Preview Features" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}"/>
+            <TextBlock Text="SQL Formatting" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource AccentBlue}"/>
 
             <StackPanel Spacing="8">
                 <CheckBox x:Name="UseNewFormatterCheckBox"
-                          Content="Use new SQL formatter (ScriptDom-based, experimental)"
-                          ToolTip.Tip="Uses Microsoft's T-SQL parser for structure-aware formatting. Falls back to the legacy formatter on parse errors."/>
+                          Content="Use ScriptDom-based SQL formatter (recommended)"
+                          ToolTip.Tip="Uses Microsoft's T-SQL parser for structure-aware formatting. Falls back to the legacy regex formatter on parse errors. Uncheck to use the legacy Hogimn formatter exclusively."/>
                 <TextBlock Text="Applies to the next Format SQL action. Env var LOOKOUT_USE_NEW_FORMATTER=1 forces on regardless of this setting."
                            FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
             </StackPanel>

@@ -198,9 +198,9 @@ public class AppSettings
     public int GridRowHeight { get; set; } = 22;
     public int ConnectionTimeout { get; set; } = 5;
 
-    // Formatter engine selection (new in v2.16 — ScriptDom-based). Default-on after 4f-iv;
-    // legacy Hogimn formatter still selectable via Settings UI for one observation week,
-    // then deleted. LOOKOUT_USE_NEW_FORMATTER env var still honored at startup.
+    // Formatter engine selection. Default = ScriptDom-based visitor formatter (recommended).
+    // Set to false to use the legacy Hogimn regex formatter (kept as a permanent fallback).
+    // LOOKOUT_USE_NEW_FORMATTER env var still honored at startup (overrides this setting when set).
     public bool UseNewFormatter { get; set; } = true;
 
     // User mode (Normal hides admin-only settings sections)

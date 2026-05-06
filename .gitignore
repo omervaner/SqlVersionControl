@@ -91,6 +91,9 @@ notes/
 # Defunct directories — kept gitignored to prevent accidental re-tracking after history purge
 icons-deprecated/
 
+# Dev archive of legacy session/design docs — kept locally, not published
+docs/archived/
+
 # Temporary safety backup of .git before history rewrites — delete once push verified
 .git-backup/
 
