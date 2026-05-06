@@ -84,8 +84,15 @@ scripts/formatter-test-corpus/*
 /test_sproc.sql
 /Sorgu/
 /results.xlsx
-/1.png
-/2.png
 scripts/localhost_1433/
 scripts/CHANGELOG.md
 notes/
+
+# Defunct directories — kept gitignored to prevent accidental re-tracking after history purge
+icons-deprecated/
+
+# Temporary safety backup of .git before history rewrites — delete once push verified
+.git-backup/
+
+# Formatter intermediate output
+*.formatted

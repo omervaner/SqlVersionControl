@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="2.png">
-  <img src="1.png" alt="Lookout" width="160">
+  <source media="(prefers-color-scheme: dark)" srcset="Assets/logo-dark.png">
+  <img src="Assets/logo-light.png" alt="Lookout" width="160">
 </picture>
 
 # Lookout
